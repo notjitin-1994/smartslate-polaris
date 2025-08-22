@@ -139,7 +139,7 @@ export function SwirlField({
     if (!width || !height || placed.length === 0) return []
 
     const rng = createSeededRng(seedRef.current + 2)
-    const maxPerNode = 4
+    const maxPerNode = 2
     const minPerNode = 2
     const maxDistance = Math.min(width, height) * 0.4
     const maxCandidates = 10

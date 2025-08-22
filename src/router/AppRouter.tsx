@@ -1,6 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { paths } from '@/routes/paths'
-import AuthLanding from '@/pages/AuthLanding'
 import AuthCallback from '@/pages/AuthCallback'
 import { PortalPage } from '@/pages/PortalPage'
 import { SettingsContent } from '@/portal/SettingsContent'

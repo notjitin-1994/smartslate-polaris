@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react'
-import { Outlet, useLocation, useNavigate, useParams, useOutlet } from 'react-router-dom'
+import { useLocation, useNavigate, useParams, useOutlet } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { getSupabase } from '@/services/supabase'
 import html2canvas from 'html2canvas'

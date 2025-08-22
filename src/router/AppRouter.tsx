@@ -4,6 +4,7 @@ import AuthLanding from '@/pages/AuthLanding'
 import AuthCallback from '@/pages/AuthCallback'
 import { PortalPage } from '@/pages/PortalPage'
 import { SettingsContent } from '@/portal/SettingsContent'
+import { PublicProfile } from '@/pages/PublicProfile'
 
 export function AppRouter() {
   return (
@@ -15,6 +16,7 @@ export function AppRouter() {
         </Route>
         <Route path={paths.portalUser} element={<PortalPage />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path={paths.publicProfile} element={<PublicProfile />} />
       </Routes>
     </BrowserRouter>
   )

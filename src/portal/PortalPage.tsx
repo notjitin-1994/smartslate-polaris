@@ -2,8 +2,12 @@ import { useEffect, useRef, useState, type ComponentType } from 'react'
 import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { getSupabase } from '@/services/supabase'
-import { paths, portalUserPath } from '@/routes/paths'
+import html2canvas from 'html2canvas'
+import jsPDF from 'jspdf'
+import { paths, portalUserPath, publicProfilePath } from '@/routes/paths'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
+import { getCapitalizedFirstName } from '@/lib/textUtils'
+
 
 type NavItem = string | { label: string; tagText?: string; tagTone?: 'preview' | 'soon' | 'info' }
 
@@ -340,20 +344,21 @@ export function PortalPage() {
   // Profile form state
   const [username, setUsername] = useState<string>('')
   const [displayName, setDisplayName] = useState<string>('')
-  const [avatarUrl, setAvatarUrl] = useState<string>('')
+
   const [jobTitle, setJobTitle] = useState<string>('')
   const [company, setCompany] = useState<string>('')
   const [website, setWebsite] = useState<string>('')
   const [city, setCity] = useState<string>('')
   const [country, setCountry] = useState<string>('')
-  const [timezone, setTimezone] = useState<string>('')
+
   const [bio, setBio] = useState<string>('')
-  const [marketingOptIn, setMarketingOptIn] = useState<boolean>(false)
-  const [saving, setSaving] = useState<boolean>(false)
-  const [checkingUsername, setCheckingUsername] = useState<boolean>(false)
-  const [usernameAvailable, setUsernameAvailable] = useState<'unknown' | 'available' | 'taken' | 'error'>('unknown')
+
+
   const [toast, setToast] = useState<{ id: number; kind: 'success' | 'error'; message: string } | null>(null)
-  useDocumentTitle(isSettings ? 'Smartslate | Settings' : (viewingProfile ? `Smartslate | @${(username || decodeURIComponent(userParam as string || 'user'))}` : 'Smartslate | Portal'))
+  const [copySuccess, setCopySuccess] = useState<boolean>(false)
+  const [downloading, setDownloading] = useState<boolean>(false)
+  const profileCardRef = useRef<HTMLDivElement>(null)
+  useDocumentTitle(isSettings ? 'Smartslate | Settings' : (viewingProfile ? 'Smartslate | My Profile' : 'Smartslate | Portal'))
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
     const stored = localStorage.getItem('portal:sidebarCollapsed')
@@ -461,46 +466,9 @@ export function PortalPage() {
     return (input || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24)
   }
 
-  function isReservedUsername(input: string): boolean {
-    const reserved = new Set(['settings'])
-    return reserved.has(input)
-  }
 
-  async function checkUsernameAvailability(next: string) {
-    const trimmed = sanitizeUsername(next)
-    if (!trimmed) {
-      setUsernameAvailable('unknown')
-      return
-    }
-    if (isReservedUsername(trimmed)) {
-      setUsernameAvailable('taken')
-      return
-    }
-    if (trimmed === username.toLowerCase()) {
-      // unchanged from current value
-    }
-    try {
-      setCheckingUsername(true)
-      // Try checking against profiles table if it exists
-      const supabase = getSupabase()
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('username', trimmed)
-        .maybeSingle()
-      if (error) {
-        // If the table doesn't exist or RLS blocks, fall back to unknown
-        setUsernameAvailable('unknown')
-        return
-      }
-      const takenByOther = Boolean(data && data.id && data.id !== user?.id)
-      setUsernameAvailable(takenByOther ? 'taken' : 'available')
-    } catch {
-      setUsernameAvailable('error')
-    } finally {
-      setCheckingUsername(false)
-    }
-  }
+
+
 
   async function loadProfileFromServer(currentUser: User | null) {
     if (!currentUser) return
@@ -515,15 +483,15 @@ export function PortalPage() {
       if (!error && data) {
         setUsername((data.username as string) || getUsernameFromMeta() || getFirstName())
         setDisplayName((data.full_name as string) || (currentUser.user_metadata?.full_name as string) || (currentUser.user_metadata?.name as string) || getFirstName())
-        setAvatarUrl((data.avatar_url as string) || (currentUser.user_metadata?.avatar_url as string) || '')
+
         setJobTitle((data.job_title as string) || '')
         setCompany((data.company as string) || '')
         setWebsite((data.website as string) || '')
         setCity((data.location as string) || '')
         setCountry((data.country as string) || '')
-        setTimezone((data.timezone as string) || '')
+
         setBio((data.bio as string) || '')
-        setMarketingOptIn(Boolean(data.marketing_opt_in))
+
         return
       }
     } catch {}
@@ -532,15 +500,15 @@ export function PortalPage() {
     const meta: any = currentUser.user_metadata ?? {}
     setUsername((meta.username as string) || (meta.handle as string) || getFirstName())
     setDisplayName((meta.full_name as string) || (meta.name as string) || getFirstName())
-    setAvatarUrl((meta.avatar_url as string) || '')
+
     setJobTitle((meta.job_title as string) || '')
-    setCompany((meta.company as string) || '')
+    setCompany((meta.organization as string) || (meta.company as string) || '')
     setWebsite((meta.website as string) || '')
     setCity((meta.location as string) || '')
     setCountry((meta.country as string) || '')
-    setTimezone((meta.timezone as string) || '')
+
     setBio((meta.bio as string) || '')
-    setMarketingOptIn(Boolean(meta.marketing_opt_in))
+
   }
 
   useEffect(() => {
@@ -562,137 +530,40 @@ export function PortalPage() {
     navigate(portalUserPath(handle))
   }
 
-  async function saveProfile() {
-    if (!user) return
-    setSaving(true)
-    const supabase = getSupabase()
-    const next = {
-      id: user.id,
-      username: sanitizeUsername(username || ''),
-      full_name: (displayName || '').trim(),
-      avatar_url: (avatarUrl || '').trim(),
-      job_title: (jobTitle || '').trim(),
-      company: (company || '').trim(),
-      website: (website || '').trim(),
-      location: (city || '').trim(),
-      country: (country || '').trim(),
-      timezone: (timezone || '').trim(),
-      bio: (bio || '').trim(),
-      marketing_opt_in: Boolean(marketingOptIn),
-      updated_at: new Date().toISOString(),
-    }
-    try {
-      const { error } = await supabase.from('profiles').upsert(next, { onConflict: 'id' })
-      if (error) {
-        // If unique username constraint fails
-        if ((error as any).code === '23505') {
-          setUsernameAvailable('taken')
-          const id = Date.now()
-          setToast({ id, kind: 'error', message: 'This username is already taken.' })
-          window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
-          return
-        }
-        const id = Date.now()
-        setToast({ id, kind: 'error', message: 'Could not save profile. Try again.' })
-        window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
-      }
-    } catch {
-      const id = Date.now()
-      setToast({ id, kind: 'error', message: 'Could not save profile. Try again.' })
-      window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
-    }
 
+
+
+
+
+  async function downloadProfilePdf() {
+    const element = profileCardRef.current
+    if (!element) return
     try {
-      const { error } = await supabase.auth.updateUser({
-        data: {
-          username: next.username,
-          full_name: next.full_name,
-          avatar_url: next.avatar_url,
-          job_title: next.job_title,
-          company: next.company,
-          website: next.website,
-          location: next.location,
-          country: next.country,
-          timezone: next.timezone,
-          bio: next.bio,
-          marketing_opt_in: next.marketing_opt_in,
-          noAvatar: next.avatar_url ? false : (user.user_metadata?.noAvatar as boolean) || false,
-        },
-      })
-      if (!error) {
-        if (viewingProfile && username && username !== decodeURIComponent((userParam as string) || '')) {
-          navigate(portalUserPath(username), { replace: true })
-        }
-        const id = Date.now()
-        setToast({ id, kind: 'success', message: 'Profile updated successfully.' })
-        window.setTimeout(() => {
-          setToast((t) => (t && t.id === id ? null : t))
-        }, 3000)
-      } else {
-        const id = Date.now()
-        setToast({ id, kind: 'error', message: 'Failed to update profile.' })
-        window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
+      setDownloading(true)
+      const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#0b0b0b' })
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const pageHeight = pdf.internal.pageSize.getHeight()
+      const margin = 10
+      let renderWidth = pageWidth - margin * 2
+      const imgProps = (pdf as any).getImageProperties(imgData)
+      let renderHeight = (imgProps.height * renderWidth) / imgProps.width
+      const maxHeight = pageHeight - margin * 2
+      if (renderHeight > maxHeight) {
+        renderHeight = maxHeight
+        renderWidth = (imgProps.width * renderHeight) / imgProps.height
       }
+      const x = (pageWidth - renderWidth) / 2
+      const y = margin
+      pdf.addImage(imgData, 'PNG', x, y, renderWidth, renderHeight)
+      pdf.save(`${username || 'profile'}.pdf`)
+      setToast({ id: Date.now(), kind: 'success', message: 'PDF downloaded successfully.' })
+    } catch (err) {
+      setToast({ id: Date.now(), kind: 'error', message: 'Failed to generate PDF.' })
+      console.error(err)
     } finally {
-      setSaving(false)
-    }
-  }
-
-  async function onAvatarFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file || !user) return
-    const supabase = getSupabase()
-    const fileExt = file.name.split('.').pop() || 'png'
-    const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const bucket = 'public-assets'
-    const path = `avatars/${user.id}/${unique}.${fileExt}`
-    try {
-      const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, { upsert: true, contentType: file.type })
-      if (uploadError) {
-        const id = Date.now()
-        setToast({ id, kind: 'error', message: 'Avatar upload failed.' })
-        window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
-        return
-      }
-      const { data } = supabase.storage.from(bucket).getPublicUrl(path)
-      if (data?.publicUrl) {
-        setAvatarUrl(data.publicUrl)
-        try {
-          await supabase.auth.updateUser({ data: { avatar_url: data.publicUrl, avatar_path: path, noAvatar: false } })
-        } catch {}
-        const id = Date.now()
-        setToast({ id, kind: 'success', message: 'Avatar uploaded.' })
-        window.setTimeout(() => {
-          setToast((t) => (t && t.id === id ? null : t))
-        }, 2500)
-      }
-    } catch {
-      const id = Date.now()
-      setToast({ id, kind: 'error', message: 'Avatar upload failed.' })
-      window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
-    }
-  }
-
-  async function removeAvatar() {
-    setAvatarUrl('')
-    // Persist the intent to hide avatar via metadata flag
-    try {
-      const { error } = await getSupabase().auth.updateUser({ data: { avatar_url: '', noAvatar: true } })
-      if (error) {
-        const id = Date.now()
-        setToast({ id, kind: 'error', message: 'Failed to remove avatar.' })
-        window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
-        return
-      }
-      const id = Date.now()
-      setToast({ id, kind: 'success', message: 'Avatar removed.' })
-      window.setTimeout(() => {
-        setToast((t) => (t && t.id === id ? null : t))
-      }, 2500)
-    } catch {
-      const id = Date.now()
-      setToast({ id, kind: 'error', message: 'Failed to remove avatar.' })
-      window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
+      setDownloading(false)
     }
   }
 
@@ -753,7 +624,7 @@ export function PortalPage() {
               <div className="px-0 py-3 flex flex-col items-center gap-2">
                 <button
                   type="button"
-                  title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
+                  title={`${getCapitalizedFirstName((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
                   onClick={goToProfile}
                   className="w-10 h-10 rounded-full text-white/85 hover:text-white flex items-center justify-center pressable"
                 >
@@ -774,7 +645,7 @@ export function PortalPage() {
                   type="button"
                   onClick={goToProfile}
                   className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition pressable"
-                  title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
+                  title={`${getCapitalizedFirstName((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
                 >
                   <UserAvatar user={user} sizeClass="w-5 h-5" />
                   <span className="text-sm text-white/90 font-medium">
@@ -784,8 +655,8 @@ export function PortalPage() {
                         (user?.user_metadata?.full_name as string) ||
                         (user?.email as string) ||
                         'Your'
-                      const first = rawName.trim().split(' ')[0]
-                      return user ? `${first}'s Profile` : 'Your Profile'
+                      const first = rawName.toString().trim().split(' ')[0]
+                      return user && first && first !== 'Your' ? `${first}'s Profile` : 'Your Profile'
                     })()}
                   </span>
                 </button>
@@ -833,13 +704,28 @@ export function PortalPage() {
                   </>
                 ) : viewingProfile ? (
                   <>
-                    <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">
-                      <span className="text-primary-600">{getFirstName()}</span>
-                      <span>'s Profile</span>
-                    </h1>
-                    <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
-                      Manage your account, settings, and preferences.
-                    </p>
+                    <div className="mt-2 flex items-start justify-between gap-3">
+                      <div>
+                        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">
+                          <span className="text-primary-600">{getFirstName()}</span>
+                          <span>'s Profile</span>
+                        </h1>
+                        <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
+                          Your professional profile showcases your achievements and expertise. Share your unique profile with colleagues and potential collaborators: <span className="text-primary-400 font-medium">{window.location.origin}{publicProfilePath(username || 'your-username')}</span>
+                        </p>
+                      </div>
+                      <div className="shrink-0">
+                        <button
+                          type="button"
+                          onClick={onLogout}
+                          className="px-3 py-2 text-sm border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg transition-colors pressable"
+                          title="Logout"
+                          aria-label="Logout"
+                        >
+                          Logout
+                        </button>
+                      </div>
+                    </div>
                   </>
                 ) : (
                   <>
@@ -875,97 +761,309 @@ export function PortalPage() {
           {isSettings ? (
             <Outlet />
           ) : viewingProfile ? (
-            <section className="mx-auto max-w-3xl px-4 py-6 animate-fade-in-up">
-              <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-5 sm:p-7">
-                <div className="flex items-start gap-5">
-                  <div className="relative">
-                    <UserAvatar user={user} sizeClass="w-16 h-16" textClass="text-lg font-semibold" />
-                    <input type="file" accept="image/*" onChange={onAvatarFileSelected} className="absolute inset-0 opacity-0 cursor-pointer" title="Upload avatar" aria-label="Upload avatar" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-xl font-semibold text-white/95 truncate">{displayName || getFirstName()}</h2>
-                      <span className="text-xs bg-white/10 border border-white/10 rounded-full px-2 py-0.5 text-white/70">@{username || 'user'}</span>
+            <section className="mx-auto max-w-4xl px-4 py-6 animate-fade-in-up">
+              {/* Clean Material Profile Card */}
+              <div ref={profileCardRef} className="bg-white/[0.02] border border-white/10 rounded-2xl p-6 sm:p-8 mb-8 shadow-lg hover:shadow-xl transition-shadow duration-300">
+                <div className="flex flex-col sm:flex-row gap-6">
+                  {/* Simple Avatar Section */}
+                  <div className="flex flex-col items-center sm:items-start">
+                    <div className="relative">
+                      <UserAvatar user={user} sizeClass="w-24 h-24" textClass="text-2xl font-semibold" />
+                      <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-green-400 border-2 border-white rounded-full" />
                     </div>
-                    <div className="mt-2 flex gap-2">
-                      <button type="button" onClick={removeAvatar} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable">Remove avatar</button>
-                      <button type="button" onClick={() => navigate(paths.portal)} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable">Back</button>
-                      <button type="button" onClick={onLogout} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable">Sign out</button>
+                  </div>
+                  
+                  {/* Profile Content */}
+                  <div className="flex-1 min-w-0">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+                      <div>
+                        <h2 className="text-2xl sm:text-3xl font-bold text-white mb-1">
+                          {displayName || getFirstName()}
+                        </h2>
+                        <div className="flex items-center gap-2 text-white/60">
+                          <span>@{username || 'user'}</span>
+                          <button 
+                            type="button"
+                            onClick={async () => {
+                              try {
+                                await navigator.clipboard.writeText(`@${username || 'user'}`)
+                                setCopySuccess(true)
+                                setTimeout(() => setCopySuccess(false), 2000)
+                              } catch (err) {
+                                console.log('Copy failed:', err)
+                              }
+                            }}
+                            className={`p-1 hover:text-primary-400 transition-colors ${copySuccess ? 'text-green-400' : 'text-white/40'}`}
+                            title={copySuccess ? 'Copied!' : 'Copy username'}
+                          >
+                            {copySuccess ? (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* Action Buttons */}
+                      <div className="flex gap-2">
+                        <button 
+                          type="button" 
+                          onClick={() => navigate(paths.portal)} 
+                          className="p-2 border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg transition-colors"
+                          title="Back to Portal"
+                          aria-label="Back to Portal"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                          </svg>
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const profileUrl = `${window.location.origin}${publicProfilePath(username || 'user')}`
+                            if (navigator.share) {
+                              navigator.share({
+                                title: `${displayName || getFirstName()} - Smartslate Profile`,
+                                text: `Check out ${displayName || getFirstName()}'s professional profile on Smartslate`,
+                                url: profileUrl
+                              })
+                            } else {
+                              navigator.clipboard.writeText(profileUrl)
+                            }
+                          }}
+                          className="p-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors"
+                          title="Share Profile"
+                          aria-label="Share Profile"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={downloadProfilePdf}
+                          disabled={downloading}
+                          className={`p-2 border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg transition-colors ${downloading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                          title={downloading ? 'Generating PDF…' : 'Download PDF'}
+                          aria-label={downloading ? 'Generating PDF' : 'Download PDF'}
+                        >
+                          {downloading ? (
+                            <div className="w-5 h-5 border-2 border-white/50 border-t-transparent rounded-full animate-spin" />
+                          ) : (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14" />
+                            </svg>
+                          )}
+                        </button>
+
+                      </div>
+                    </div>
+                    
+                    {/* Professional Info */}
+                    <div className="space-y-3 mb-4">
+                      {(jobTitle || company) && (
+                        <div className="flex flex-wrap gap-2 text-sm">
+                          {jobTitle && <span className="text-white/90">{jobTitle}</span>}
+                          {jobTitle && company && <span className="text-white/40">at</span>}
+                          {company && <span className="text-primary-400 font-medium">{company}</span>}
+                        </div>
+                      )}
+                      
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-white/60">
+                        {(city || country) && (
+                          <div className="flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            <span>{[city, country].filter(Boolean).join(', ')}</span>
+                          </div>
+                        )}
+                        
+                        {website && (
+                          <div className="flex items-center gap-1">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                            <a 
+                              href={website} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-primary-400 hover:underline"
+                            >
+                              {website.replace(/^https?:\/\//, '')}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Social Actions */}
+                    <div className="flex items-center gap-2">
+                      <button 
+                        className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors" 
+                        title="LinkedIn"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>
+                        </svg>
+                      </button>
+                      <button 
+                        className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors" 
+                        title="Twitter"
+                      >
+                        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z"/>
+                        </svg>
+                      </button>
+                      <button 
+                        className="p-2 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors" 
+                        title="Email"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </button>
+                      
+                      <div className="w-px h-6 bg-white/20 mx-2" />
+                      
+                      <button 
+                        onClick={() => {
+                          const publicProfileUrl = `${window.location.origin}/${userParam || 'user'}`
+                          window.open(publicProfileUrl, '_blank')
+                        }}
+                        className="px-3 py-1.5 text-sm border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg transition-colors"
+                      >
+                        View Public Profile
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Bio Section */}
+                {bio && (
+                  <div className="mt-6 pt-6 border-t border-white/10">
+                    <h3 className="text-sm font-medium text-white/80 mb-2">About</h3>
+                    <div 
+                      className="text-white/70 leading-relaxed prose prose-invert prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: bio }}
+                      style={{
+                        color: 'rgba(255, 255, 255, 0.7)'
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Portfolio Sections */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Certificates Section */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-lg bg-primary-500/20 border border-primary-500/30 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white/95">Certificates</h3>
+                      <p className="text-sm text-white/60">Professional certifications and achievements</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center py-12 px-4">
+                    <div className="text-center">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </div>
+                      <p className="text-sm text-white/60">Certificates will be displayed here</p>
+                      <p className="text-xs text-white/40 mt-1">Coming soon</p>
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-sm font-semibold text-white/90">Identity</div>
-                    <div className="mt-3 space-y-3 text-sm text-white/80">
-                      <label className="block">
-                        <span className="text-xs text-white/60">Display name</span>
-                        <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your name" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs text-white/60">Unique User ID (username)</span>
-                        <div className="mt-1 flex items-center gap-2">
-                          <span className="px-2 py-2 rounded-lg bg-white/5 border border-white/10 text-white/60 select-none">@</span>
-                          <input value={username} onChange={(e) => { const v = sanitizeUsername(e.target.value); setUsername(v); void checkUsernameAvailability(v) }} placeholder="username" className="flex-1 rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
-                          <span className="text-xs min-w-[64px] text-center">
-                            {checkingUsername ? '...' : username ? (usernameAvailable === 'available' ? 'Available' : usernameAvailable === 'taken' ? 'Taken' : '') : ''}
-                          </span>
-                        </div>
-                        <span className="mt-1 block text-[11px] text-white/50">Public and unique. No spaces, only letters, numbers, underscores.</span>
-                      </label>
+                {/* Achievements Section */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-lg bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white/95">Achievements</h3>
+                      <p className="text-sm text-white/60">Awards, recognitions, and accolades</p>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-sm font-semibold text-white/90">Profile</div>
-                    <div className="mt-3 space-y-3 text-sm text-white/80">
-                      <label className="block">
-                        <span className="text-xs text-white/60">Job title (optional)</span>
-                        <input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Product Manager" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs text-white/60">Company (optional)</span>
-                        <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs text-white/60">Website (optional)</span>
-                        <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://example.com" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
-                      </label>
+                  <div className="flex items-center justify-center py-12 px-4">
+                    <div className="text-center">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </div>
+                      <p className="text-sm text-white/60">Achievements will be displayed here</p>
+                      <p className="text-xs text-white/40 mt-1">Coming soon</p>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-sm font-semibold text-white/90">Location</div>
-                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-white/80">
-                      <label className="block">
-                        <span className="text-xs text-white/60">City (optional)</span>
-                        <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
-                      </label>
-                      <label className="block">
-                        <span className="text-xs text-white/60">Country (optional)</span>
-                        <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Country" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
-                      </label>
-                      <label className="block sm:col-span-2">
-                        <span className="text-xs text-white/60">Timezone (optional)</span>
-                        <input value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="e.g. UTC+05:30" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
-                      </label>
+                </div>
+
+                {/* Skills Section */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-lg bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white/95">Skills & Expertise</h3>
+                      <p className="text-sm text-white/60">Professional skills and competencies</p>
                     </div>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <div className="text-sm font-semibold text-white/90">About</div>
-                    <div className="mt-3 space-y-3 text-sm text-white/80">
-                      <label className="block">
-                        <span className="text-xs text-white/60">Bio (optional)</span>
-                        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={4} placeholder="Tell us a bit about yourself" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400"></textarea>
-                      </label>
-                      <label className="inline-flex items-center gap-2 select-none">
-                        <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="rounded border-white/20 bg-white/5" />
-                        <span className="text-xs text-white/60">I agree to receive occasional product updates (optional)</span>
-                      </label>
+                  <div className="flex items-center justify-center py-12 px-4">
+                    <div className="text-center">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </div>
+                      <p className="text-sm text-white/60">Skills will be displayed here</p>
+                      <p className="text-xs text-white/40 mt-1">Coming soon</p>
                     </div>
                   </div>
-                  <div className="sm:col-span-2 flex items-center justify-end gap-3">
-                    <button type="button" onClick={() => navigate(paths.portal)} className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable">Cancel</button>
-                    <button type="button" onClick={saveProfile} disabled={saving} className="px-4 py-2 rounded-lg border border-primary-500/20 bg-primary-500/20 text-primary-200 hover:text-white hover:bg-primary-500/30 pressable disabled:opacity-60">{saving ? 'Saving...' : 'Save changes'}</button>
+                </div>
+
+                {/* Projects Section */}
+                <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 rounded-lg bg-green-500/20 border border-green-500/30 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-white/95">Projects & Portfolio</h3>
+                      <p className="text-sm text-white/60">Notable projects and work samples</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-center py-12 px-4">
+                    <div className="text-center">
+                      <div className="w-16 h-16 mx-auto mb-4 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                      </div>
+                      <p className="text-sm text-white/60">Projects will be displayed here</p>
+                      <p className="text-xs text-white/40 mt-1">Coming soon</p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1065,7 +1163,7 @@ export function PortalPage() {
                       <button
                         type="button"
                         onClick={goToProfile}
-                        title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
+                        title={`${getCapitalizedFirstName((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
                         className="w-10 h-10 rounded-full text-white/85 hover:text-white flex items-center justify-center pressable"
                       >
                         <UserAvatar user={user} sizeClass="w-10 h-10" textClass="text-sm font-semibold" />

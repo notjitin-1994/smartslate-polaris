@@ -117,4 +117,143 @@
     opacity: 0.07;
     pointer-events: none;
   }
+
+  /* Enhanced Profile Card Animations */
+  .profile-card-hover {
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .profile-card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 32px 64px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Avatar glow animation */
+  .avatar-glow {
+    animation: avatarGlow 3s ease-in-out infinite alternate;
+  }
+  
+  /* Status indicator pulse */
+  .status-pulse {
+    animation: statusPulse 2s ease-in-out infinite;
+  }
+
+  /* Floating action button */
+  .float-button {
+    animation: floatButton 3s ease-in-out infinite;
+  }
+
+  /* Staggered entrance animation for social buttons */
+  .stagger-in {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: staggerIn 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+  
+  .stagger-in:nth-child(1) { animation-delay: 0.1s; }
+  .stagger-in:nth-child(2) { animation-delay: 0.2s; }
+  .stagger-in:nth-child(3) { animation-delay: 0.3s; }
+  .stagger-in:nth-child(4) { animation-delay: 0.4s; }
+  .stagger-in:nth-child(5) { animation-delay: 0.5s; }
+  .stagger-in:nth-child(6) { animation-delay: 0.6s; }
+
+  /* Copy button success feedback */
+  .copy-success {
+    animation: copySuccess 0.6s ease-out;
+  }
+
+  /* Enhanced gradient text */
+  .gradient-text-animated {
+    background: linear-gradient(-45deg, #ffffff, #a7dadb, #7bc5c7, #4F46E5);
+    background-size: 400% 400%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: gradientShift 4s ease-in-out infinite;
+  }
+}
+
+@layer utilities {
+  /* Animation keyframes */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes avatarGlow {
+    0% {
+      box-shadow: 0 0 20px rgba(167, 218, 219, 0.3);
+    }
+    100% {
+      box-shadow: 0 0 40px rgba(167, 218, 219, 0.6), 0 0 80px rgba(79, 70, 229, 0.2);
+    }
+  }
+
+  @keyframes statusPulse {
+    0%, 100% {
+      transform: scale(1);
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
+    }
+    50% {
+      transform: scale(1.1);
+      box-shadow: 0 0 16px rgba(34, 197, 94, 0.8);
+    }
+  }
+
+  @keyframes floatButton {
+    0%, 100% {
+      transform: translateY(0) translateX(-50%);
+    }
+    50% {
+      transform: translateY(-6px) translateX(-50%);
+    }
+  }
+
+  @keyframes staggerIn {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes copySuccess {
+    0% {
+      transform: scale(1);
+      color: rgba(255, 255, 255, 0.5);
+    }
+    50% {
+      transform: scale(1.2);
+      color: rgba(34, 197, 94, 1);
+    }
+    100% {
+      transform: scale(1);
+      color: rgba(255, 255, 255, 0.5);
+    }
+  }
+
+  @keyframes gradientShift {
+    0% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+    100% {
+      background-position: 0% 50%;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
 }

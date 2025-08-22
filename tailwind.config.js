@@ -7,17 +7,17 @@ export default {
   theme: {
     extend: {
       colors: {
+        // Brand primary (Teal/Cyan)
         primary: {
-          50: '#eef6ff',
-          100: '#d9eaff',
-          200: '#b6d7ff',
-          300: '#86bdff',
-          400: '#559eff',
-          500: '#3b82f6',
-          600: '#2563eb',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          400: '#d0edf0',
+          500: '#a7dadb',
+          600: '#7bc5c7',
+        },
+        // Brand secondary (Indigo/Purple)
+        secondary: {
+          400: '#7C69F5',
+          500: '#4F46E5',
+          600: '#3730A3',
         },
       },
       fontFamily: {

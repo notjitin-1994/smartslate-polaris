@@ -19,7 +19,7 @@ export function AuthPage() {
             <span className="relative inline-flex items-center justify-center">
               Login
               {activeTab === 'login' && (
-                <span className="absolute -bottom-[9px] left-1/2 h-0.5 w-10 -translate-x-1/2 bg-primary-500 rounded-full" />
+                <span className="absolute -bottom-[9px] left-1/2 h-0.5 w-10 -translate-x-1/2 bg-secondary-500 rounded-full" />
               )}
             </span>
           </button>
@@ -30,7 +30,7 @@ export function AuthPage() {
             <span className="relative inline-flex items-center justify-center">
               Sign Up
               {activeTab === 'signup' && (
-                <span className="absolute -bottom-[9px] left-1/2 h-0.5 w-10 -translate-x-1/2 bg-primary-500 rounded-full" />
+                <span className="absolute -bottom-[9px] left-1/2 h-0.5 w-10 -translate-x-1/2 bg-secondary-500 rounded-full" />
               )}
             </span>
           </button>

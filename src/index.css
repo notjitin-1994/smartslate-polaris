@@ -4,9 +4,18 @@
 
 @layer base {
   :root {
-    --bg: 11 12 15; /* #0b0c0f */
-    --card: 17 19 23; /* #111317 */
-    --text: 234 240 247; /* near-white */
+    --bg: 2 12 27; /* #020C1B */
+    --card: 13 27 42; /* #0d1b2a */
+    --text: 224 224 224; /* #e0e0e0 */
+    --text-muted: 176 197 198; /* #b0c5c6 */
+    --text-disabled: 122 138 139; /* #7a8a8b */
+    /* Brand tokens from style guide */
+    --primary: 167 218 219; /* #a7dadb (teal primary) */
+    --primary-light: 208 237 240; /* #d0edf0 */
+    --primary-dark: 123 197 199; /* #7bc5c7 */
+    --secondary: 79 70 229; /* #4F46E5 (indigo secondary) */
+    --secondary-light: 124 105 245; /* #7C69F5 */
+    --secondary-dark: 55 48 163; /* #3730A3 */
   }
 
   html, body, #root {
@@ -20,11 +29,11 @@
 
 @layer components {
   .card {@apply bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 shadow-2xl;}
-  .input {@apply w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/40 outline-none ring-0 focus:ring-2 focus:ring-primary-500 focus:border-white/20 transition;}
-  .btn-primary {@apply inline-flex items-center justify-center rounded-xl bg-primary-500 px-4 py-3 text-sm font-medium text-white hover:bg-primary-600 active:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition;}
+  .input {@apply w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/40 outline-none ring-0 focus:ring-[1.2px] focus:ring-primary-400 focus:border-primary-400 transition;}
+  .btn-primary {@apply inline-flex items-center justify-center rounded-xl bg-secondary-500 px-4 py-3 text-sm font-medium text-white hover:bg-secondary-600 active:bg-secondary-600 disabled:opacity-50 disabled:cursor-not-allowed transition;}
   .btn-ghost {@apply inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition;}
-  .tab {@apply relative flex-1 text-center py-2 text-sm font-medium text-white/70 hover:text-white transition;}
-  .tab-active {@apply text-white;}
+  .tab {@apply relative flex-1 text-center py-2 text-sm font-medium text-primary-500 transition;}
+  .tab-active {@apply text-primary-500;}
   .swirl-item {
     transition: transform 420ms cubic-bezier(0.22,1,0.36,1), filter 420ms ease;
     transform: var(--t);
@@ -34,11 +43,11 @@
   }
   /* Logo glow */
   .logo-glow {
-    filter: drop-shadow(0 0 0 rgba(45,212,191,0));
+    filter: drop-shadow(0 0 0 rgba(var(--primary), 0));
     transition: filter 360ms ease;
   }
   .logo-glow:hover {
-    filter: drop-shadow(0 0 14px rgba(45,212,191,0.45));
+    filter: drop-shadow(0 0 14px rgba(var(--primary), 0.45));
   }
   .swirl-pattern {
     position: absolute;

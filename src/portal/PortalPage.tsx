@@ -765,7 +765,7 @@ export function PortalPage() {
                   onClick={() => navigate(paths.settings)}
                   className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
                 >
-                  <SettingsIconImg className="w-10 h-10" />
+                  <SettingsIconImg className="w-5 h-5" />
                 </button>
               </div>
             ) : (

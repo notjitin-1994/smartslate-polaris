@@ -18,21 +18,6 @@ function detect(input: string): IdentifierValue {
     return { kind: 'email', email: trimmed.toLowerCase() }
   }
 
-  // Phone: must start with + followed by digits
-  if (/^\+\d{1,15}$/.test(trimmed)) {
-    try {
-      const phone = parsePhoneNumberFromString(trimmed)
-      if (phone && phone.isValid()) {
-        return {
-          kind: 'phone',
-          countryCode: `+${phone.countryCallingCode}`,
-          national: phone.nationalNumber,
-          e164: phone.number,
-        }
-      }
-    } catch {}
-  }
-
   return { kind: 'unknown', raw: input }
 }
 

@@ -644,18 +644,22 @@ export function PortalPage() {
     const supabase = getSupabase()
     const fileExt = file.name.split('.').pop() || 'png'
     const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-    const path = `${user.id}/${unique}.${fileExt}`
+    const bucket = 'public-assets'
+    const path = `avatars/${user.id}/${unique}.${fileExt}`
     try {
-      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+      const { error: uploadError } = await supabase.storage.from(bucket).upload(path, file, { upsert: true, contentType: file.type })
       if (uploadError) {
         const id = Date.now()
         setToast({ id, kind: 'error', message: 'Avatar upload failed.' })
         window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
         return
       }
-      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      const { data } = supabase.storage.from(bucket).getPublicUrl(path)
       if (data?.publicUrl) {
         setAvatarUrl(data.publicUrl)
+        try {
+          await supabase.auth.updateUser({ data: { avatar_url: data.publicUrl, avatar_path: path, noAvatar: false } })
+        } catch {}
         const id = Date.now()
         setToast({ id, kind: 'success', message: 'Avatar uploaded.' })
         window.setTimeout(() => {
@@ -707,10 +711,10 @@ export function PortalPage() {
   ]
 
   return (
-    <div className="min-h-screen w-full bg-[rgb(var(--bg))] text-[rgb(var(--text))]">
-      <div className="flex h-screen">
+    <div className="h-screen w-full overflow-hidden bg-[rgb(var(--bg))] text-[rgb(var(--text))]">
+      <div className="flex h-full">
         <aside className={`hidden md:flex ${sidebarCollapsed ? 'md:w-16 lg:w-16' : 'md:w-72 lg:w-80'} flex-col border-r border-white/10 bg-white/5/50 backdrop-blur-xl transition-[width] duration-300 ease-in-out`}>
-          <div className={`px-3 ${sidebarCollapsed ? 'py-2' : 'px-4 py-4'} border-b border-white/10 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} gap-2`}>
+          <div className={`px-3 ${sidebarCollapsed ? 'py-2' : 'px-4 py-4'} border-b border-white/10 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} gap-2 sticky top-0 z-10`}>
             {!sidebarCollapsed && <Brand />}
             <button
               type="button"
@@ -743,63 +747,66 @@ export function PortalPage() {
               <NavSection title="Solara" items={solaraItems} />
             </nav>
           )}
-          {sidebarCollapsed ? (
-            <div className="px-0 py-3 flex flex-col items-center gap-2">
-              <button
-                type="button"
-                title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
-                onClick={goToProfile}
-                className="w-10 h-10 rounded-full text-white/85 hover:text-white flex items-center justify-center pressable"
-              >
-                <UserAvatar user={user} sizeClass="w-10 h-10" textClass="text-sm font-semibold" />
-              </button>
-              <button
-                type="button"
-                title="Settings"
-                onClick={() => navigate(paths.settings)}
-                className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
-              >
-                <SettingsIconImg className="w-5 h-5" />
-              </button>
+
+          <div className="mt-auto w-full">
+            {sidebarCollapsed ? (
+              <div className="px-0 py-3 flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
+                  onClick={goToProfile}
+                  className="w-10 h-10 rounded-full text-white/85 hover:text-white flex items-center justify-center pressable"
+                >
+                  <UserAvatar user={user} sizeClass="w-10 h-10" textClass="text-sm font-semibold" />
+                </button>
+                <button
+                  type="button"
+                  title="Settings"
+                  onClick={() => navigate(paths.settings)}
+                  className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
+                >
+                  <SettingsIconImg className="w-5 h-5" />
+                </button>
+              </div>
+            ) : (
+              <div className="px-3 py-3 space-y-2">
+                <button
+                  type="button"
+                  onClick={goToProfile}
+                  className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition pressable"
+                  title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
+                >
+                  <UserAvatar user={user} sizeClass="w-9 h-9" />
+                  <span className="text-sm text-white/90 font-medium">
+                    {(() => {
+                      const rawName = (user?.user_metadata?.first_name as string) ||
+                        (user?.user_metadata?.name as string) ||
+                        (user?.user_metadata?.full_name as string) ||
+                        (user?.email as string) ||
+                        'Your'
+                      const first = rawName.trim().split(' ')[0]
+                      return user ? `${first}'s Profile` : 'Your Profile'
+                    })()}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(paths.settings)}
+                  className="w-full inline-flex items-center gap-2 px-2 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
+                  title="Settings"
+                >
+                  <SettingsIconImg className="w-4 h-4" />
+                  <span>Settings</span>
+                </button>
+              </div>
+            )}
+            <div className={`border-t border-white/10 text-xs text-white/50 ${sidebarCollapsed ? 'px-0 py-2 flex items-center justify-center' : 'px-4 py-3'}`}>
+              Made with ❤️ for better education
             </div>
-          ) : (
-            <div className="px-3 py-3 space-y-2">
-              <button
-                type="button"
-                onClick={goToProfile}
-                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition pressable"
-                title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
-              >
-                <UserAvatar user={user} sizeClass="w-9 h-9" />
-                <span className="text-sm text-white/90 font-medium">
-                  {(() => {
-                    const rawName = (user?.user_metadata?.first_name as string) ||
-                      (user?.user_metadata?.name as string) ||
-                      (user?.user_metadata?.full_name as string) ||
-                      (user?.email as string) ||
-                      'Your'
-                    const first = rawName.trim().split(' ')[0]
-                    return user ? `${first}'s Profile` : 'Your Profile'
-                  })()}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate(paths.settings)}
-                className="w-full inline-flex items-center gap-2 px-2 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
-                title="Settings"
-              >
-                <SettingsIconImg className="w-4 h-4" />
-                <span>Settings</span>
-              </button>
-            </div>
-          )}
-          <div className={`border-t border-white/10 text-xs text-white/50 ${sidebarCollapsed ? 'px-0 py-2 flex items-center justify-center' : 'px-4 py-3'}`}>
-            {sidebarCollapsed ? null : 'Made with ❤️ for better education'}
           </div>
         </aside>
 
-        <main className="flex-1 min-w-0">
+        <main className="flex-1 min-w-0 h-full overflow-y-auto">
           <header className="sticky top-0 z-10 border-b border-white/10 bg-[rgb(var(--bg))]/80 backdrop-blur-xl mb-12 md:mb-0">
             <div className="relative mx-auto max-w-7xl px-4 py-3 sm:py-4">
               <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 -top-24 h-48 bg-gradient-to-br from-primary-400/10 via-fuchsia-400/5 to-transparent blur-2xl" />

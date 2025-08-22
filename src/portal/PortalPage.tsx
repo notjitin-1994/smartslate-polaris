@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react'
-import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate, useParams, useOutlet } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { getSupabase } from '@/services/supabase'
 import html2canvas from 'html2canvas'
@@ -340,6 +340,7 @@ export function PortalPage() {
   const location = useLocation()
   const isSettings = location.pathname.endsWith('/settings')
   const { user: userParam } = useParams()
+  const outlet = useOutlet()
   const viewingProfile = Boolean(userParam)
   // Profile form state
   const [username, setUsername] = useState<string>('')
@@ -574,7 +575,7 @@ export function PortalPage() {
   ]
 
   const solaraItems: NavItem[] = [
-    { label: 'Polaris', tagText: 'V1 - Preview', tagTone: 'preview' },
+    { label: 'Polaris', tagText: 'Open', tagTone: 'preview' },
     { label: 'Constellation', tagText: 'V1 - Preview', tagTone: 'preview' },
     { label: 'Nova', tagText: isMobile ? 'Visit on Desktop' : 'Coming Soon', tagTone: 'info' },
     { label: 'Orbit', tagText: isMobile ? 'Visit on Desktop' : 'Coming Soon', tagTone: 'info' },
@@ -615,7 +616,34 @@ export function PortalPage() {
             <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-3">
               <NavSection title="Ignite" items={["Explore Learning", "My Learning"]} />
               <NavSection title="Strategic Skills Architecture" items={["Explore Partnership", "My Architecture"]} />
-              <NavSection title="Solara" items={solaraItems} />
+              <div className="select-none">
+                <div className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
+                  <span>Solara</span>
+                </div>
+                <div className="mt-1 pl-2">
+                  <ul className="space-y-0.5">
+                    <li>
+                      <a
+                        href={typeof window !== 'undefined' ? `${window.location.protocol}//polaris.smartslate.io` : 'https://polaris.smartslate.io'}
+                        className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 focus-visible:text-primary-500 active:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
+                      >
+                        <span className="truncate">Polaris</span>
+                        <span className="ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium border-primary-400/30 text-primary-500 bg-primary-400/10">Open</span>
+                      </a>
+                    </li>
+                    {solaraItems.slice(1).map((item) => (
+                      <li key={typeof item === 'string' ? item : item.label}>
+                        <a href="#" className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable">
+                          <span className="truncate">{typeof item === 'string' ? item : item.label}</span>
+                          {typeof item !== 'string' && item.tagText && (
+                            <span className={`ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${item.tagTone === 'preview' ? 'border-primary-400/30 text-primary-500 bg-primary-400/10' : 'border-white/10 text-white/60 bg-white/5'}`}>{item.tagText}</span>
+                          )}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
             </nav>
           )}
 
@@ -758,8 +786,8 @@ export function PortalPage() {
             </div>
           </header>
 
-          {isSettings ? (
-            <Outlet />
+          {outlet ? (
+            outlet
           ) : viewingProfile ? (
             <section className="mx-auto max-w-4xl px-4 py-6 animate-fade-in-up">
               {/* Clean Material Profile Card */}

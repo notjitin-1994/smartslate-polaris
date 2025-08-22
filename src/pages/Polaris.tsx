@@ -1,0 +1,351 @@
+import { useEffect, useState } from 'react'
+import { callLLM, type ChatMessage } from '@/services/llmClient'
+
+type QuestionType = 'text' | 'textarea' | 'number' | 'select' | 'multiselect' | 'radio' | 'chips' | 'boolean' | 'date'
+
+type Question = {
+  id: string
+  label: string
+  type: QuestionType
+  placeholder?: string
+  description?: string
+  required?: boolean
+  options?: Array<{ value: string; label: string }>
+}
+
+type QuestionnairePayload = {
+  stage: 1 | 2 | 3
+  questions: Question[]
+}
+
+const SYSTEM_PROMPT = `You are Smartslate's Product Discovery Copilot.
+You will produce JSON ONLY (no markdown) describing a questionnaire tailored to a prospect.
+JSON schema:
+{
+  "stage": 1 | 2 | 3,
+  "questions": [
+    {"id": string, "label": string, "type": "text"|"textarea"|"number"|"select"|"multiselect"|"radio"|"chips"|"boolean"|"date", "placeholder"?: string, "description"?: string, "required"?: boolean, "options"?: [{"value": string, "label": string}]} 
+  ]
+}
+Rules:
+- Keep IDs stable and URL-safe (kebab-case).
+- Choose answer types appropriately (e.g., select/multiselect when you can suggest options, boolean for yes/no).
+- Stages:
+  1. First-pass scoping across org profile, goals, timeline, constraints.
+  2. Deep-dive based on answers from Stage 1.
+  3. Final clarification for solution fit and rollout details. 
+- Use Smartslate context: Products at https://www.smartslate.io/products include Ignite Series (pre-built courses > talent pipeline), Strategic Skills Architecture (bespoke learning solutions, IP-safe), and Solara (AI-powered platform: Polaris/Constellation/Nova/Orbit/Nebula/Spectrum).
+- Ask only what is necessary. 6–12 questions per stage.
+- Localize labels in plain English.
+- Output valid JSON with no backticks.`
+
+function userPromptForStage(stage: 1 | 2 | 3, prior: any) {
+  const base = `Prospect inputs so far (JSON):\n${JSON.stringify(prior, null, 2)}\n`
+  if (stage === 2) return `${base}Generate the Stage 2 questionnaire (deep-dive).`
+  if (stage === 3) return `${base}Generate the Stage 3 questionnaire (final clarifications + rollout specifics).`
+  return `${base}Generate the Stage 1 questionnaire (first-pass scoping).`
+}
+
+function extractJsonBlock(s: string): any {
+  const trimmed = s.trim()
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    const start = trimmed.indexOf('{')
+    const end = trimmed.lastIndexOf('}')
+    if (start !== -1 && end !== -1 && end > start) {
+      const slice = trimmed.slice(start, end + 1)
+      try {
+        return JSON.parse(slice)
+      } catch {}
+    }
+  }
+  throw new Error('Could not parse LLM JSON')
+}
+
+export default function Polaris() {
+  const [active, setActive] = useState<'stage1' | 'stage2' | 'stage3' | 'summary'>('stage1')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [stage1Questions, setStage1] = useState<Question[]>([])
+  const [stage2Questions, setStage2] = useState<Question[]>([])
+  const [stage3Questions, setStage3] = useState<Question[]>([])
+  const [answers1, setAnswers1] = useState<Record<string, any>>({})
+  const [answers2, setAnswers2] = useState<Record<string, any>>({})
+  const [answers3, setAnswers3] = useState<Record<string, any>>({})
+  const [analysis, setAnalysis] = useState<string>('')
+
+  useEffect(() => {
+    let ignore = false
+    ;(async () => {
+      try {
+        setLoading(true)
+        const messages: ChatMessage[] = [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPromptForStage(1, {}) },
+        ]
+        const res = await callLLM(messages)
+        if (ignore) return
+        const json = extractJsonBlock(res.content)
+        setStage1((json?.questions as Question[]) || [])
+      } catch (e: any) {
+        if (!ignore) setError(e?.message || 'Failed to load Stage 1 questions.')
+      } finally {
+        if (!ignore) setLoading(false)
+      }
+    })()
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  async function genStage2() {
+    try {
+      setLoading(true)
+      setError(null)
+      const messages: ChatMessage[] = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userPromptForStage(2, { answers1 }) },
+      ]
+      const res = await callLLM(messages)
+      const json: QuestionnairePayload = extractJsonBlock(res.content)
+      setStage2(json.questions || [])
+      setActive('stage2')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to create Stage 2 questionnaire.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function genStage3() {
+    try {
+      setLoading(true)
+      setError(null)
+      const messages: ChatMessage[] = [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userPromptForStage(3, { answers1, answers2 }) },
+      ]
+      const res = await callLLM(messages)
+      const json: QuestionnairePayload = extractJsonBlock(res.content)
+      setStage3(json.questions || [])
+      setActive('stage3')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to create Stage 3 questionnaire.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function analyze() {
+    try {
+      setLoading(true)
+      setError(null)
+      const messages: ChatMessage[] = [
+        { role: 'system', content: 'You are a senior Solutions Architect at Smartslate. Analyze prospect inputs across three stages and produce a concise solution proposal mapping to Smartslate offerings with rationale and next steps. Output in markdown.' },
+        { role: 'user', content: `Prospect inputs (JSON):\n${JSON.stringify({ answers1, answers2, answers3 }, null, 2)}` },
+      ]
+      const res = await callLLM(messages, { temperature: 0.1 })
+      setAnalysis(res.content || '')
+      setActive('summary')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to analyze answers.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function Field({ q, value, onChange }: { q: Question; value: any; onChange: (v: any) => void }) {
+    const label = (
+      <div className="space-y-1">
+        <div className="text-sm font-medium text-white/90">{q.label}{q.required ? ' *' : ''}</div>
+        {q.description && <div className="text-xs text-white/60">{q.description}</div>}
+      </div>
+    )
+    if (q.type === 'textarea') {
+      return (
+        <label className="block space-y-2">
+          {label}
+          <textarea className="w-full min-h-[120px] rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-400" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={q.placeholder} />
+        </label>
+      )
+    }
+    if (q.type === 'number') {
+      return (
+        <label className="block space-y-2">
+          {label}
+          <input type="number" className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-400" value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} placeholder={q.placeholder} />
+        </label>
+      )
+    }
+    if (q.type === 'boolean') {
+      return (
+        <label className="block space-y-2">
+          {label}
+          <select className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary-400" value={value === true ? 'yes' : value === false ? 'no' : ''} onChange={(e) => onChange(e.target.value === 'yes')}>
+            <option value="">Select yes/no</option>
+            <option value="yes">Yes</option>
+            <option value="no">No</option>
+          </select>
+        </label>
+      )
+    }
+    if (q.type === 'select' || q.type === 'radio') {
+      return (
+        <label className="block space-y-2">
+          {label}
+          <select className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary-400" value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
+            <option value="">{q.placeholder || 'Select an option'}</option>
+            {(q.options || []).map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+      )
+    }
+    if (q.type === 'multiselect' || q.type === 'chips') {
+      return (
+        <div className="space-y-2">
+          {label}
+          <div className="flex flex-wrap gap-2">
+            {(q.options || []).map((o) => {
+              const active = Array.isArray(value) && value.includes(o.value)
+              return (
+                <button key={o.value} type="button" onClick={() => {
+                  const next = new Set(Array.isArray(value) ? value : [])
+                  if (next.has(o.value)) next.delete(o.value); else next.add(o.value)
+                  onChange(Array.from(next))
+                }} className={`px-3 py-1 rounded-2xl border transition ${active ? 'border-transparent bg-white/90 text-slate-900' : 'border-white/15 text-white/85 hover:bg-white/5'}`}>
+                  {o.label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )
+    }
+    if (q.type === 'date') {
+      return (
+        <label className="block space-y-2">
+          {label}
+          <input type="date" className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary-400" value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
+        </label>
+      )
+    }
+    return (
+      <label className="block space-y-2">
+        {label}
+        <input className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-400" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={q.placeholder} />
+      </label>
+    )
+  }
+
+  function markdownToHtml(md: string): string {
+    let html = md
+    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>')
+    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>')
+    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>')
+    html = html.replace(/^\*\s+(.*)$/gim, '<ul><li>$1</li></ul>')
+    html = html.replace(/^\-\s+(.*)$/gim, '<ul><li>$1</li></ul>')
+    html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+    html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>')
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+    html = html.replace(/\n/g, '<br />')
+    return html.trim()
+  }
+
+  return (
+    <div className="px-4 py-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-xl font-semibold text-white">Polaris – Needs Analysis</h2>
+          <p className="text-sm text-white/70">Guided, multi-stage discovery that adapts in real time.</p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mb-4 p-3 rounded-md border border-red-500/30 bg-red-500/10 text-red-200 text-sm">{error}</div>
+      )}
+
+      {active === 'stage1' && (
+        <section className="space-y-4">
+          {stage1Questions.length ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {stage1Questions.map((q) => (
+                <div key={q.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <Field q={q} value={answers1[q.id]} onChange={(v) => setAnswers1({ ...answers1, [q.id]: v })} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-white/60">No questions yet.</div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="px-3 py-2 text-sm border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg" onClick={() => setAnswers1({})}>Reset</button>
+            <button type="button" className="px-3 py-2 text-sm bg-primary-600 text-white rounded-lg disabled:opacity-70" onClick={genStage2} disabled={loading}>{loading ? 'Generating…' : 'Next: Generate Stage 2'}</button>
+          </div>
+        </section>
+      )}
+
+      {active === 'stage2' && (
+        <section className="space-y-4">
+          {stage2Questions.length ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {stage2Questions.map((q) => (
+                <div key={q.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <Field q={q} value={answers2[q.id]} onChange={(v) => setAnswers2({ ...answers2, [q.id]: v })} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-white/60">No questions yet.</div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="px-3 py-2 text-sm border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg" onClick={() => setActive('stage1')}>Back</button>
+            <button type="button" className="px-3 py-2 text-sm bg-secondary-500 text-white rounded-lg disabled:opacity-70" onClick={genStage3} disabled={loading}>{loading ? 'Generating…' : 'Next: Generate Stage 3'}</button>
+          </div>
+        </section>
+      )}
+
+      {active === 'stage3' && (
+        <section className="space-y-4">
+          {stage3Questions.length ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {stage3Questions.map((q) => (
+                <div key={q.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <Field q={q} value={answers3[q.id]} onChange={(v) => setAnswers3({ ...answers3, [q.id]: v })} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-white/60">No questions yet.</div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="px-3 py-2 text-sm border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg" onClick={() => setActive('stage2')}>Back</button>
+            <button type="button" className="px-3 py-2 text-sm bg-white/90 text-slate-900 rounded-lg disabled:opacity-70" onClick={analyze} disabled={loading}>{loading ? 'Analyzing…' : 'Analyze & Propose'}</button>
+          </div>
+        </section>
+      )}
+
+      {active === 'summary' && (
+        <section className="space-y-4">
+          {analysis ? (
+            <div className="prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: markdownToHtml(analysis) }} />
+          ) : (
+            <div className="text-sm text-white/60">Run the analysis to see a tailored proposal mapped to Ignite / Strategic Skills Architecture / Solara.</div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button type="button" className="px-3 py-2 text-sm border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg" onClick={() => setActive('stage1')}>Start Over</button>
+            <button type="button" className="px-3 py-2 text-sm bg-primary-600 text-white rounded-lg" onClick={() => navigator.clipboard.writeText(analysis || '')}>Copy Summary</button>
+          </div>
+          <details className="mt-2">
+            <summary className="cursor-pointer text-sm text-white/60">Developer debug: raw JSON</summary>
+            <pre className="text-xs bg-white/5 p-3 rounded-md overflow-auto border border-white/10 text-white/80">{JSON.stringify({ answers1, answers2, answers3, stage1Questions, stage2Questions, stage3Questions }, null, 2)}</pre>
+          </details>
+        </section>
+      )}
+    </div>
+  )
+}
+
+

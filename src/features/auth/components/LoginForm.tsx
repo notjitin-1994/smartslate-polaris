@@ -26,7 +26,7 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5">
+    <form onSubmit={onSubmit} className="space-y-5 animate-fade-in-up">
       <AuthInput
         value={identifierRaw}
         onChange={(raw, parsed) => {
@@ -45,8 +45,8 @@ export function LoginForm() {
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <button type="submit" className="btn-primary w-full" disabled={loading}>
-        {loading ? 'Signing in…' : 'Login'}
+      <button type="submit" className="btn-primary w-full pressable" disabled={loading}>
+        <span className={loading ? 'opacity-70 animate-pulse-subtle' : ''}>{loading ? 'Signing in…' : 'Login'}</span>
       </button>
 
       <div className="relative py-2 text-center text-xs text-white/40">

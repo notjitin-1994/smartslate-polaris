@@ -4,6 +4,7 @@ import type { IdentifierValue } from '@/features/auth/types'
 import * as authService from '@/features/auth/services/authService'
 import { GoogleOAuthButton } from '@/features/auth/components/GoogleOAuthButton'
 import { PasswordInput } from '@/components/PasswordInput'
+import { PasswordStrength } from '@/features/auth/components/PasswordStrength'
 
 export function SignUpForm() {
   const [identifierRaw, setIdentifierRaw] = useState('')
@@ -31,7 +32,7 @@ export function SignUpForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-5">
+    <form onSubmit={onSubmit} className="space-y-5 animate-fade-in-up">
       <AuthInput
         value={identifierRaw}
         onChange={(raw, parsed) => {
@@ -47,6 +48,7 @@ export function SignUpForm() {
         autoComplete="new-password"
         name="new-password"
       />
+      <PasswordStrength value={password} />
       <PasswordInput
         label="Confirm password"
         value={confirm}
@@ -58,8 +60,8 @@ export function SignUpForm() {
 
       {error && <p className="text-sm text-red-400">{error}</p>}
 
-      <button type="submit" className="btn-primary w-full" disabled={loading}>
-        {loading ? 'Creating account…' : 'Sign Up'}
+      <button type="submit" className="btn-primary w-full pressable" disabled={loading}>
+        <span className={loading ? 'opacity-70 animate-pulse-subtle' : ''}>{loading ? 'Creating account…' : 'Sign Up'}</span>
       </button>
 
       <div className="relative py-2 text-center text-xs text-white/40">

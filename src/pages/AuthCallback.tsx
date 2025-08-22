@@ -28,7 +28,7 @@ export default function AuthCallback() {
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-slate-950 text-white">
-      <div className="opacity-70">Signing you in…</div>
+      <div className="opacity-70 animate-fade-in-up">Signing you in…</div>
     </div>
   )
 }

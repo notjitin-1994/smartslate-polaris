@@ -6,14 +6,14 @@ export function AuthPage() {
   const [activeTab, setActiveTab] = useState<'login' | 'signup'>('login')
 
   return (
-    <div className="w-full max-w-md relative z-10">
-      <div className="flex items-center mb-6 select-none">
-        <img src="/images/logos/logo.png" alt="SmartSlate" className="h-8 w-auto logo-glow" />
-      </div>
-      <div className="card p-6 md:p-8 animate-fade-in">
+    <div className="w-full max-w-sm md:max-w-sm lg:max-w-md mx-auto relative z-10">
+      <div className="card p-6 md:p-8 animate-scale-in">
+        <div className="flex items-center mb-6 select-none animate-fade-in">
+          <img src="/images/logos/logo.png" alt="SmartSlate" className="h-8 w-auto logo-glow" />
+        </div>
         <div className="flex mb-6 rounded-lg bg-white/5 p-1">
           <button
-            className={`tab ${activeTab === 'login' ? 'tab-active' : ''}`}
+            className={`tab pressable ${activeTab === 'login' ? 'tab-active' : ''}`}
             onClick={() => setActiveTab('login')}
           >
             <span className="relative inline-flex items-center justify-center">
@@ -24,7 +24,7 @@ export function AuthPage() {
             </span>
           </button>
           <button
-            className={`tab ${activeTab === 'signup' ? 'tab-active' : ''}`}
+            className={`tab pressable ${activeTab === 'signup' ? 'tab-active' : ''}`}
             onClick={() => setActiveTab('signup')}
           >
             <span className="relative inline-flex items-center justify-center">
@@ -38,11 +38,11 @@ export function AuthPage() {
 
         <div className="relative">
           {activeTab === 'login' ? (
-            <div key="login" className="animate-fade-in">
+            <div key="login" className="animate-fade-in-up">
               <LoginForm />
             </div>
           ) : (
-            <div key="signup" className="animate-fade-in">
+            <div key="signup" className="animate-fade-in-up">
               <SignUpForm />
             </div>
           )}

@@ -35,7 +35,7 @@ export function PasswordInput({ label, value, onChange, placeholder, autoComplet
   return (
     <div className="space-y-2">
       <label className="block text-sm text-white/70">{label}</label>
-      <div className="relative group">
+      <div className="relative group animate-fade-in-up">
         <input
           className="input pr-12"
           type={visible ? 'text' : 'password'}
@@ -50,7 +50,7 @@ export function PasswordInput({ label, value, onChange, placeholder, autoComplet
           aria-label={visible ? 'Hide password' : 'Show password'}
           aria-pressed={visible}
           onClick={() => setVisible((v) => !v)}
-          className="absolute inset-y-0 right-2 my-auto h-8 w-8 rounded-md inline-flex items-center justify-center text-white/60 hover:text-white transition-colors"
+          className="absolute inset-y-0 right-2 my-auto h-8 w-8 rounded-md inline-flex items-center justify-center text-white/60 hover:text-white transition-colors pressable"
           title={visible ? 'Hide password' : 'Show password'}
         >
           <span className={`transition-opacity duration-200 ${visible ? 'opacity-0' : 'opacity-100'}`}>

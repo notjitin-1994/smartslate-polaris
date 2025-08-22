@@ -25,9 +25,11 @@ export default function AuthLanding() {
   }, [navigate])
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-slate-950 relative overflow-hidden">
-      <SwirlField imageSrc="/images/logos/logo-swirl.png" count={84} minSize={20} maxSize={44} opacityMin={0.035} opacityMax={0.09} />
-      <AuthPage />
+    <div className="min-h-screen w-full flex items-center justify-center px-2 md:px-3 lg:px-3 py-6 md:py-8 bg-slate-950 relative overflow-hidden">
+      <SwirlField imageSrc="/images/logos/logo-swirl.png" count={128} minSize={24} maxSize={56} opacityMin={0.14} opacityMax={0.30} />
+      <div className="page-enter animate-fade-in-up animate-delay-75 w-full">
+        <AuthPage />
+      </div>
     </div>
   )
 }

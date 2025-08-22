@@ -28,6 +28,14 @@ type PlacedSwirl = {
   flip: boolean
 }
 
+type Connection = {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+  strength: number
+}
+
 function createSeededRng(seed: number) {
   let t = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0
   return function rng() {
@@ -124,8 +132,97 @@ export function SwirlField({
     return results
   }, [viewport, normalized, minSize, maxSize, opacityMin, opacityMax, areaPadding])
 
+  // Create randomized but deterministic connections (2-4 per swirl, within distance)
+  const connections = useMemo<Connection[]>(() => {
+    const { width, height } = viewport
+    if (!width || !height || placed.length === 0) return []
+
+    const rng = createSeededRng(seedRef.current + 2)
+    const maxPerNode = 4
+    const minPerNode = 2
+    const maxDistance = Math.min(width, height) * 0.4
+    const maxCandidates = 10
+
+    const edgeKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`)
+    const used = new Set<string>()
+    const degree = new Array(placed.length).fill(0)
+    const out: Connection[] = []
+
+    for (let i = 0; i < placed.length; i++) {
+      if (degree[i] >= maxPerNode) continue
+      const pi = placed[i]
+      // Build candidate neighbor list by distance
+      const neighbors: { j: number; d: number }[] = []
+      for (let j = 0; j < placed.length; j++) {
+        if (j === i) continue
+        const pj = placed[j]
+        const dx = pi.x - pj.x
+        const dy = pi.y - pj.y
+        const d = Math.sqrt(dx * dx + dy * dy)
+        if (d <= maxDistance) neighbors.push({ j, d })
+      }
+      neighbors.sort((a, b) => a.d - b.d)
+
+      const desired = Math.min(
+        maxPerNode,
+        minPerNode + Math.floor(rng() * 3) // 2-4
+      )
+
+      let added = 0
+      for (let k = 0; k < neighbors.length && added < desired; k++) {
+        const { j, d } = neighbors[k]
+        if (degree[j] >= maxPerNode) continue
+        const key = edgeKey(i, j)
+        if (used.has(key)) continue
+        // Randomly skip some neighbors if there are too many very close ones
+        if (k > maxCandidates) break
+        used.add(key)
+        degree[i]++
+        degree[j]++
+        added++
+        const strength = Math.max(0.2, Math.min(1, 1 - d / maxDistance))
+        out.push({ x1: pi.x, y1: pi.y, x2: placed[j].x, y2: placed[j].y, strength })
+        if (degree[i] >= maxPerNode) break
+      }
+    }
+
+    return out
+  }, [viewport, placed])
+
   return (
     <div ref={containerRef} className="absolute inset-0 z-0 overflow-hidden">
+      {/* Connection lines behind swirls */}
+      <svg
+        className="absolute inset-0 w-full h-full"
+        width={viewport.width}
+        height={viewport.height}
+        viewBox={`0 0 ${viewport.width || 0} ${viewport.height || 0}`}
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+        focusable="false"
+        style={{ pointerEvents: 'none' }}
+      >
+        <defs>
+          <filter id="line-glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="2.4" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        <g filter="url(#line-glow)" strokeLinecap="round" fill="none">
+          {connections.map((c, i) => (
+            <g key={i} stroke={`rgb(var(--primary))`}>
+              {/* outer soft glow */}
+              <line x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeOpacity={Math.min(0.5, 0.28 + c.strength * 0.35)} strokeWidth={3.2} />
+              {/* crisp core */}
+              <line x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeOpacity={Math.min(0.85, 0.55 + c.strength * 0.35)} strokeWidth={1.2} />
+            </g>
+          ))}
+        </g>
+      </svg>
+
       {placed.map((s, idx) => (
         <img
           key={idx}
@@ -138,7 +235,6 @@ export function SwirlField({
             width: `${Math.round(s.size)}px`,
             height: `${Math.round(s.size)}px`,
             opacity: s.opacity,
-            // Dynamic transform via CSS var so hover can compose scale smoothly
             ['--t' as any]: `translate(-50%, -50%) rotate(${s.rotation}deg) scaleX(${s.flip ? -1 : 1})`,
           } as CSSProperties}
         />

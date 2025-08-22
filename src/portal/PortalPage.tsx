@@ -20,7 +20,7 @@ function NavSection({ title, items, defaultOpen = false }: NavSectionProps) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-500 hover:bg-white/5 rounded-lg transition"
+        className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-500 hover:bg-white/5 rounded-lg transition pressable"
         aria-expanded={open}
         aria-controls={`section-${title.replace(/\s+/g, '-')}`}
       >
@@ -36,7 +36,7 @@ function NavSection({ title, items, defaultOpen = false }: NavSectionProps) {
               <li key={label}>
                 <a
                   href="#"
-                  className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 focus-visible:text-primary-500 active:text-primary-500 hover:bg-primary-500/5 rounded-lg transition"
+                  className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 focus-visible:text-primary-500 active:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
                 >
                   <span className="truncate">{label}</span>
                   {tagText && (
@@ -128,7 +128,7 @@ function WorkspaceActionCard({ href, label, description, icon: Icon }: Workspace
       href={href}
       aria-label={label}
       onMouseMove={onMouseMove}
-      className="group relative block h-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-transform duration-300 hover:-translate-y-0.5"
+      className="group relative block h-full overflow-hidden rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400 transition-transform duration-300 hover:-translate-y-0.5 pressable elevate animate-fade-in-up"
     >
       <div className="interactive-spotlight" aria-hidden="true" />
       <div className="relative p-5 sm:p-6 h-full grid grid-cols-[auto,1fr,auto] items-center gap-4">
@@ -451,7 +451,7 @@ export function PortalPage() {
               type="button"
               onClick={() => setSidebarCollapsed((v) => !v)}
               aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-              className="w-8 h-8 flex items-center justify-center text-white/80 hover:text-white transition"
+              className="w-8 h-8 flex items-center justify-center text-white/80 hover:text-white transition pressable"
               title={sidebarCollapsed ? 'Expand' : 'Collapse'}
             >
               <SidebarToggleIcon className="h-5 w-5" />
@@ -465,7 +465,7 @@ export function PortalPage() {
                   type="button"
                   title={title}
                   aria-label={title}
-                  className="w-10 h-10 rounded-lg text-white/80 hover:text-white flex items-center justify-center transition-transform duration-200 hover:scale-[1.04]"
+                  className="w-10 h-10 rounded-lg text-white/80 hover:text-white flex items-center justify-center transition-transform duration-200 hover:scale-[1.04] pressable"
                 >
                   <Icon className="h-5 w-5" />
                 </button>
@@ -484,14 +484,14 @@ export function PortalPage() {
                 type="button"
                 title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
                 onClick={openProfileMenu}
-                className="w-10 h-10 rounded-full text-white/85 hover:text-white flex items-center justify-center"
+                className="w-10 h-10 rounded-full text-white/85 hover:text-white flex items-center justify-center pressable"
               >
                 <UserAvatar user={user} sizeClass="w-10 h-10" textClass="text-sm font-semibold" />
               </button>
               <button
                 type="button"
                 title="Settings"
-                className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center"
+                className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
               >
                 <SettingsIconImg className="w-5 h-5" />
               </button>
@@ -501,7 +501,7 @@ export function PortalPage() {
               <button
                 type="button"
                 onClick={openProfileMenu}
-                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition"
+                className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition pressable"
                 title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
               >
                 <UserAvatar user={user} sizeClass="w-9 h-9" />
@@ -519,7 +519,7 @@ export function PortalPage() {
               </button>
               <button
                 type="button"
-                className="w-full inline-flex items-center gap-2 px-2 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition"
+                className="w-full inline-flex items-center gap-2 px-2 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
                 title="Settings"
               >
                 <SettingsIconImg className="w-4 h-4" />
@@ -536,7 +536,7 @@ export function PortalPage() {
           <header className="sticky top-0 z-10 border-b border-white/10 bg-[rgb(var(--bg))]/80 backdrop-blur-xl mb-12 md:mb-0">
             <div className="relative mx-auto max-w-7xl px-4 py-3 sm:py-4">
               <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 -top-24 h-48 bg-gradient-to-br from-primary-400/10 via-fuchsia-400/5 to-transparent blur-2xl" />
-              <div className="relative">
+              <div className="relative animate-fade-in-up">
                 <div className="flex items-center md:hidden gap-2">
                   <Brand />
                   <div className="inline-flex items-center gap-2 ml-auto">
@@ -544,7 +544,7 @@ export function PortalPage() {
                       type="button"
                       onClick={openProfileMenu}
                       title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
-                      className="w-9 h-9 inline-flex items-center justify-center rounded-full"
+                      className="w-9 h-9 inline-flex items-center justify-center rounded-full pressable"
                     >
                       <UserAvatar user={user} sizeClass="w-9 h-9" textClass="text-sm font-semibold" />
                     </button>
@@ -552,17 +552,13 @@ export function PortalPage() {
                       type="button"
                       onClick={() => setMobileMenuOpen(true)}
                       aria-label="Open menu"
-                      className="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white"
+                      className="w-9 h-9 inline-flex items-center justify-center rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable"
                     >
                       <SidebarToggleIcon className="h-5 w-5" />
                     </button>
                   </div>
                 </div>
-                <div className="mt-3 md:mt-1 inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] leading-none text-white/70">
-                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary-400/80" />
-                  <span>Portal</span>
-                </div>
-                <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white">
+                <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">
                   {(() => {
                     const rawName = (user?.user_metadata?.first_name as string) ||
                       (user?.user_metadata?.name as string) ||
@@ -581,7 +577,7 @@ export function PortalPage() {
                     )
                   })()}
                 </h1>
-                <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl">
+                <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
                   Your gateway to explore and connect with the Smartslate ecosystem — discover the home of every product in one place.
                 </p>
                 <div aria-hidden="true" className="mt-3 h-px w-16 bg-gradient-to-r from-white/40 to-transparent" />
@@ -591,7 +587,7 @@ export function PortalPage() {
 
           <section className="mx-auto max-w-7xl px-4 py-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="h-40 sm:h-44 md:h-48">
+              <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up">
                 <WorkspaceActionCard
                   href="#"
                   label="Build"
@@ -599,7 +595,7 @@ export function PortalPage() {
                   icon={IconWrench}
                 />
               </div>
-              <div className="h-40 sm:h-44 md:h-48">
+              <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up animate-delay-75">
                 <WorkspaceActionCard
                   href="#"
                   label="Learn"
@@ -607,7 +603,7 @@ export function PortalPage() {
                   icon={IconBookOpen}
                 />
               </div>
-              <div className="h-40 sm:h-44 md:h-48">
+              <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up animate-delay-150">
                 <WorkspaceActionCard
                   href="#"
                   label="Insight"
@@ -618,10 +614,10 @@ export function PortalPage() {
             </div>
           </section>
           {profileMenu.open && (
-            <div className="fixed inset-0 z-50" onClick={closeProfileMenu} aria-hidden="true">
+            <div className="fixed inset-0 z-50 animate-fade-in" onClick={closeProfileMenu} aria-hidden="true">
               <div
                 ref={menuRef}
-                className="absolute z-50 min-w-[160px] rounded-lg border border-white/10 bg-[rgb(var(--bg))]/95 backdrop-blur-xl shadow-2xl p-1 text-sm"
+                className="absolute z-50 min-w-[160px] rounded-lg border border-white/10 bg-[rgb(var(--bg))]/95 backdrop-blur-xl shadow-2xl p-1 text-sm animate-scale-in"
                 style={{
                   top: `${profileMenu.y}px`,
                   ...(profileMenu.align === 'center'
@@ -648,14 +644,14 @@ export function PortalPage() {
 
           {mobileMenuOpen && (
             <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
-              <div className="absolute inset-0 bg-black/50" onClick={() => setMobileMenuOpen(false)} />
-              <div className="absolute right-0 top-0 h-full w-72 max-w-[85vw] bg-[rgb(var(--bg))]/95 backdrop-blur-xl border-l border-white/10 shadow-2xl p-3">
+              <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setMobileMenuOpen(false)} />
+              <div className="absolute right-0 top-0 h-full w-72 max-w-[85vw] bg-[rgb(var(--bg))]/95 backdrop-blur-xl border-l border-white/10 shadow-2xl p-3 animate-slide-in-right">
                 <div className="flex items-center justify-between px-1 py-2 border-b border-white/10">
                   <button
                     type="button"
                     onClick={() => setMobileMenuOpen(false)}
                     aria-label="Close menu"
-                    className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-white/80 hover:text-white"
+                    className="w-8 h-8 inline-flex items-center justify-center rounded-lg text-white/80 hover:text-white pressable"
                   >
                     <span className="text-lg">×</span>
                   </button>

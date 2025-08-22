@@ -765,7 +765,7 @@ export function PortalPage() {
                   onClick={() => navigate(paths.settings)}
                   className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
                 >
-                  <SettingsIconImg className="w-5 h-5" />
+                  <SettingsIconImg className="w-10 h-10" />
                 </button>
               </div>
             ) : (
@@ -795,13 +795,13 @@ export function PortalPage() {
                   className="w-full inline-flex items-center gap-2 px-2 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
                   title="Settings"
                 >
-                  <SettingsIconImg className="w-4 h-4" />
+                  <SettingsIconImg className="w-9 h-9" />
                   <span>Settings</span>
                 </button>
               </div>
             )}
             <div className={`border-t border-white/10 text-xs text-white/50 ${sidebarCollapsed ? 'px-0 py-2 flex items-center justify-center' : 'px-4 py-3'}`}>
-              Made with ❤️ for better education
+              {sidebarCollapsed ? '❤️' : 'Made with ❤️ for better education'}
             </div>
           </div>
         </aside>
@@ -814,14 +814,6 @@ export function PortalPage() {
                 <div className="flex items-center md:hidden gap-2">
                   <Brand />
                   <div className="inline-flex items-center gap-2 ml-auto">
-                    <button
-                      type="button"
-                      onClick={goToProfile}
-                      title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
-                      className="w-9 h-9 inline-flex items-center justify-center rounded-full pressable"
-                    >
-                      <UserAvatar user={user} sizeClass="w-9 h-9" textClass="text-sm font-semibold" />
-                    </button>
                     <button
                       type="button"
                       onClick={() => setMobileMenuOpen(true)}
@@ -1050,7 +1042,7 @@ export function PortalPage() {
           {mobileMenuOpen && (
             <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
               <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setMobileMenuOpen(false)} />
-              <div className="absolute right-0 top-0 h-full w-72 max-w-[85vw] bg-[rgb(var(--bg))]/95 backdrop-blur-xl border-l border-white/10 shadow-2xl p-3 animate-slide-in-right">
+              <div className="absolute right-0 top-0 h-full w-72 max-w-[85vw] bg-[rgb(var(--bg))]/95 backdrop-blur-xl border-l border-white/10 shadow-2xl p-3 animate-slide-in-right flex flex-col">
                 <div className="flex items-center justify-between px-1 py-2 border-b border-white/10">
                   <button
                     type="button"
@@ -1062,11 +1054,33 @@ export function PortalPage() {
                   </button>
                   <Brand />
                 </div>
-                <nav className="mt-3 space-y-3 overflow-y-auto h-[calc(100%-56px)] pb-6">
+                <nav className="mt-3 space-y-3 overflow-y-auto flex-1 pb-6">
                   <NavSection title="Ignite" items={["Explore Learning", "My Learning"]} defaultOpen />
                   <NavSection title="Strategic Skills Architecture" items={["Explore Partnership", "My Architecture"]} defaultOpen />
                   <NavSection title="Solara" items={solaraItems} defaultOpen />
                 </nav>
+                <div className="mt-auto">
+                  <div className="px-1 py-2 border-t border-white/10">
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={goToProfile}
+                        title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
+                        className="w-10 h-10 rounded-full text-white/85 hover:text-white flex items-center justify-center pressable"
+                      >
+                        <UserAvatar user={user} sizeClass="w-10 h-10" textClass="text-sm font-semibold" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Settings"
+                        onClick={() => navigate(paths.settings)}
+                        className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
+                      >
+                        <SettingsIconImg className="w-10 h-10" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}

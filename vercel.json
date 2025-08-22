@@ -1,6 +1,12 @@
 {
   "version": 2,
+  "functions": {
+    "api/*.ts": {
+      "runtime": "nodejs20.x"
+    }
+  },
   "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1.ts" },
     { "handle": "filesystem" },
     { "src": "/.*", "dest": "/index.html" }
   ]

@@ -4,12 +4,14 @@ type AppEnv = {
   VITE_SITE_URL?: string
   VITE_AUTH_REDIRECT_URL?: string
   VITE_GOOGLE_REDIRECT_URL?: string
+  VITE_LLM_PROVIDER?: string
   VITE_OPENAI_API_KEY?: string
   VITE_OPENAI_BASE_URL?: string
   VITE_OPENAI_MODEL?: string
   VITE_ANTHROPIC_API_KEY?: string
   VITE_ANTHROPIC_BASE_URL?: string
   VITE_ANTHROPIC_MODEL?: string
+  VITE_ANTHROPIC_MAX_TOKENS?: string
   MODE: string
   DEV: boolean
   PROD: boolean
@@ -28,12 +30,14 @@ export const env = {
   siteUrl: read('VITE_SITE_URL'),
   authRedirectUrl: read('VITE_AUTH_REDIRECT_URL'),
   googleRedirectUrl: read('VITE_GOOGLE_REDIRECT_URL'),
+  llmProvider: (read('VITE_LLM_PROVIDER') || 'anthropic').toLowerCase(),
   openaiApiKey: read('VITE_OPENAI_API_KEY'),
   openaiBaseUrl: read('VITE_OPENAI_BASE_URL'),
   openaiModel: read('VITE_OPENAI_MODEL') || 'gpt-5',
   anthropicApiKey: read('VITE_ANTHROPIC_API_KEY'),
   anthropicBaseUrl: read('VITE_ANTHROPIC_BASE_URL'),
   anthropicModel: read('VITE_ANTHROPIC_MODEL') || 'claude-3-5-sonnet-latest',
+  anthropicMaxTokens: read('VITE_ANTHROPIC_MAX_TOKENS'),
   mode: raw.MODE,
   isDev: raw.DEV,
   isProd: raw.PROD,

@@ -56,9 +56,9 @@ export function SwirlField({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState<{ width: number; height: number }>({ width: 0, height: 0 })
   const seedRef = useRef(Math.floor(Math.random() * 1_000_000))
-  const swirlRefs = useRef<HTMLImageElement[]>([])
-  const lineGlowRefs = useRef<SVGLineElement[]>([])
-  const lineCoreRefs = useRef<SVGLineElement[]>([])
+  const swirlRefs = useRef<(HTMLImageElement | null)[]>([])
+  const lineGlowRefs = useRef<(SVGLineElement | null)[]>([])
+  const lineCoreRefs = useRef<(SVGLineElement | null)[]>([])
 
   // Pre-generate normalized positions and attributes once for stability
   const normalized = useMemo<NormalizedSwirl[]>(() => {
@@ -349,8 +349,8 @@ export function SwirlField({
             const coreOpacity = Math.min(0.85, (0.55 + c.strength * 0.35) * centerFactor)
             return (
               <g key={i} stroke={`rgb(var(--primary))`}>
-                <line ref={(el) => (lineGlowRefs.current[i] = el as SVGLineElement)} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} strokeOpacity={glowOpacity} strokeWidth={1.28} />
-                <line ref={(el) => (lineCoreRefs.current[i] = el as SVGLineElement)} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} strokeOpacity={coreOpacity} strokeWidth={0.48} />
+                <line ref={(el) => { lineGlowRefs.current[i] = el }} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} strokeOpacity={glowOpacity} strokeWidth={1.28} />
+                <line ref={(el) => { lineCoreRefs.current[i] = el }} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} strokeOpacity={coreOpacity} strokeWidth={0.48} />
               </g>
             )
           })}
@@ -362,7 +362,7 @@ export function SwirlField({
           key={idx}
           src={imageSrc}
           alt=""
-          ref={(el) => (swirlRefs.current[idx] = el as HTMLImageElement)}
+          ref={(el) => { swirlRefs.current[idx] = el }}
           className="swirl-item absolute select-none z-10"
           style={{
             left: `0px`,

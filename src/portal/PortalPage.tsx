@@ -773,10 +773,10 @@ export function PortalPage() {
                 <button
                   type="button"
                   onClick={goToProfile}
-                  className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition pressable"
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition pressable"
                   title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
                 >
-                  <UserAvatar user={user} sizeClass="w-9 h-9" />
+                  <UserAvatar user={user} sizeClass="w-5 h-5" />
                   <span className="text-sm text-white/90 font-medium">
                     {(() => {
                       const rawName = (user?.user_metadata?.first_name as string) ||
@@ -792,10 +792,10 @@ export function PortalPage() {
                 <button
                   type="button"
                   onClick={() => navigate(paths.settings)}
-                  className="w-full inline-flex items-center gap-2 px-2 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
+                  className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
                   title="Settings"
                 >
-                  <SettingsIconImg className="w-9 h-9" />
+                  <SettingsIconImg className="w-5 h-5" />
                   <span>Settings</span>
                 </button>
               </div>

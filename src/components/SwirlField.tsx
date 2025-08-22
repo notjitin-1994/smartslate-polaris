@@ -29,10 +29,8 @@ type PlacedSwirl = {
 }
 
 type Connection = {
-  x1: number
-  y1: number
-  x2: number
-  y2: number
+  a: number
+  b: number
   strength: number
 }
 
@@ -58,6 +56,9 @@ export function SwirlField({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState<{ width: number; height: number }>({ width: 0, height: 0 })
   const seedRef = useRef(Math.floor(Math.random() * 1_000_000))
+  const swirlRefs = useRef<HTMLImageElement[]>([])
+  const lineGlowRefs = useRef<SVGLineElement[]>([])
+  const lineCoreRefs = useRef<SVGLineElement[]>([])
 
   // Pre-generate normalized positions and attributes once for stability
   const normalized = useMemo<NormalizedSwirl[]>(() => {
@@ -181,7 +182,7 @@ export function SwirlField({
         degree[j]++
         added++
         const strength = Math.max(0.2, Math.min(1, 1 - d / maxDistance))
-        out.push({ x1: pi.x, y1: pi.y, x2: placed[j].x, y2: placed[j].y, strength })
+        out.push({ a: i, b: j, strength })
         if (degree[i] >= maxPerNode) break
       }
     }
@@ -189,11 +190,131 @@ export function SwirlField({
     return out
   }, [viewport, placed])
 
+  // Animation: randomized smooth motion with per-swirl speed and direction drift
+  useEffect(() => {
+    const { width, height } = viewport
+    if (!width || !height || placed.length === 0) return
+
+    const n = placed.length
+    const rng = createSeededRng(seedRef.current + 3)
+
+    const posX = new Float32Array(n)
+    const posY = new Float32Array(n)
+    const angle = new Float32Array(n)
+    const speed = new Float32Array(n)
+    const turn = new Float32Array(n)
+    const radius = new Float32Array(n)
+    const speedPhase = new Float32Array(n)
+    const speedFreq = new Float32Array(n)
+    const driftPhase = new Float32Array(n)
+    const driftFreq = new Float32Array(n)
+
+    for (let i = 0; i < n; i++) {
+      posX[i] = placed[i].x
+      posY[i] = placed[i].y
+      angle[i] = rng() * Math.PI * 2
+      speed[i] = 6 + rng() * 8 // px/s, slightly slower for smoothness
+      // Gentle curved paths with reduced turn rate
+      turn[i] = (rng() * 2 - 1) * 0.15 // rad/s
+      radius[i] = placed[i].size / 2
+      speedPhase[i] = rng() * Math.PI * 2
+      speedFreq[i] = 0.2 + rng() * 0.5 // Hz
+      driftPhase[i] = rng() * Math.PI * 2
+      driftFreq[i] = 0.05 + rng() * 0.15 // very low-frequency drift for organic motion
+    }
+
+    // Prepare element styles
+    for (let i = 0; i < n; i++) {
+      const el = swirlRefs.current[i]
+      if (el) {
+        el.style.transition = 'transform 0s' // avoid easing trails during rAF
+        el.style.willChange = 'transform'
+      }
+    }
+
+    let rafId = 0
+    let lastTs = performance.now()
+    const marginExtra = 8
+
+    const step = (ts: number) => {
+      const now = ts
+      const dt = Math.min(0.033, (now - lastTs) / 1000) // cap dt for stability (≈30 FPS max step)
+      lastTs = now
+
+      // Time in seconds for low-frequency oscillations
+      const tSec = now / 1000
+
+      // Update swirl positions
+      for (let i = 0; i < n; i++) {
+        const sp = speed[i] * (0.9 + 0.25 * Math.sin(speedPhase[i] + tSec * 2 * Math.PI * speedFreq[i]))
+        const drift = Math.sin(driftPhase[i] + tSec * 2 * Math.PI * driftFreq[i])
+        angle[i] += (turn[i] * 0.2 + drift * 0.12) * dt
+        posX[i] += Math.cos(angle[i]) * sp * dt
+        posY[i] += Math.sin(angle[i]) * sp * dt
+
+        const wrapMargin = radius[i] + marginExtra
+        if (posX[i] < -wrapMargin) posX[i] = width + wrapMargin
+        else if (posX[i] > width + wrapMargin) posX[i] = -wrapMargin
+        if (posY[i] < -wrapMargin) posY[i] = height + wrapMargin
+        else if (posY[i] > height + wrapMargin) posY[i] = -wrapMargin
+
+        const el = swirlRefs.current[i]
+        if (el) {
+          const transform = `translate3d(${posX[i].toFixed(1)}px, ${posY[i].toFixed(1)}px, 0) translate(-50%, -50%) rotate(${placed[i].rotation}deg) scaleX(${placed[i].flip ? -1 : 1})`
+          el.style.setProperty('--t', transform)
+        }
+      }
+
+      // Update connection lines to follow moving swirls
+      const cx = width / 2
+      const cy = height / 2
+      for (let k = 0; k < connections.length; k++) {
+        const c = connections[k]
+        const x1 = posX[c.a]
+        const y1 = posY[c.a]
+        const x2 = posX[c.b]
+        const y2 = posY[c.b]
+
+        const midx = (x1 + x2) / 2
+        const midy = (y1 + y2) / 2
+        const dx = midx - cx
+        const dy = midy - cy
+        const dist = Math.sqrt(dx * dx + dy * dy)
+        const maxDist = Math.sqrt(cx * cx + cy * cy)
+        const centerFactor = Math.min(1, Math.max(0.6, dist / maxDist))
+        const glowOpacity = Math.min(0.5, (0.28 + c.strength * 0.35) * centerFactor)
+        const coreOpacity = Math.min(0.85, (0.55 + c.strength * 0.35) * centerFactor)
+
+        const g = lineGlowRefs.current[k]
+        if (g) {
+          g.setAttribute('x1', x1.toFixed(1))
+          g.setAttribute('y1', y1.toFixed(1))
+          g.setAttribute('x2', x2.toFixed(1))
+          g.setAttribute('y2', y2.toFixed(1))
+          g.setAttribute('stroke-opacity', glowOpacity.toFixed(3))
+        }
+        const core = lineCoreRefs.current[k]
+        if (core) {
+          core.setAttribute('x1', x1.toFixed(1))
+          core.setAttribute('y1', y1.toFixed(1))
+          core.setAttribute('x2', x2.toFixed(1))
+          core.setAttribute('y2', y2.toFixed(1))
+          core.setAttribute('stroke-opacity', coreOpacity.toFixed(3))
+        }
+      }
+
+      rafId = requestAnimationFrame(step)
+    }
+
+    rafId = requestAnimationFrame(step)
+    return () => cancelAnimationFrame(rafId)
+  }, [viewport, placed, connections])
+
   return (
     <div ref={containerRef} className="absolute inset-0 z-0 overflow-hidden">
       {/* Connection lines behind swirls */}
       <svg
-        className="absolute inset-0 w-full h-full"
+        className="absolute inset-0 w-full h-full z-0"
         width={viewport.width}
         height={viewport.height}
         viewBox={`0 0 ${viewport.width || 0} ${viewport.height || 0}`}
@@ -212,14 +333,27 @@ export function SwirlField({
           </filter>
         </defs>
         <g filter="url(#line-glow)" strokeLinecap="round" fill="none">
-          {connections.map((c, i) => (
-            <g key={i} stroke={`rgb(var(--primary))`}>
-              {/* outer soft glow */}
-              <line x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeOpacity={Math.min(0.5, 0.28 + c.strength * 0.35)} strokeWidth={3.2} />
-              {/* crisp core */}
-              <line x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} strokeOpacity={Math.min(0.85, 0.55 + c.strength * 0.35)} strokeWidth={1.2} />
-            </g>
-          ))}
+          {connections.map((c, i) => {
+            const p1 = placed[c.a]
+            const p2 = placed[c.b]
+            const cx = viewport.width / 2
+            const cy = viewport.height / 2
+            const midx = (p1.x + p2.x) / 2
+            const midy = (p1.y + p2.y) / 2
+            const dx = midx - cx
+            const dy = midy - cy
+            const dist = Math.sqrt(dx * dx + dy * dy)
+            const maxDist = Math.sqrt(cx * cx + cy * cy)
+            const centerFactor = Math.min(1, Math.max(0.6, dist / maxDist))
+            const glowOpacity = Math.min(0.5, (0.28 + c.strength * 0.35) * centerFactor)
+            const coreOpacity = Math.min(0.85, (0.55 + c.strength * 0.35) * centerFactor)
+            return (
+              <g key={i} stroke={`rgb(var(--primary))`}>
+                <line ref={(el) => (lineGlowRefs.current[i] = el as SVGLineElement)} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} strokeOpacity={glowOpacity} strokeWidth={1.28} />
+                <line ref={(el) => (lineCoreRefs.current[i] = el as SVGLineElement)} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} strokeOpacity={coreOpacity} strokeWidth={0.48} />
+              </g>
+            )
+          })}
         </g>
       </svg>
 
@@ -228,14 +362,15 @@ export function SwirlField({
           key={idx}
           src={imageSrc}
           alt=""
-          className="swirl-item absolute select-none"
+          ref={(el) => (swirlRefs.current[idx] = el as HTMLImageElement)}
+          className="swirl-item absolute select-none z-10"
           style={{
-            left: `${s.x}px`,
-            top: `${s.y}px`,
+            left: `0px`,
+            top: `0px`,
             width: `${Math.round(s.size)}px`,
             height: `${Math.round(s.size)}px`,
             opacity: s.opacity,
-            ['--t' as any]: `translate(-50%, -50%) rotate(${s.rotation}deg) scaleX(${s.flip ? -1 : 1})`,
+            ['--t' as any]: `translate3d(${s.x}px, ${s.y}px, 0) translate(-50%, -50%) rotate(${s.rotation}deg) scaleX(${s.flip ? -1 : 1})`,
           } as CSSProperties}
         />
       ))}

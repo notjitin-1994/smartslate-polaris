@@ -7,7 +7,7 @@ export function AuthPage() {
 
   return (
     <div className="w-full max-w-sm md:max-w-sm lg:max-w-md mx-auto relative z-10">
-      <div className="card p-6 md:p-8 animate-scale-in">
+      <div className="glass-card p-6 md:p-8 animate-scale-in">
         <div className="flex items-center mb-6 select-none animate-fade-in">
           <img src="/images/logos/logo.png" alt="SmartSlate" className="h-8 w-auto logo-glow" />
         </div>

@@ -320,7 +320,7 @@ function IconSun({ className = '' }: { className?: string }) {
 function SettingsIconImg({ className = '' }: { className?: string }) {
   return (
     <img
-      src="/images/icons/gear.png"
+      src="https://oyjslszrygcajdpwgxbe.supabase.co/storage/v1/object/public/public-assets/gear.png"
       alt="Settings"
       className={`select-none ${className}`}
       style={{ objectFit: 'contain' }}
@@ -533,7 +533,7 @@ export function PortalPage() {
         </aside>
 
         <main className="flex-1 min-w-0">
-          <header className="sticky top-0 z-10 border-b border-white/10 bg-[rgb(var(--bg))]/80 backdrop-blur-xl mb-4 md:mb-0">
+          <header className="sticky top-0 z-10 border-b border-white/10 bg-[rgb(var(--bg))]/80 backdrop-blur-xl mb-12 md:mb-0">
             <div className="relative mx-auto max-w-7xl px-4 py-3 sm:py-4">
               <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 -top-24 h-48 bg-gradient-to-br from-primary-400/10 via-fuchsia-400/5 to-transparent blur-2xl" />
               <div className="relative">
@@ -589,7 +589,7 @@ export function PortalPage() {
             </div>
           </header>
 
-          <section className="mx-auto max-w-7xl px-4 py-6 mt-6 md:mt-0">
+          <section className="mx-auto max-w-7xl px-4 py-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="h-40 sm:h-44 md:h-48">
                 <WorkspaceActionCard

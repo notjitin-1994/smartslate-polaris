@@ -7,7 +7,7 @@ export function GoogleOAuthButton() {
   async function onClick() {
     try {
       setLoading(true)
-      const redirectTo = env.googleRedirectUrl || env.siteUrl || undefined
+      const redirectTo = env.googleRedirectUrl || `${window.location.origin}/auth/callback`
       const { data, error } = await getSupabase().auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo },

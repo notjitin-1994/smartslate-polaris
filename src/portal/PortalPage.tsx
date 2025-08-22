@@ -891,6 +891,7 @@ export function PortalPage() {
                     <div className="mt-2 flex gap-2">
                       <button type="button" onClick={removeAvatar} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable">Remove avatar</button>
                       <button type="button" onClick={() => navigate(paths.portal)} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable">Back</button>
+                      <button type="button" onClick={onLogout} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable">Sign out</button>
                     </div>
                   </div>
                 </div>

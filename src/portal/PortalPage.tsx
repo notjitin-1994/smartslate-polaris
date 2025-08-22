@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ComponentType } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { getSupabase } from '@/services/supabase'
-import { paths } from '@/routes/paths'
+import { paths, portalUserPath } from '@/routes/paths'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 type NavItem = string | { label: string; tagText?: string; tagTone?: 'preview' | 'soon' | 'info' }
@@ -15,6 +15,7 @@ type NavSectionProps = {
 
 function NavSection({ title, items, defaultOpen = false }: NavSectionProps) {
   const [open, setOpen] = useState<boolean>(defaultOpen)
+
   return (
     <div className="select-none">
       <button
@@ -64,6 +65,7 @@ function resolveUserAvatarUrl(user: User | null): string | null {
   const meta: any = user?.user_metadata ?? {}
   const identities: any[] = (user as any)?.identities ?? []
   const identityData = identities.find((i) => i?.identity_data)?.identity_data ?? {}
+  if (meta.noAvatar === true) return null
   return (
     meta.avatar_url ||
     meta.avatarURL ||
@@ -331,7 +333,27 @@ function SettingsIconImg({ className = '' }: { className?: string }) {
 
 export function PortalPage() {
   const navigate = useNavigate()
-  useDocumentTitle('Smartslate | Portal')
+  const location = useLocation()
+  const isSettings = location.pathname.endsWith('/settings')
+  const { user: userParam } = useParams()
+  const viewingProfile = Boolean(userParam)
+  // Profile form state
+  const [username, setUsername] = useState<string>('')
+  const [displayName, setDisplayName] = useState<string>('')
+  const [avatarUrl, setAvatarUrl] = useState<string>('')
+  const [jobTitle, setJobTitle] = useState<string>('')
+  const [company, setCompany] = useState<string>('')
+  const [website, setWebsite] = useState<string>('')
+  const [city, setCity] = useState<string>('')
+  const [country, setCountry] = useState<string>('')
+  const [timezone, setTimezone] = useState<string>('')
+  const [bio, setBio] = useState<string>('')
+  const [marketingOptIn, setMarketingOptIn] = useState<boolean>(false)
+  const [saving, setSaving] = useState<boolean>(false)
+  const [checkingUsername, setCheckingUsername] = useState<boolean>(false)
+  const [usernameAvailable, setUsernameAvailable] = useState<'unknown' | 'available' | 'taken' | 'error'>('unknown')
+  const [toast, setToast] = useState<{ id: number; kind: 'success' | 'error'; message: string } | null>(null)
+  useDocumentTitle(isSettings ? 'Smartslate | Settings' : (viewingProfile ? `Smartslate | @${(username || decodeURIComponent(userParam as string || 'user'))}` : 'Smartslate | Portal'))
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true
     const stored = localStorage.getItem('portal:sidebarCollapsed')
@@ -376,13 +398,7 @@ export function PortalPage() {
     }
   }, [])
 
-  function openProfileMenu(e: React.MouseEvent) {
-    const target = e.currentTarget as HTMLElement
-    const rect = target.getBoundingClientRect()
-    const x = rect.left + rect.width / 2
-    const y = rect.bottom + 8
-    setProfileMenu({ open: true, x, y, align: 'center' })
-  }
+  // profile menu opener removed; profile page navigation is used instead
 
   function closeProfileMenu() {
     setProfileMenu((p) => ({ ...p, open: false }))
@@ -424,6 +440,255 @@ export function PortalPage() {
       await getSupabase().auth.signOut()
     } finally {
       navigate(paths.home, { replace: true })
+    }
+  }
+
+  function getFirstName(): string {
+    const rawName = (user?.user_metadata?.first_name as string) ||
+      (user?.user_metadata?.name as string) ||
+      (user?.user_metadata?.full_name as string) ||
+      (user?.email as string) ||
+      'User'
+    return rawName.toString().trim().split(' ')[0]
+  }
+
+  function getUsernameFromMeta(): string {
+    const meta: any = user?.user_metadata ?? {}
+    return sanitizeUsername((meta.username as string) || (meta.handle as string) || '')
+  }
+
+  function sanitizeUsername(input: string): string {
+    return (input || '').toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 24)
+  }
+
+  function isReservedUsername(input: string): boolean {
+    const reserved = new Set(['settings'])
+    return reserved.has(input)
+  }
+
+  async function checkUsernameAvailability(next: string) {
+    const trimmed = sanitizeUsername(next)
+    if (!trimmed) {
+      setUsernameAvailable('unknown')
+      return
+    }
+    if (isReservedUsername(trimmed)) {
+      setUsernameAvailable('taken')
+      return
+    }
+    if (trimmed === username.toLowerCase()) {
+      // unchanged from current value
+    }
+    try {
+      setCheckingUsername(true)
+      // Try checking against profiles table if it exists
+      const supabase = getSupabase()
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('username', trimmed)
+        .maybeSingle()
+      if (error) {
+        // If the table doesn't exist or RLS blocks, fall back to unknown
+        setUsernameAvailable('unknown')
+        return
+      }
+      const takenByOther = Boolean(data && data.id && data.id !== user?.id)
+      setUsernameAvailable(takenByOther ? 'taken' : 'available')
+    } catch {
+      setUsernameAvailable('error')
+    } finally {
+      setCheckingUsername(false)
+    }
+  }
+
+  async function loadProfileFromServer(currentUser: User | null) {
+    if (!currentUser) return
+    const supabase = getSupabase()
+    // Try load from 'profiles' table
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', currentUser.id)
+        .maybeSingle()
+      if (!error && data) {
+        setUsername((data.username as string) || getUsernameFromMeta() || getFirstName())
+        setDisplayName((data.full_name as string) || (currentUser.user_metadata?.full_name as string) || (currentUser.user_metadata?.name as string) || getFirstName())
+        setAvatarUrl((data.avatar_url as string) || (currentUser.user_metadata?.avatar_url as string) || '')
+        setJobTitle((data.job_title as string) || '')
+        setCompany((data.company as string) || '')
+        setWebsite((data.website as string) || '')
+        setCity((data.location as string) || '')
+        setCountry((data.country as string) || '')
+        setTimezone((data.timezone as string) || '')
+        setBio((data.bio as string) || '')
+        setMarketingOptIn(Boolean(data.marketing_opt_in))
+        return
+      }
+    } catch {}
+
+    // Fallback to auth metadata
+    const meta: any = currentUser.user_metadata ?? {}
+    setUsername((meta.username as string) || (meta.handle as string) || getFirstName())
+    setDisplayName((meta.full_name as string) || (meta.name as string) || getFirstName())
+    setAvatarUrl((meta.avatar_url as string) || '')
+    setJobTitle((meta.job_title as string) || '')
+    setCompany((meta.company as string) || '')
+    setWebsite((meta.website as string) || '')
+    setCity((meta.location as string) || '')
+    setCountry((meta.country as string) || '')
+    setTimezone((meta.timezone as string) || '')
+    setBio((meta.bio as string) || '')
+    setMarketingOptIn(Boolean(meta.marketing_opt_in))
+  }
+
+  useEffect(() => {
+    if (!user) return
+    loadProfileFromServer(user)
+  }, [user])
+
+  useEffect(() => {
+    if (!viewingProfile) return
+    const param = decodeURIComponent((userParam as string) || '')
+    if (username && param && param !== username) {
+      navigate(portalUserPath(username), { replace: true })
+    }
+  }, [username, viewingProfile, userParam, navigate])
+
+  function goToProfile() {
+    const handle = getUsernameFromMeta() || sanitizeUsername(getFirstName())
+    closeProfileMenu()
+    navigate(portalUserPath(handle))
+  }
+
+  async function saveProfile() {
+    if (!user) return
+    setSaving(true)
+    const supabase = getSupabase()
+    const next = {
+      id: user.id,
+      username: sanitizeUsername(username || ''),
+      full_name: (displayName || '').trim(),
+      avatar_url: (avatarUrl || '').trim(),
+      job_title: (jobTitle || '').trim(),
+      company: (company || '').trim(),
+      website: (website || '').trim(),
+      location: (city || '').trim(),
+      country: (country || '').trim(),
+      timezone: (timezone || '').trim(),
+      bio: (bio || '').trim(),
+      marketing_opt_in: Boolean(marketingOptIn),
+      updated_at: new Date().toISOString(),
+    }
+    try {
+      const { error } = await supabase.from('profiles').upsert(next, { onConflict: 'id' })
+      if (error) {
+        // If unique username constraint fails
+        if ((error as any).code === '23505') {
+          setUsernameAvailable('taken')
+          const id = Date.now()
+          setToast({ id, kind: 'error', message: 'This username is already taken.' })
+          window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
+          return
+        }
+        const id = Date.now()
+        setToast({ id, kind: 'error', message: 'Could not save profile. Try again.' })
+        window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
+      }
+    } catch {
+      const id = Date.now()
+      setToast({ id, kind: 'error', message: 'Could not save profile. Try again.' })
+      window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
+    }
+
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: {
+          username: next.username,
+          full_name: next.full_name,
+          avatar_url: next.avatar_url,
+          job_title: next.job_title,
+          company: next.company,
+          website: next.website,
+          location: next.location,
+          country: next.country,
+          timezone: next.timezone,
+          bio: next.bio,
+          marketing_opt_in: next.marketing_opt_in,
+          noAvatar: next.avatar_url ? false : (user.user_metadata?.noAvatar as boolean) || false,
+        },
+      })
+      if (!error) {
+        if (viewingProfile && username && username !== decodeURIComponent((userParam as string) || '')) {
+          navigate(portalUserPath(username), { replace: true })
+        }
+        const id = Date.now()
+        setToast({ id, kind: 'success', message: 'Profile updated successfully.' })
+        window.setTimeout(() => {
+          setToast((t) => (t && t.id === id ? null : t))
+        }, 3000)
+      } else {
+        const id = Date.now()
+        setToast({ id, kind: 'error', message: 'Failed to update profile.' })
+        window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
+      }
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function onAvatarFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    const supabase = getSupabase()
+    const fileExt = file.name.split('.').pop() || 'png'
+    const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const path = `${user.id}/${unique}.${fileExt}`
+    try {
+      const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true })
+      if (uploadError) {
+        const id = Date.now()
+        setToast({ id, kind: 'error', message: 'Avatar upload failed.' })
+        window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
+        return
+      }
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path)
+      if (data?.publicUrl) {
+        setAvatarUrl(data.publicUrl)
+        const id = Date.now()
+        setToast({ id, kind: 'success', message: 'Avatar uploaded.' })
+        window.setTimeout(() => {
+          setToast((t) => (t && t.id === id ? null : t))
+        }, 2500)
+      }
+    } catch {
+      const id = Date.now()
+      setToast({ id, kind: 'error', message: 'Avatar upload failed.' })
+      window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
+    }
+  }
+
+  async function removeAvatar() {
+    setAvatarUrl('')
+    // Persist the intent to hide avatar via metadata flag
+    try {
+      const { error } = await getSupabase().auth.updateUser({ data: { avatar_url: '', noAvatar: true } })
+      if (error) {
+        const id = Date.now()
+        setToast({ id, kind: 'error', message: 'Failed to remove avatar.' })
+        window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
+        return
+      }
+      const id = Date.now()
+      setToast({ id, kind: 'success', message: 'Avatar removed.' })
+      window.setTimeout(() => {
+        setToast((t) => (t && t.id === id ? null : t))
+      }, 2500)
+    } catch {
+      const id = Date.now()
+      setToast({ id, kind: 'error', message: 'Failed to remove avatar.' })
+      window.setTimeout(() => setToast((t) => (t && t.id === id ? null : t)), 3500)
     }
   }
 
@@ -483,7 +748,7 @@ export function PortalPage() {
               <button
                 type="button"
                 title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
-                onClick={openProfileMenu}
+                onClick={goToProfile}
                 className="w-10 h-10 rounded-full text-white/85 hover:text-white flex items-center justify-center pressable"
               >
                 <UserAvatar user={user} sizeClass="w-10 h-10" textClass="text-sm font-semibold" />
@@ -491,6 +756,7 @@ export function PortalPage() {
               <button
                 type="button"
                 title="Settings"
+                onClick={() => navigate(paths.settings)}
                 className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
               >
                 <SettingsIconImg className="w-5 h-5" />
@@ -500,7 +766,7 @@ export function PortalPage() {
             <div className="px-3 py-3 space-y-2">
               <button
                 type="button"
-                onClick={openProfileMenu}
+                onClick={goToProfile}
                 className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 transition pressable"
                 title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
               >
@@ -519,6 +785,7 @@ export function PortalPage() {
               </button>
               <button
                 type="button"
+                onClick={() => navigate(paths.settings)}
                 className="w-full inline-flex items-center gap-2 px-2 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
                 title="Settings"
               >
@@ -542,7 +809,7 @@ export function PortalPage() {
                   <div className="inline-flex items-center gap-2 ml-auto">
                     <button
                       type="button"
-                      onClick={openProfileMenu}
+                      onClick={goToProfile}
                       title={`${((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
                       className="w-9 h-9 inline-flex items-center justify-center rounded-full pressable"
                     >
@@ -558,61 +825,191 @@ export function PortalPage() {
                     </button>
                   </div>
                 </div>
-                <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">
-                  {(() => {
-                    const rawName = (user?.user_metadata?.first_name as string) ||
-                      (user?.user_metadata?.name as string) ||
-                      (user?.user_metadata?.full_name as string) ||
-                      (user?.email as string) ||
-                      ''
-                    const firstName = rawName.toString().trim().split(' ')[0]
-                    return user && firstName ? (
-                      <>
-                        <span>Welcome to the Portal, </span>
-                        <span className="text-primary-600">{firstName}</span>
-                        <span>.</span>
-                      </>
-                    ) : (
-                      <>Welcome to the Portal.</>
-                    )
-                  })()}
-                </h1>
-                <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
-                  Your gateway to explore and connect with the Smartslate ecosystem — discover the home of every product in one place.
-                </p>
+                {isSettings ? (
+                  <>
+                    <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">Settings</h1>
+                    <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
+                      Manage your account, settings, and preferences.
+                    </p>
+                  </>
+                ) : viewingProfile ? (
+                  <>
+                    <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">
+                      <span className="text-primary-600">{getFirstName()}</span>
+                      <span>'s Profile</span>
+                    </h1>
+                    <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
+                      Manage your account, settings, and preferences.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">
+                      {(() => {
+                        const rawName = (user?.user_metadata?.first_name as string) ||
+                          (user?.user_metadata?.name as string) ||
+                          (user?.user_metadata?.full_name as string) ||
+                          (user?.email as string) ||
+                          ''
+                        const firstName = rawName.toString().trim().split(' ')[0]
+                        return user && firstName ? (
+                          <>
+                            <span>Welcome to the Portal, </span>
+                            <span className="text-primary-600">{firstName}</span>
+                            <span>.</span>
+                          </>
+                        ) : (
+                          <>Welcome to the Portal.</>
+                        )
+                      })()}
+                    </h1>
+                    <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
+                      Your gateway to explore and connect with the Smartslate ecosystem — discover the home of every product in one place.
+                    </p>
+                  </>
+                )}
                 <div aria-hidden="true" className="mt-3 h-px w-16 bg-gradient-to-r from-white/40 to-transparent" />
               </div>
             </div>
           </header>
 
-          <section className="mx-auto max-w-7xl px-4 py-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up">
-                <WorkspaceActionCard
-                  href="#"
-                  label="Build"
-                  description="Conduct stakeholder analysis, instructional design & generate storyboards, build and deploy courses."
-                  icon={IconWrench}
-                />
+          {isSettings ? (
+            <Outlet />
+          ) : viewingProfile ? (
+            <section className="mx-auto max-w-3xl px-4 py-6 animate-fade-in-up">
+              <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-xl p-5 sm:p-7">
+                <div className="flex items-start gap-5">
+                  <div className="relative">
+                    <UserAvatar user={user} sizeClass="w-16 h-16" textClass="text-lg font-semibold" />
+                    <input type="file" accept="image/*" onChange={onAvatarFileSelected} className="absolute inset-0 opacity-0 cursor-pointer" title="Upload avatar" aria-label="Upload avatar" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xl font-semibold text-white/95 truncate">{displayName || getFirstName()}</h2>
+                      <span className="text-xs bg-white/10 border border-white/10 rounded-full px-2 py-0.5 text-white/70">@{username || 'user'}</span>
+                    </div>
+                    <div className="mt-2 flex gap-2">
+                      <button type="button" onClick={removeAvatar} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable">Remove avatar</button>
+                      <button type="button" onClick={() => navigate(paths.portal)} className="px-3 py-1.5 rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable">Back</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-sm font-semibold text-white/90">Identity</div>
+                    <div className="mt-3 space-y-3 text-sm text-white/80">
+                      <label className="block">
+                        <span className="text-xs text-white/60">Display name</span>
+                        <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="Your name" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs text-white/60">Unique User ID (username)</span>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="px-2 py-2 rounded-lg bg-white/5 border border-white/10 text-white/60 select-none">@</span>
+                          <input value={username} onChange={(e) => { const v = sanitizeUsername(e.target.value); setUsername(v); void checkUsernameAvailability(v) }} placeholder="username" className="flex-1 rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
+                          <span className="text-xs min-w-[64px] text-center">
+                            {checkingUsername ? '...' : username ? (usernameAvailable === 'available' ? 'Available' : usernameAvailable === 'taken' ? 'Taken' : '') : ''}
+                          </span>
+                        </div>
+                        <span className="mt-1 block text-[11px] text-white/50">Public and unique. No spaces, only letters, numbers, underscores.</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-sm font-semibold text-white/90">Profile</div>
+                    <div className="mt-3 space-y-3 text-sm text-white/80">
+                      <label className="block">
+                        <span className="text-xs text-white/60">Job title (optional)</span>
+                        <input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} placeholder="e.g. Product Manager" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs text-white/60">Company (optional)</span>
+                        <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs text-white/60">Website (optional)</span>
+                        <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://example.com" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-sm font-semibold text-white/90">Location</div>
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm text-white/80">
+                      <label className="block">
+                        <span className="text-xs text-white/60">City (optional)</span>
+                        <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="City" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs text-white/60">Country (optional)</span>
+                        <input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="Country" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
+                      </label>
+                      <label className="block sm:col-span-2">
+                        <span className="text-xs text-white/60">Timezone (optional)</span>
+                        <input value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="e.g. UTC+05:30" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400" />
+                      </label>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                    <div className="text-sm font-semibold text-white/90">About</div>
+                    <div className="mt-3 space-y-3 text-sm text-white/80">
+                      <label className="block">
+                        <span className="text-xs text-white/60">Bio (optional)</span>
+                        <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={4} placeholder="Tell us a bit about yourself" className="mt-1 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-primary-400"></textarea>
+                      </label>
+                      <label className="inline-flex items-center gap-2 select-none">
+                        <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} className="rounded border-white/20 bg-white/5" />
+                        <span className="text-xs text-white/60">I agree to receive occasional product updates (optional)</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="sm:col-span-2 flex items-center justify-end gap-3">
+                    <button type="button" onClick={() => navigate(paths.portal)} className="px-4 py-2 rounded-lg border border-white/10 bg-white/5 text-white/85 hover:text-white pressable">Cancel</button>
+                    <button type="button" onClick={saveProfile} disabled={saving} className="px-4 py-2 rounded-lg border border-primary-500/20 bg-primary-500/20 text-primary-200 hover:text-white hover:bg-primary-500/30 pressable disabled:opacity-60">{saving ? 'Saving...' : 'Save changes'}</button>
+                  </div>
+                </div>
               </div>
-              <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up animate-delay-75">
-                <WorkspaceActionCard
-                  href="#"
-                  label="Learn"
-                  description="Explore docs, courses, and tutorials to level up quickly."
-                  icon={IconBookOpen}
-                />
+            </section>
+          ) : (
+            <section className="mx-auto max-w-7xl px-4 py-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up">
+                  <WorkspaceActionCard
+                    href="#"
+                    label="Build"
+                    description="Conduct stakeholder analysis, instructional design & generate storyboards, build and deploy courses."
+                    icon={IconWrench}
+                  />
+                </div>
+                <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up animate-delay-75">
+                  <WorkspaceActionCard
+                    href="#"
+                    label="Learn"
+                    description="Explore docs, courses, and tutorials to level up quickly."
+                    icon={IconBookOpen}
+                  />
+                </div>
+                <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up animate-delay-150">
+                  <WorkspaceActionCard
+                    href="#"
+                    label="Insight"
+                    description="Discover analytics and reports to drive better decisions."
+                    icon={IconChart}
+                  />
+                </div>
               </div>
-              <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up animate-delay-150">
-                <WorkspaceActionCard
-                  href="#"
-                  label="Insight"
-                  description="Discover analytics and reports to drive better decisions."
-                  icon={IconChart}
-                />
+            </section>
+          )}
+          {toast && (
+            <div className="fixed bottom-4 right-4 z-[60] animate-fade-in-up">
+              <div className={`rounded-xl border px-4 py-3 shadow-xl backdrop-blur-xl ${toast.kind === 'success' ? 'border-green-500/30 bg-green-500/15 text-green-100' : 'border-red-500/30 bg-red-500/15 text-red-100'}`}>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm">{toast.message}</span>
+                  <button type="button" className="ml-2 text-white/80 hover:text-white" aria-label="Dismiss" onClick={() => setToast(null)}>×</button>
+                </div>
               </div>
             </div>
-          </section>
+          )}
           {profileMenu.open && (
             <div className="fixed inset-0 z-50 animate-fade-in" onClick={closeProfileMenu} aria-hidden="true">
               <div

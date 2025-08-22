@@ -19,9 +19,14 @@ export default {
           500: '#4F46E5',
           600: '#3730A3',
         },
+        // Utility alias for emphasis/selection overlays
+        brand: {
+          accent: '#a7dadb',
+        },
       },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['Lato', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        heading: ['Quicksand', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       keyframes: {
         fadeIn: {

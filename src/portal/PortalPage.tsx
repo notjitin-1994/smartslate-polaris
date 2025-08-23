@@ -785,7 +785,7 @@ export function PortalPage() {
           </header>
 
           {outlet ? (
-            outlet
+            <div className="mx-auto max-w-7xl px-4 py-6">{outlet}</div>
           ) : viewingProfile ? (
             <section className="mx-auto max-w-4xl px-4 py-6 animate-fade-in-up">
               {/* Clean Material Profile Card */}

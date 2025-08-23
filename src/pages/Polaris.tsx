@@ -233,7 +233,7 @@ export default function Polaris() {
       return (
         <label className="block space-y-2">
           {label}
-          <textarea className="w-full min-h-[120px] rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-400" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={q.placeholder} />
+          <textarea className="input min-h-[120px]" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={q.placeholder} />
         </label>
       )
     }
@@ -241,7 +241,7 @@ export default function Polaris() {
       return (
         <label className="block space-y-2">
           {label}
-          <input type="number" className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-400" value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} placeholder={q.placeholder} />
+          <input type="number" className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} placeholder={q.placeholder} />
         </label>
       )
     }
@@ -249,7 +249,7 @@ export default function Polaris() {
       return (
         <label className="block space-y-2">
           {label}
-          <select className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary-400" value={value === true ? 'yes' : value === false ? 'no' : ''} onChange={(e) => onChange(e.target.value === 'yes')}>
+          <select className="input" value={value === true ? 'yes' : value === false ? 'no' : ''} onChange={(e) => onChange(e.target.value === 'yes')}>
             <option value="">Select yes/no</option>
             <option value="yes">Yes</option>
             <option value="no">No</option>
@@ -261,7 +261,7 @@ export default function Polaris() {
       return (
         <label className="block space-y-2">
           {label}
-          <select className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary-400" value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
+          <select className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
             <option value="">{q.placeholder || 'Select an option'}</option>
             {(q.options || []).map((o) => (
               <option key={o.value} value={o.value}>{o.label}</option>
@@ -282,7 +282,7 @@ export default function Polaris() {
                   const next = new Set(Array.isArray(value) ? value : [])
                   if (next.has(o.value)) next.delete(o.value); else next.add(o.value)
                   onChange(Array.from(next))
-                }} className={`px-3 py-1 rounded-2xl border transition ${active ? 'border-transparent bg-white/90 text-slate-900' : 'border-white/15 text-white/85 hover:bg-white/5'}`}>
+                }} className={`px-3 py-1.5 rounded-full border transition pressable ${active ? 'border-transparent bg-primary-400 text-slate-900' : 'border-white/15 text-white/85 hover:bg-white/10'}`}>
                   {o.label}
                 </button>
               )
@@ -295,14 +295,14 @@ export default function Polaris() {
       return (
         <label className="block space-y-2">
           {label}
-          <input type="date" className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-primary-400" value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
+          <input type="date" className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
         </label>
       )
     }
     return (
       <label className="block space-y-2">
         {label}
-        <input className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-400" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={q.placeholder} />
+        <input className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={q.placeholder} />
       </label>
     )
   }
@@ -321,26 +321,85 @@ export default function Polaris() {
     return html.trim()
   }
 
+  // Horizontal stepper to visualize active stage
+  function Stepper() {
+    const steps: Array<{ key: 'stage1' | 'stage2' | 'stage3' | 'summary'; label: string }> = [
+      { key: 'stage1', label: 'Stage 1' },
+      { key: 'stage2', label: 'Stage 2' },
+      { key: 'stage3', label: 'Stage 3' },
+      { key: 'summary', label: 'Summary' },
+    ]
+    const order: Array<'stage1' | 'stage2' | 'stage3' | 'summary'> = ['stage1', 'stage2', 'stage3', 'summary']
+    const currentIndex = order.indexOf(active)
+
+    return (
+      <ol className="relative flex items-center gap-3 md:gap-4">
+        {steps.map((s, idx) => {
+          const isCompleted = idx < currentIndex
+          const isActive = idx === currentIndex
+          return (
+            <li key={s.key} className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setActive(s.key)}
+                className={`pressable flex items-center gap-2 rounded-full px-3 py-1.5 border ${isActive ? 'border-primary-400 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10'} text-xs md:text-sm`}
+                aria-current={isActive ? 'step' : undefined}
+              >
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${isCompleted ? 'bg-primary-400 text-slate-900' : isActive ? 'bg-white/90 text-slate-900' : 'bg-white/10 text-white/80'}`}>{idx + 1}</span>
+                <span className={`font-medium ${isCompleted ? 'text-primary-400' : 'text-white/85'}`}>{s.label}</span>
+              </button>
+              {idx !== steps.length - 1 && (
+                <div className={`h-[2px] w-6 md:w-10 ${idx < currentIndex ? 'bg-primary-400/80' : 'bg-white/10'}`} />
+              )}
+            </li>
+          )
+        })}
+      </ol>
+    )
+  }
+
   return (
-    <div className="px-4 py-6">
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-xl font-semibold text-white">Polaris – Needs Analysis</h2>
-          <p className="text-sm text-white/70">Guided, multi-stage discovery that adapts in real time.</p>
+    <div className="px-4 py-6 page-enter">
+      <div className="mb-5">
+        <div className="glass-card p-4 md:p-6 elevate">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="overflow-x-auto">
+              {<Stepper />}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn-ghost px-3 py-2 text-sm"
+                onClick={() => { setAnswers1({}); setAnswers2({}); setAnswers3({}); setActive('stage1') }}
+              >
+                Start Over
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 rounded-md border border-red-500/30 bg-red-500/10 text-red-200 text-sm">{error}</div>
+        <div className="mb-4 rounded-xl border-l-4 border-red-400/80 bg-red-500/10 p-3 text-red-200 text-sm">{error}</div>
       )}
 
       {active === 'stage1' && (
         <section className="space-y-4">
           {stage1Questions.length ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
               {stage1Questions.map((q) => (
-                <div key={q.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div key={q.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
+                  <span className="interactive-spotlight" />
                   <Field q={q} value={answers1[q.id]} onChange={(v) => setAnswers1({ ...answers1, [q.id]: v })} />
+                </div>
+              ))}
+            </div>
+          ) : loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="glass-card p-4 md:p-5">
+                  <div className="h-5 w-1/3 rounded skeleton mb-3" />
+                  <div className="h-10 w-full rounded skeleton" />
                 </div>
               ))}
             </div>
@@ -348,8 +407,8 @@ export default function Polaris() {
             <div className="text-sm text-white/60">No questions yet.</div>
           )}
           <div className="flex justify-end gap-2">
-            <button type="button" className="px-3 py-2 text-sm border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg" onClick={() => setAnswers1({})}>Reset</button>
-            <button type="button" className="px-3 py-2 text-sm bg-primary-600 text-white rounded-lg disabled:opacity-70" onClick={genStage2} disabled={loading}>{loading ? 'Generating…' : 'Next: Generate Stage 2'}</button>
+            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setAnswers1({})}>Reset</button>
+            <button type="button" className="btn-primary text-sm" onClick={genStage2} disabled={loading}>{loading ? 'Generating…' : 'Next: Generate Stage 2'}</button>
           </div>
         </section>
       )}
@@ -357,9 +416,10 @@ export default function Polaris() {
       {active === 'stage2' && (
         <section className="space-y-4">
           {stage2Questions.length ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
               {stage2Questions.map((q) => (
-                <div key={q.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div key={q.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
+                  <span className="interactive-spotlight" />
                   <Field q={q} value={answers2[q.id]} onChange={(v) => setAnswers2({ ...answers2, [q.id]: v })} />
                 </div>
               ))}
@@ -368,8 +428,8 @@ export default function Polaris() {
             <div className="text-sm text-white/60">No questions yet.</div>
           )}
           <div className="flex justify-end gap-2">
-            <button type="button" className="px-3 py-2 text-sm border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg" onClick={() => setActive('stage1')}>Back</button>
-            <button type="button" className="px-3 py-2 text-sm bg-secondary-500 text-white rounded-lg disabled:opacity-70" onClick={genStage3} disabled={loading}>{loading ? 'Generating…' : 'Next: Generate Stage 3'}</button>
+            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage1')}>Back</button>
+            <button type="button" className="btn-primary text-sm" onClick={genStage3} disabled={loading}>{loading ? 'Generating…' : 'Next: Generate Stage 3'}</button>
           </div>
         </section>
       )}
@@ -377,9 +437,10 @@ export default function Polaris() {
       {active === 'stage3' && (
         <section className="space-y-4">
           {stage3Questions.length ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
               {stage3Questions.map((q) => (
-                <div key={q.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div key={q.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
+                  <span className="interactive-spotlight" />
                   <Field q={q} value={answers3[q.id]} onChange={(v) => setAnswers3({ ...answers3, [q.id]: v })} />
                 </div>
               ))}
@@ -388,8 +449,8 @@ export default function Polaris() {
             <div className="text-sm text-white/60">No questions yet.</div>
           )}
           <div className="flex justify-end gap-2">
-            <button type="button" className="px-3 py-2 text-sm border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg" onClick={() => setActive('stage2')}>Back</button>
-            <button type="button" className="px-3 py-2 text-sm bg-white/90 text-slate-900 rounded-lg disabled:opacity-70" onClick={analyze} disabled={loading}>{loading ? 'Analyzing…' : 'Analyze & Propose'}</button>
+            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage2')}>Back</button>
+            <button type="button" className="btn-primary text-sm" onClick={analyze} disabled={loading}>{loading ? 'Analyzing…' : 'Analyze & Propose'}</button>
           </div>
         </section>
       )}
@@ -402,8 +463,8 @@ export default function Polaris() {
             <div className="text-sm text-white/60">Run the analysis to see a tailored proposal mapped to Ignite / Strategic Skills Architecture / Solara.</div>
           )}
           <div className="flex justify-end gap-2">
-            <button type="button" className="px-3 py-2 text-sm border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg" onClick={() => setActive('stage1')}>Start Over</button>
-            <button type="button" className="px-3 py-2 text-sm bg-primary-600 text-white rounded-lg" onClick={() => navigator.clipboard.writeText(analysis || '')}>Copy Summary</button>
+            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage1')}>Start Over</button>
+            <button type="button" className="btn-primary text-sm" onClick={() => navigator.clipboard.writeText(analysis || '')}>Copy Summary</button>
           </div>
           <details className="mt-2">
             <summary className="cursor-pointer text-sm text-white/60">Developer debug: raw JSON</summary>

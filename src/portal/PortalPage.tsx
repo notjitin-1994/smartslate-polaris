@@ -767,17 +767,15 @@ export function PortalPage() {
                         const firstName = rawName.toString().trim().split(' ')[0]
                         return user && firstName ? (
                           <>
-                            <span>Welcome to the Portal, </span>
-                            <span className="text-primary-600">{firstName}</span>
-                            <span>.</span>
+                            <span>Polaris: Guided Discovery</span>
                           </>
                         ) : (
-                          <>Welcome to the Portal.</>
+                          <>Polaris: Guided Discovery</>
                         )
                       })()}
                     </h1>
                     <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
-                      Your gateway to explore and connect with the Smartslate ecosystem — discover the home of every product in one place.
+                      Answer a few focused questions to scope your needs and generate a tailored Smartslate solution roadmap.
                     </p>
                   </>
                 )}

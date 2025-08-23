@@ -56,7 +56,7 @@ export function PublicProfile() {
   const { username } = useParams()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
-  const [copySuccess, setCopySuccess] = useState<boolean>(false)
+  
   
   // Profile form state
   const [displayName, setDisplayName] = useState<string>('')
@@ -176,7 +176,7 @@ export function PublicProfile() {
         <div className="mx-auto max-w-4xl px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex flex-col items-start">
-              <img src="/images/logos/logo.png" alt="SmartSlate" className="h-8 w-auto" />
+              <img src="/images/logos/logo.png" alt="Smartslate" className="h-8 w-auto" />
               <p className="text-sm font-medium text-primary-400 -mt-1">Professional Profile</p>
             </div>
             <a 
@@ -184,7 +184,7 @@ export function PublicProfile() {
               target="_blank"
               rel="noopener noreferrer"
               className="p-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors"
-              title="Join SmartSlate"
+              title="Join Smartslate"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M17 8l4 4m0 0l-4 4m4-4H3" />
@@ -219,30 +219,6 @@ export function PublicProfile() {
                   </h2>
                   <div className="flex items-center gap-2 text-white/60">
                     <span>@{username || 'user'}</span>
-                    <button 
-                      type="button"
-                      onClick={async () => {
-                        try {
-                          await navigator.clipboard.writeText(`@${username || 'user'}`)
-                          setCopySuccess(true)
-                          setTimeout(() => setCopySuccess(false), 2000)
-                        } catch (err) {
-                          console.log('Copy failed:', err)
-                        }
-                      }}
-                      className={`p-1 hover:text-primary-400 transition-colors ${copySuccess ? 'text-green-400' : 'text-white/40'}`}
-                      title={copySuccess ? 'Copied!' : 'Copy username'}
-                    >
-                      {copySuccess ? (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                        </svg>
-                      ) : (
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                      )}
-                    </button>
                   </div>
                 </div>
                 
@@ -328,27 +304,7 @@ export function PublicProfile() {
                   </svg>
                 </button>
                 
-                {username !== 'notjitin' && (
-                  <>
-                    <div className="w-px h-6 bg-white/20 mx-2" />
-                    
-                                         <button 
-                       onClick={() => {
-                         const publicUrl = window.location.href
-                         navigator.clipboard.writeText(publicUrl).then(() => {
-                           // Could add a toast notification here
-                         })
-                         window.open(publicUrl, '_blank')
-                       }}
-                       className="p-2 border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg transition-colors"
-                       title="Share Profile"
-                     >
-                       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                       </svg>
-                     </button>
-                  </>
-                )}
+                
 
               </div>
             </div>
@@ -481,14 +437,14 @@ export function PublicProfile() {
         {/* Footer with Smartslate Branding */}
         <footer className="relative z-10 mt-12 pt-8 border-t border-white/10 text-center">
           <div className="flex flex-col items-center justify-center mb-4">
-            <img src="/images/logos/logo.png" alt="SmartSlate" className="h-6 w-auto opacity-60 mb-2" />
-            <span className="text-white/60 text-sm">Powered by SmartSlate</span>
+            <img src="/images/logos/logo.png" alt="Smartslate" className="h-6 w-auto opacity-60 mb-2" />
+            <span className="text-white/60 text-sm">Powered by Smartslate</span>
           </div>
           <p className="text-xs text-white/40 mb-4">
             Create your professional profile and showcase your achievements
           </p>
           <div className="flex items-center justify-center gap-4 text-xs text-white/40">
-            <a href="https://smartslate.io" target="_blank" rel="noopener noreferrer" className="hover:text-white/60 transition-colors">About SmartSlate</a>
+            <a href="https://smartslate.io" target="_blank" rel="noopener noreferrer" className="hover:text-white/60 transition-colors">About Smartslate</a>
             <a href="https://app.smartslate.io/portal" target="_blank" rel="noopener noreferrer" className="hover:text-white/60 transition-colors">Create Profile</a>
             <a href="#" className="hover:text-white/60 transition-colors">Privacy</a>
           </div>

@@ -1,562 +1,107 @@
-import { memo, useRef, useState, useEffect } from 'react'
-import { callLLM, type ChatMessage } from '@/services/llmClient'
+import { useRef, useState, useEffect } from 'react'
+import { callLLM } from '@/services/llmClient'
 import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT } from '@/services/polarisSummaryService'
+import RenderField from '@/polaris/needs-analysis/RenderField'
+import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
+import { EXPERIENCE_LEVELS } from '@/polaris/needs-analysis/experience'
+import { NA_STATIC_FIELDS } from '@/polaris/needs-analysis/static'
+import { NA_STAGE_TITLE_PROMPT, NA_QUESTIONNAIRE_PROMPT } from '@/polaris/needs-analysis/prompts'
+import { NA_REPORT_PROMPT, type NAReport } from '@/polaris/needs-analysis/report'
+import { tryExtractJson } from '@/polaris/needs-analysis/json'
+import type { NAField, NAResponseMap } from '@/polaris/needs-analysis/types'
 
-type QuestionType = 'text' | 'textarea' | 'number' | 'select' | 'multiselect' | 'radio' | 'chips' | 'boolean' | 'date'
-
-type Question = {
-  id: string
-  label: string
-  type: QuestionType
-  placeholder?: string
-  description?: string
-  required?: boolean
-  options?: Array<{ value: string; label: string }>
-}
-
-type QuestionnairePayload = {
-  stage: 1 | 2 | 3
-  questions: Question[]
-}
-
-// Static first-contact intake questionnaire
-const INTAKE_QUESTIONS: Question[] = [
-  { id: 'contact_name', label: 'Your name', type: 'text', placeholder: 'Jane Doe', required: true },
-  { id: 'contact_email', label: 'Work email', type: 'text', placeholder: 'jane@company.com', required: true },
-  { id: 'company_name', label: 'Company / Organization', type: 'text', placeholder: 'Acme Inc.', required: true },
-  { id: 'role_title', label: 'Your role / title', type: 'text', placeholder: 'L&D Director' },
+// Group static fields into logical sections for responsive tabs/steps
+const STATIC_GROUPS_META: Array<{ id: string; label: string; description?: string; fieldIds: string[] }> = [
   {
-    id: 'company_size',
-    label: 'Company size',
-    type: 'select',
-    placeholder: 'Select',
-    options: [
-      { value: '1-10', label: '1–10' },
-      { value: '11-50', label: '11–50' },
-      { value: '51-200', label: '51–200' },
-      { value: '201-1000', label: '201–1,000' },
-      { value: '1001-5000', label: '1,001–5,000' },
-      { value: '5001+', label: '5,001+' },
-    ],
+    id: 'org_audience',
+    label: 'Organization & Audience',
+    description: 'Basic organization info and target learners',
+    fieldIds: ['org_name', 'industry', 'employee_count', 'audience_role'],
   },
   {
-    id: 'industry',
-    label: 'Industry',
-    type: 'select',
-    placeholder: 'Select industry',
-    options: [
-      { value: 'technology', label: 'Technology' },
-      { value: 'financial_services', label: 'Financial Services' },
-      { value: 'healthcare', label: 'Healthcare' },
-      { value: 'education', label: 'Education' },
-      { value: 'manufacturing', label: 'Manufacturing' },
-      { value: 'retail', label: 'Retail' },
-      { value: 'energy', label: 'Energy' },
-      { value: 'government', label: 'Government' },
-      { value: 'nonprofit', label: 'Nonprofit' },
-      { value: 'other', label: 'Other' },
-    ],
-  },
-  { id: 'country', label: 'Country', type: 'text', placeholder: 'United States' },
-  { id: 'website', label: 'Company website', type: 'text', placeholder: 'https://example.com' },
-  { id: 'has_lms', label: 'Existing LMS / learning platform?', type: 'boolean' },
-  {
-    id: 'current_systems',
-    label: 'Current systems (select all that apply)',
-    type: 'multiselect',
-    options: [
-      { value: 'moodle', label: 'Moodle' },
-      { value: 'canvas', label: 'Canvas' },
-      { value: 'cornerstone', label: 'Cornerstone' },
-      { value: 'successfactors', label: 'SAP SuccessFactors' },
-      { value: 'workday_learning', label: 'Workday Learning' },
-      { value: 'docebo', label: 'Docebo' },
-      { value: 'absorb', label: 'Absorb' },
-      { value: 'custom', label: 'Custom / internal' },
-      { value: 'none', label: 'None' },
-      { value: 'other', label: 'Other' },
-    ],
+    id: 'business_context',
+    label: 'Business Context',
+    description: 'Objectives, gaps, and geography',
+    fieldIds: ['business_objectives', 'performance_gaps', 'geographies'],
   },
   {
-    id: 'integration_targets',
-    label: 'Integrations needed',
-    type: 'multiselect',
-    options: [
-      { value: 'slack', label: 'Slack' },
-      { value: 'teams', label: 'Microsoft Teams' },
-      { value: 'google_workspace', label: 'Google Workspace' },
-      { value: 'm365', label: 'Microsoft 365' },
-      { value: 'okta', label: 'Okta / SSO' },
-      { value: 'hris', label: 'HRIS (e.g., Workday, BambooHR)' },
-      { value: 'crm', label: 'CRM (e.g., Salesforce, HubSpot)' },
-      { value: 'data_warehouse', label: 'Data Warehouse / Lake' },
-      { value: 'billing', label: 'Billing / Procurement' },
-    ],
-  },
-  { id: 'goals', label: 'Primary goals / outcomes', type: 'textarea', placeholder: 'What does success look like?' },
-  {
-    id: 'pain_points',
-    label: 'Top pain points',
-    type: 'chips',
-    options: [
-      { value: 'low_engagement', label: 'Low engagement' },
-      { value: 'high_cost', label: 'High content cost' },
-      { value: 'slow_delivery', label: 'Slow delivery speed' },
-      { value: 'compliance_risk', label: 'Compliance risk' },
-      { value: 'fragmented_systems', label: 'Fragmented systems' },
-      { value: 'poor_analytics', label: 'Poor analytics' },
-      { value: 'skills_gaps', label: 'Skills gaps' },
-      { value: 'globalization', label: 'Globalization / localization' },
-      { value: 'ip_sensitivity', label: 'IP sensitivity' },
-      { value: 'security_concerns', label: 'Security concerns' },
-    ],
+    id: 'constraints_prefs',
+    label: 'Constraints & Preferences',
+    description: 'Budget, timeline, modalities, and constraints',
+    fieldIds: ['budget_ceiling', 'time_to_impact', 'preferred_modalities', 'constraints'],
   },
   {
-    id: 'timeline',
-    label: 'Desired timeline',
-    type: 'select',
-    placeholder: 'Select timeline',
-    options: [
-      { value: 'asap', label: 'ASAP (< 1 month)' },
-      { value: '1-3', label: '1–3 months' },
-      { value: '3-6', label: '3–6 months' },
-      { value: '6-12', label: '6–12 months' },
-      { value: '12+', label: '12+ months' },
-    ],
+    id: 'systems_data',
+    label: 'Systems & Data',
+    description: 'Current platforms and metrics',
+    fieldIds: ['systems', 'success_metrics'],
   },
   {
-    id: 'budget_range',
-    label: 'Estimated budget range',
-    type: 'select',
-    placeholder: 'Select range',
-    options: [
-      { value: '<10k', label: '< $10k' },
-      { value: '10k-50k', label: '$10k–$50k' },
-      { value: '50k-150k', label: '$50k–$150k' },
-      { value: '150k-500k', label: '$150k–$500k' },
-      { value: '500k+', label: '$500k+' },
-    ],
-  },
-  { id: 'stakeholders', label: 'Primary stakeholders / decision makers', type: 'text', placeholder: 'Names / roles' },
-  { id: 'success_metrics', label: 'Success metrics', type: 'textarea', placeholder: 'KPIs / measurement plan' },
-  {
-    id: 'audience',
-    label: 'Target audience',
-    type: 'multiselect',
-    options: [
-      { value: 'new_hires', label: 'New hires' },
-      { value: 'managers', label: 'Managers' },
-      { value: 'ics', label: 'ICs' },
-      { value: 'executives', label: 'Executives' },
-      { value: 'partners', label: 'Partners' },
-      { value: 'customers', label: 'Customers' },
-      { value: 'field', label: 'Field workforce' },
-      { value: 'global', label: 'Global audience' },
-    ],
+    id: 'timeline_schedule',
+    label: 'Timeline & Scheduling',
+    description: 'Kickoff windows and key dates',
+    fieldIds: ['kickoff_window', 'stakeholder_workshop_date'],
   },
   {
-    id: 'modalities',
-    label: 'Delivery modalities',
-    type: 'multiselect',
-    options: [
-      { value: 'self_paced', label: 'Self-paced' },
-      { value: 'instructor_led', label: 'Instructor-led' },
-      { value: 'blended', label: 'Blended' },
-      { value: 'microlearning', label: 'Microlearning' },
-      { value: 'cohort', label: 'Cohort-based' },
-      { value: 'mobile_first', label: 'Mobile-first' },
-      { value: 'virtual_labs', label: 'Virtual labs' },
-      { value: 'ar_vr', label: 'AR/VR' },
-    ],
+    id: 'risk_change',
+    label: 'Risk & Change',
+    description: 'Risk tolerance and readiness',
+    fieldIds: ['risk_tolerance', 'change_readiness'],
   },
   {
-    id: 'content_types',
-    label: 'Content types',
-    type: 'multiselect',
-    options: [
-      { value: 'compliance', label: 'Compliance' },
-      { value: 'technical', label: 'Technical' },
-      { value: 'soft_skills', label: 'Soft skills' },
-      { value: 'leadership', label: 'Leadership' },
-      { value: 'product', label: 'Product' },
-      { value: 'sales_enablement', label: 'Sales enablement' },
-      { value: 'onboarding', label: 'Onboarding' },
-      { value: 'custom', label: 'Custom programs' },
-    ],
+    id: 'learner_profile',
+    label: 'Learner Familiarization',
+    description: 'Understanding your learner population',
+    fieldIds: ['learner_age_range', 'learner_tech_savviness', 'learner_education_level', 'learning_preferences', 'prior_training_experience', 'learner_motivation_level', 'accessibility_needs', 'learner_time_availability', 'learner_device_access', 'learner_work_environment', 'learner_language_diversity', 'learner_cultural_factors'],
   },
   {
-    id: 'geographies',
-    label: 'Geographies',
-    type: 'multiselect',
-    options: [
-      { value: 'na', label: 'North America' },
-      { value: 'eu', label: 'Europe' },
-      { value: 'apac', label: 'APAC' },
-      { value: 'latam', label: 'LATAM' },
-      { value: 'me', label: 'Middle East' },
-      { value: 'africa', label: 'Africa' },
-      { value: 'global', label: 'Global' },
-    ],
+    id: 'tech_talent',
+    label: 'Technology & Talent',
+    description: 'Available resources and limitations',
+    fieldIds: ['available_technologies', 'tech_expertise_level', 'talent_availability', 'talent_gaps', 'tech_limitations', 'talent_constraints', 'tech_investment_appetite'],
   },
   {
-    id: 'languages',
-    label: 'Languages',
-    type: 'multiselect',
-    options: [
-      { value: 'en', label: 'English' },
-      { value: 'es', label: 'Spanish' },
-      { value: 'fr', label: 'French' },
-      { value: 'de', label: 'German' },
-      { value: 'pt', label: 'Portuguese' },
-      { value: 'zh', label: 'Chinese' },
-      { value: 'ja', label: 'Japanese' },
-      { value: 'ar', label: 'Arabic' },
-      { value: 'hi', label: 'Hindi' },
-      { value: 'other', label: 'Other' },
-    ],
-  },
-  {
-    id: 'compliance',
-    label: 'Compliance / certifications',
-    type: 'multiselect',
-    options: [
-      { value: 'gdpr', label: 'GDPR' },
-      { value: 'soc2', label: 'SOC 2' },
-      { value: 'iso27001', label: 'ISO 27001' },
-      { value: 'hipaa', label: 'HIPAA' },
-      { value: 'ferpa', label: 'FERPA' },
-      { value: 'coppa', label: 'COPPA' },
-      { value: 'pcidss', label: 'PCI-DSS' },
-      { value: 'other', label: 'Other' },
-    ],
-  },
-  { id: 'data_privacy', label: 'Data privacy constraints', type: 'textarea', placeholder: 'Any data residency or privacy restrictions?' },
-  { id: 'security_constraints', label: 'Security constraints', type: 'textarea', placeholder: 'Security policies or requirements' },
-  { id: 'ip_sensitivity', label: 'Sensitive IP constraints?', type: 'boolean' },
-  {
-    id: 'contact_preference',
-    label: 'Preferred contact method',
-    type: 'select',
-    placeholder: 'Select',
-    options: [
-      { value: 'email', label: 'Email' },
-      { value: 'phone', label: 'Phone' },
-      { value: 'video', label: 'Video call' },
-    ],
-  },
-  { id: 'preferred_time', label: 'Preferred time window / timezone', type: 'text', placeholder: 'e.g., 9–11am ET' },
-  { id: 'notes', label: 'Anything else we should know?', type: 'textarea' },
-]
-
-// Group intake fields into logical sections for responsive tabs/steps
-const INTAKE_GROUPS_META: Array<{ id: string; label: string; description?: string; questionIds: string[] }> = [
-  {
-    id: 'contact_org',
-    label: 'Contact & Organization',
-    description: 'Basic contact details and organization info',
-    questionIds: ['contact_name', 'contact_email', 'role_title', 'company_name', 'website', 'country'],
-  },
-  {
-    id: 'company_profile',
-    label: 'Company Profile',
-    description: 'Company size, industry, and footprint',
-    questionIds: ['company_size', 'industry', 'geographies', 'languages'],
-  },
-  {
-    id: 'systems_integrations',
-    label: 'Systems & Integrations',
-    description: 'Existing platforms and integration targets',
-    questionIds: ['has_lms', 'current_systems', 'integration_targets'],
-  },
-  {
-    id: 'goals_outcomes',
-    label: 'Goals & Outcomes',
-    description: 'Primary goals, content types, and modalities',
-    questionIds: ['goals', 'pain_points', 'content_types', 'modalities', 'audience', 'success_metrics'],
-  },
-  {
-    id: 'scope_constraints',
-    label: 'Scope & Constraints',
-    description: 'Timeline, budget, stakeholders, and constraints',
-    questionIds: ['timeline', 'budget_range', 'stakeholders', 'compliance', 'data_privacy', 'security_constraints', 'ip_sensitivity'],
-  },
-  {
-    id: 'scheduling',
-    label: 'Scheduling',
-    description: 'How and when to connect',
-    questionIds: ['contact_preference', 'preferred_time', 'notes'],
+    id: 'contacts',
+    label: 'Contacts',
+    description: 'Primary stakeholder information',
+    fieldIds: ['primary_contact_name', 'primary_contact_role'],
   },
 ]
-
-// LLM prompt to generate elegant, organization-personalized stage titles
-const STAGE_TITLES_SYSTEM_PROMPT = `You are Smartslate's Stage Title Namer.
-Return JSON ONLY with keys {"stage2": string, "stage3": string, "summary": string}.
-Requirements:
-- Titles should be relevant, elegant, and personalized to the organization and their goals.
-- 2–5 words each, Title Case, no numbering or punctuation at the end.
-- Avoid generic terms like "Stage", "Step", or "Summary" in the text itself.
-- No brand names unless they are part of the organization's inputs.
-- Keep them clear and professional (e.g., "Skills Acceleration Plan", "Rollout Readiness Review").
-Output valid JSON with the exact keys: stage2, stage3, summary.`
-
-const SYSTEM_PROMPT = `You are Smartslate's Product Discovery Copilot.
-You will produce JSON ONLY (no markdown) describing a questionnaire tailored to a prospect.
-JSON schema:
-{
-  "stage": 1 | 2 | 3,
-  "questions": [
-    {"id": string, "label": string, "type": "text"|"textarea"|"number"|"select"|"multiselect"|"radio"|"chips"|"boolean"|"date", "placeholder"?: string, "description"?: string, "required"?: boolean, "options"?: [{"value": string, "label": string}]} 
-  ]
-}
-Rules:
-- Keep IDs stable and URL-safe (kebab-case).
-- Choose answer types appropriately (e.g., select/multiselect when you can suggest options, boolean for yes/no).
-- Stages:
-  1. First-pass scoping across org profile, goals, timeline, constraints.
-  2. Deep-dive based on answers from Stage 1.
-  3. Final clarification for solution fit and rollout details. 
-- Use Smartslate context: Products at https://www.smartslate.io/products include Ignite Series (pre-built courses > talent pipeline), Strategic Skills Architecture (bespoke learning solutions, IP-safe), and Solara (AI-powered platform: Polaris/Constellation/Nova/Orbit/Nebula/Spectrum).
-- Ask only what is necessary. 6–12 questions per stage.
-- Localize labels in plain English.
-- Output valid JSON with no backticks.`
-
-function userPromptForStage(stage: 1 | 2 | 3, prior: any) {
-  const base = `Prospect inputs so far (JSON):\n${JSON.stringify(prior, null, 2)}\n`
-  if (stage === 2) return `${base}Generate the Stage 2 questionnaire (deep-dive).`
-  if (stage === 3) return `${base}Generate the Stage 3 questionnaire (final clarifications + rollout specifics).`
-  return `${base}Generate the Stage 1 questionnaire (first-pass scoping).`
-}
-
-function extractJsonBlock(s: string): any {
-  const text = (s || '').trim()
-
-  function fixJsonCommonIssues(input: string) {
-    let out = input
-    // normalize smart quotes
-    out = out.replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
-    // strip code fences
-    out = out.replace(/```json\s*([\s\S]*?)```/gi, '$1').replace(/```\s*([\s\S]*?)```/g, '$1')
-    // remove trailing commas before } or ]
-    out = out.replace(/,(\s*[}\]])/g, '$1')
-    return out
-  }
-
-  function tryParse(candidate: string) {
-    try {
-      return JSON.parse(candidate)
-    } catch {
-      try {
-        const fixed = fixJsonCommonIssues(candidate)
-        return JSON.parse(fixed)
-      } catch {
-        return undefined
-      }
-    }
-  }
-
-  // direct parse
-  let parsed = tryParse(text)
-  if (parsed !== undefined) {
-    return Array.isArray(parsed) ? { questions: parsed } : parsed
-  }
-
-  // ```json ... ``` fenced block
-  const fenceJson = text.match(/```json\s*([\s\S]*?)```/i)
-  if (fenceJson) {
-    parsed = tryParse(fenceJson[1].trim())
-    if (parsed !== undefined) return Array.isArray(parsed) ? { questions: parsed } : parsed
-  }
-
-  // generic ``` ... ``` fenced block
-  const fence = text.match(/```\s*([\s\S]*?)```/)
-  if (fence) {
-    parsed = tryParse(fence[1].trim())
-    if (parsed !== undefined) return Array.isArray(parsed) ? { questions: parsed } : parsed
-  }
-
-  function extractBalanced(startChar: '{' | '[', endChar: '}' | ']', source: string): string | undefined {
-    const start = source.indexOf(startChar)
-    if (start === -1) return undefined
-    let depth = 0
-    let inString = false
-    let prev = ''
-    for (let i = start; i < source.length; i++) {
-      const ch = source[i]
-      if (ch === '"' && prev !== '\\') inString = !inString
-      if (!inString) {
-        if (ch === startChar) depth++
-        if (ch === endChar) depth--
-        if (depth === 0) return source.slice(start, i + 1)
-      }
-      prev = ch
-    }
-    return undefined
-  }
-
-  // balanced object
-  const balancedObj = extractBalanced('{', '}', text)
-  if (balancedObj) {
-    parsed = tryParse(balancedObj)
-    if (parsed !== undefined) return Array.isArray(parsed) ? { questions: parsed } : parsed
-  }
-
-  // balanced array
-  const balancedArr = extractBalanced('[', ']', text)
-  if (balancedArr) {
-    parsed = tryParse(balancedArr)
-    if (parsed !== undefined) return Array.isArray(parsed) ? { questions: parsed } : parsed
-  }
-
-  const snippet = text.slice(0, 200)
-  throw new Error(`Could not parse LLM JSON. Snippet: ${snippet}`)
-}
-
-type QuestionFieldProps = { q: Question; value: any; onChange: (v: any) => void }
-
-const QuestionField = memo(function QuestionField({ q, value, onChange }: QuestionFieldProps) {
-  const label = (
-    <div className="space-y-1 break-words">
-      <div className="text-sm font-medium text-white/90">{q.label}{q.required ? ' *' : ''}</div>
-      {q.description && <div className="text-xs text-white/60">{q.description}</div>}
-    </div>
-  )
-  if (q.type === 'textarea') {
-    return (
-      <label className="block space-y-2">
-        {label}
-        <textarea className="input min-h-[120px]" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={q.placeholder} />
-      </label>
-    )
-  }
-  if (q.type === 'number') {
-    return (
-      <label className="block space-y-2">
-        {label}
-        <input type="number" className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))} placeholder={q.placeholder} />
-      </label>
-    )
-  }
-  if (q.type === 'boolean') {
-    return (
-      <label className="block space-y-2">
-        {label}
-        <select className="input" value={value === true ? 'yes' : value === false ? 'no' : ''} onChange={(e) => onChange(e.target.value === 'yes')}>
-          <option value="">Select yes/no</option>
-          <option value="yes">Yes</option>
-          <option value="no">No</option>
-        </select>
-      </label>
-    )
-  }
-  if (q.type === 'select' || q.type === 'radio') {
-    const options = (q.options || [])
-    const optionValues = new Set(options.map(o => o.value))
-    const selectValue = value == null || value === '' ? '' : (optionValues.has(value) ? value : '__custom__')
-    return (
-      <div className="space-y-2">
-        <label className="block space-y-2">
-          {label}
-          <select className="input" value={selectValue} onChange={(e) => onChange(e.target.value === '__custom__' ? (typeof value === 'string' ? value : '') : e.target.value)}>
-            <option value="">{q.placeholder || 'Select an option'}</option>
-            {options.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-            <option value="__custom__">Custom…</option>
-          </select>
-        </label>
-        {selectValue === '__custom__' && (
-          <div className="pl-0">
-            <input
-              className="input"
-              placeholder="Type a custom value"
-              value={typeof value === 'string' ? value : ''}
-              onChange={(e) => onChange(e.target.value)}
-            />
-            <p className="mt-1 text-[11px] text-white/50">Your custom value will be used for this field.</p>
-          </div>
-        )}
-      </div>
-    )
-  }
-  if (q.type === 'multiselect' || q.type === 'chips') {
-    const selected: string[] = Array.isArray(value) ? value : []
-    const optionValues = new Set((q.options || []).map(o => o.value))
-    const combined = [
-      ...(q.options || []).map(o => ({ value: o.value, label: o.label })),
-      // include custom selections not in options so they render as chips
-      ...selected.filter(v => !optionValues.has(v)).map(v => ({ value: v, label: v })),
-    ]
-    return (
-      <div className="space-y-2">
-        {label}
-        <div className="flex flex-wrap gap-2">
-          {combined.map((o) => {
-            const active = Array.isArray(value) && value.includes(o.value)
-            return (
-              <button key={o.value} type="button" onClick={() => {
-                const next = new Set(Array.isArray(value) ? value : [])
-                if (next.has(o.value)) next.delete(o.value); else next.add(o.value)
-                onChange(Array.from(next))
-              }} className={`px-3 py-1.5 rounded-full border transition pressable ${active ? 'border-transparent bg-primary-400 text-slate-900' : 'border-white/15 text-white/85 hover:bg-white/10'}`}>
-                {o.label}
-              </button>
-            )
-          })}
-        </div>
-        <div className="flex items-center gap-2">
-          <input
-            className="input flex-1"
-            placeholder="Add custom item and press Enter"
-            onKeyDown={(e) => {
-              const t = e.target as HTMLInputElement
-              if (e.key === 'Enter') {
-                const v = t.value.trim()
-                if (v) {
-                  const next = new Set(Array.isArray(value) ? value : [])
-                  next.add(v)
-                  onChange(Array.from(next))
-                  t.value = ''
-                }
-              }
-            }}
-          />
-        </div>
-        <p className="mt-1 text-[11px] text-white/50">Click to toggle items. Add your own with Enter.</p>
-      </div>
-    )
-  }
-  if (q.type === 'date') {
-    return (
-      <label className="block space-y-2">
-        {label}
-        <input type="date" className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)} />
-      </label>
-    )
-  }
-  return (
-    <label className="block space-y-2">
-      {label}
-      <input className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={q.placeholder} />
-    </label>
-  )
-}, (prev, next) => prev.value === next.value && prev.q === next.q)
 
 export default function Polaris() {
-  const [active, setActive] = useState<'stage1' | 'stage2' | 'stage3' | 'summary'>('stage1')
+  const [active, setActive] = useState<'experience' | 'static' | 'stage2' | 'stage3' | 'stage4' | 'report'>('experience')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [stage2Questions, setStage2] = useState<Question[]>([])
-  const [stage3Questions, setStage3] = useState<Question[]>([])
-  const [answers1, setAnswers1] = useState<Record<string, any>>({})
-  const [answers2, setAnswers2] = useState<Record<string, any>>({})
-  const [answers3, setAnswers3] = useState<Record<string, any>>({})
-  const [analysis, setAnalysis] = useState<string>('')
-  const [intakeIndex, setIntakeIndex] = useState<number>(0)
-  const [stageTitleOverrides, setStageTitleOverrides] = useState<{ stage2?: string; stage3?: string; summary?: string }>({})
   const [summaryCount, setSummaryCount] = useState<number>(0)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
-  // Smooth, informative loading overlay state
-  const [loader, setLoader] = useState<{ active: boolean; phase?: 'stage2'|'stage3'|'summary'; message: string; progress: number; etaSeconds: number }>({ active: false, message: '', progress: 0, etaSeconds: 0 })
+  
+  // State for all responses
+  const [experienceAnswer, setExperienceAnswer] = useState<NAResponseMap>({})
+  const [staticAnswers, setStaticAnswers] = useState<NAResponseMap>({})
+  const [stage2Answers, setStage2Answers] = useState<NAResponseMap>({})
+  const [stage3Answers, setStage3Answers] = useState<NAResponseMap>({})
+  const [stage4Answers, setStage4Answers] = useState<NAResponseMap>({})
+  
+  // Dynamic questions state
+  const [stage2Questions, setStage2Questions] = useState<NAField[]>([])
+  const [stage3Questions, setStage3Questions] = useState<NAField[]>([])
+  const [stage4Questions, setStage4Questions] = useState<NAField[]>([])
+  const [shouldShowStage4, setShouldShowStage4] = useState(false)
+  
+  // Stage titles
+  const [stageTitles, setStageTitles] = useState<{ stage2?: string; stage3?: string; stage4?: string }>({})
+  
+  // Final report
+  const [reportMarkdown, setReportMarkdown] = useState<string>('')
+  
+  // UI state
+  const [staticGroupIndex, setStaticGroupIndex] = useState<number>(0)
+  const summaryRef = useRef<HTMLDivElement | null>(null)
+  
+  // Smooth loading overlay state
+  const [loader, setLoader] = useState<{ active: boolean; phase?: string; message: string; progress: number; etaSeconds: number }>({ 
+    active: false, message: '', progress: 0, etaSeconds: 0 
+  })
   const loaderIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   
   // Load user's current summary count on mount
@@ -570,50 +115,41 @@ export default function Polaris() {
     loadSummaryCount()
   }, [])
   
-  // Validate all intake fields are filled
-  const allIntakeIds = INTAKE_QUESTIONS.map(q => q.id)
-  const intakeMissing: string[] = allIntakeIds.filter(id => {
-    const q = INTAKE_QUESTIONS.find(x => x.id === id)!
-    const val = answers1[id]
-    if (q.type === 'multiselect' || q.type === 'chips') return !Array.isArray(val) || val.length === 0
-    if (q.type === 'boolean') return typeof val !== 'boolean'
-    return val === undefined || val === null || String(val).trim() === ''
+  // Check if experience is selected
+  const experienceLevel = experienceAnswer.exp_level as string | undefined
+  const hasExperience = !!experienceLevel
+  
+  // Check if static fields are complete (required fields filled)
+  const staticRequiredFields = NA_STATIC_FIELDS.filter(f => f.required)
+  const staticComplete = staticRequiredFields.every(f => {
+    const val = staticAnswers[f.id]
+    if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
+    return val !== undefined && val !== null && val !== ''
   })
-  const intakeComplete = intakeMissing.length === 0
-
-  // Manual navigation helper for intake groups (with smooth scroll)
-  function goToGroup(idx: number) {
-    setIntakeIndex(idx)
-    const nextId = INTAKE_GROUPS_META[idx]?.id
-    if (nextId) {
-      window.setTimeout(() => {
-        const el = document.getElementById(`intake-panel-${nextId}`)
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-      }, 10)
-    }
-  }
-
+  
+  // Helper for smooth loader animation
   function easeInOutCubic(t: number) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
   }
 
-  function startSmartLoader(phase: 'stage2' | 'stage3' | 'summary') {
-    const base = phase === 'stage2' ? 8000 : phase === 'stage3' ? 7000 : 6000
-    const signal = phase === 'stage2' ? Object.keys(answers1 || {}).length : phase === 'stage3' ? Object.keys(answers2 || {}).length : Object.keys(answers3 || {}).length
-    const targetMs = Math.min(14000, Math.max(5500, base + signal * 120))
+  function startSmartLoader(phase: string) {
+    const baseTime = phase === 'stage2' ? 8000 : phase === 'stage3' ? 7000 : phase === 'stage4' ? 6500 : 9000
+    const targetMs = Math.min(14000, Math.max(5500, baseTime))
     const start = Date.now()
+    
     const step = () => {
       const elapsed = Date.now() - start
       const ratio = Math.min(1, elapsed / targetMs)
       const progress = Math.min(95, Math.max(5, Math.round(easeInOutCubic(ratio) * 95)))
       let message = 'Preparing inputs…'
       if (progress > 15) message = 'Gathering context…'
-      if (progress > 45) message = phase === 'summary' ? 'Analyzing and drafting proposal…' : 'Creating tailored questions…'
-      if (progress > 70) message = 'Refining wording and structure…'
+      if (progress > 45) message = phase === 'report' ? 'Analyzing and drafting report…' : 'Creating tailored questions…'
+      if (progress > 70) message = 'Refining structure…'
       if (progress > 85) message = 'Finalizing…'
       const etaSeconds = Math.max(1, Math.ceil((targetMs - elapsed) / 1000))
       setLoader({ active: true, phase, message, progress, etaSeconds })
     }
+    
     step()
     if (loaderIntervalRef.current) clearInterval(loaderIntervalRef.current)
     loaderIntervalRef.current = setInterval(step, 180)
@@ -628,132 +164,261 @@ export default function Polaris() {
     window.setTimeout(() => setLoader({ active: false, message: '', progress: 0, etaSeconds: 0 }), 450)
   }
 
-  async function genStage2() {
+  // Generate Stage 2 questions
+  async function generateStage2() {
     try {
       setLoading(true)
       setError(null)
       startSmartLoader('stage2')
-      // Ask LLM for stage titles using intake responses (do this before stage 2 questions)
-      try {
-        const titleMessages: ChatMessage[] = [
-          { role: 'system', content: STAGE_TITLES_SYSTEM_PROMPT },
-          { role: 'user', content: `Organization intake (JSON):\n${JSON.stringify(answers1, null, 2)}\nReturn JSON titles now.` },
-        ]
-        const titleRes = await callLLM(titleMessages)
-        const titles = extractJsonBlock(titleRes.content)
-        if (titles && (titles.stage2 || titles.stage3 || titles.summary)) {
-          setStageTitleOverrides({
-            stage2: typeof titles.stage2 === 'string' ? titles.stage2 : undefined,
-            stage3: typeof titles.stage3 === 'string' ? titles.stage3 : undefined,
-            summary: typeof titles.summary === 'string' ? titles.summary : undefined,
-          })
-        }
-      } catch {}
-      const messages: ChatMessage[] = [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPromptForStage(2, { answers1 }) },
-      ]
-      const res = await callLLM(messages)
-      const json: QuestionnairePayload = extractJsonBlock(res.content)
-      setStage2(json.questions || [])
+      
+      // Generate stage title
+      const titlePrompt = NA_STAGE_TITLE_PROMPT(experienceLevel!, 2, { ...staticAnswers })
+      const titleRes = await callLLM([{ role: 'user', content: titlePrompt }])
+      const stage2Title = titleRes.content.trim()
+      
+      // Generate questions
+      const questionsPrompt = NA_QUESTIONNAIRE_PROMPT(experienceLevel!, 2, staticAnswers, {})
+      const res = await callLLM([{ role: 'user', content: questionsPrompt }])
+      const json = JSON.parse(tryExtractJson(res.content))
+      
+      setStage2Questions(json.questions || [])
+      setStageTitles(prev => ({ ...prev, stage2: json.title || stage2Title }))
       setActive('stage2')
     } catch (e: any) {
-      setError(e?.message || 'Failed to create Stage 2 questionnaire.')
+      setError(e?.message || 'Failed to create Stage 2 questions.')
     } finally {
       setLoading(false)
       stopSmartLoader()
     }
   }
 
-  async function genStage3() {
+  // Generate Stage 3 questions
+  async function generateStage3() {
     try {
       setLoading(true)
       setError(null)
       startSmartLoader('stage3')
-      // Optionally refresh titles with more context (answers2)
-      try {
-        const titleMessages: ChatMessage[] = [
-          { role: 'system', content: STAGE_TITLES_SYSTEM_PROMPT },
-          { role: 'user', content: `Organization inputs so far (JSON):\n${JSON.stringify({ answers1, answers2 }, null, 2)}\nReturn JSON titles now.` },
-        ]
-        const titleRes = await callLLM(titleMessages)
-        const titles = extractJsonBlock(titleRes.content)
-        if (titles && (titles.stage2 || titles.stage3 || titles.summary)) {
-          setStageTitleOverrides((prev) => ({
-            stage2: typeof titles.stage2 === 'string' ? titles.stage2 : prev.stage2,
-            stage3: typeof titles.stage3 === 'string' ? titles.stage3 : prev.stage3,
-            summary: typeof titles.summary === 'string' ? titles.summary : prev.summary,
-          }))
-        }
-      } catch {}
-      const messages: ChatMessage[] = [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPromptForStage(3, { answers1, answers2 }) },
-      ]
-      const res = await callLLM(messages)
-      const json: QuestionnairePayload = extractJsonBlock(res.content)
-      setStage3(json.questions || [])
+      
+      // Generate stage title
+      const titlePrompt = NA_STAGE_TITLE_PROMPT(experienceLevel!, 3, { ...staticAnswers, ...stage2Answers })
+      const titleRes = await callLLM([{ role: 'user', content: titlePrompt }])
+      const stage3Title = titleRes.content.trim()
+      
+      // Generate questions
+      const questionsPrompt = NA_QUESTIONNAIRE_PROMPT(experienceLevel!, 3, staticAnswers, { ...stage2Answers })
+      const res = await callLLM([{ role: 'user', content: questionsPrompt }])
+      const json = JSON.parse(tryExtractJson(res.content))
+      
+      setStage3Questions(json.questions || [])
+      setStageTitles(prev => ({ ...prev, stage3: json.title || stage3Title }))
+      
+      // Determine if Stage 4 is needed (complexity check)
+      const hasComplexity = checkComplexity()
+      setShouldShowStage4(hasComplexity)
+      
       setActive('stage3')
     } catch (e: any) {
-      setError(e?.message || 'Failed to create Stage 3 questionnaire.')
+      setError(e?.message || 'Failed to create Stage 3 questions.')
     } finally {
       setLoading(false)
       stopSmartLoader()
     }
   }
 
-  async function analyze() {
+  // Generate Stage 4 questions (optional, based on complexity)
+  async function generateStage4() {
     try {
       setLoading(true)
       setError(null)
-      startSmartLoader('summary')
-      // Finalize titles with full context
-      try {
-        const titleMessages: ChatMessage[] = [
-          { role: 'system', content: STAGE_TITLES_SYSTEM_PROMPT },
-          { role: 'user', content: `All inputs (JSON):\n${JSON.stringify({ answers1, answers2, answers3 }, null, 2)}\nReturn JSON titles now.` },
-        ]
-        const titleRes = await callLLM(titleMessages)
-        const titles = extractJsonBlock(titleRes.content)
-        if (titles && (titles.stage2 || titles.stage3 || titles.summary)) {
-          setStageTitleOverrides((prev) => ({
-            stage2: typeof titles.stage2 === 'string' ? titles.stage2 : prev.stage2,
-            stage3: typeof titles.stage3 === 'string' ? titles.stage3 : prev.stage3,
-            summary: typeof titles.summary === 'string' ? titles.summary : prev.summary,
-          }))
-        }
-      } catch {}
-      const messages: ChatMessage[] = [
-        { role: 'system', content: 'You are a senior Solutions Architect at Smartslate. Analyze prospect inputs across three stages and produce a concise solution proposal mapping to Smartslate offerings with rationale and next steps. Output in markdown.' },
-        { role: 'user', content: `Prospect inputs (JSON):\n${JSON.stringify({ answers1, answers2, answers3 }, null, 2)}` },
-      ]
-      const res = await callLLM(messages, { temperature: 0.1 })
-      const summaryContent = res.content || ''
-      setAnalysis(summaryContent)
+      startSmartLoader('stage4')
       
-      // Save the summary to database
+      // Generate stage title
+      const titlePrompt = NA_STAGE_TITLE_PROMPT(experienceLevel!, 4, { ...staticAnswers, ...stage2Answers, ...stage3Answers })
+      const titleRes = await callLLM([{ role: 'user', content: titlePrompt }])
+      const stage4Title = titleRes.content.trim()
+      
+      // Generate questions
+      const questionsPrompt = NA_QUESTIONNAIRE_PROMPT(experienceLevel!, 4, staticAnswers, { ...stage2Answers, ...stage3Answers })
+      const res = await callLLM([{ role: 'user', content: questionsPrompt }])
+      const json = JSON.parse(tryExtractJson(res.content))
+      
+      setStage4Questions(json.questions || [])
+      setStageTitles(prev => ({ ...prev, stage4: json.title || stage4Title }))
+      setActive('stage4')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to create Stage 4 questions.')
+    } finally {
+      setLoading(false)
+      stopSmartLoader()
+    }
+  }
+  
+  // Check complexity to determine if Stage 4 is needed
+  function checkComplexity(): boolean {
+    const geographies = staticAnswers.geographies as string[] | undefined
+    const constraints = staticAnswers.constraints as string[] | undefined
+    const hasMultiGeo = geographies && geographies.length > 2
+    const hasCompliance = constraints && constraints.includes('Compliance deadlines')
+    const hasTightTimeline = staticAnswers.time_to_impact === '< 4 weeks'
+    
+    return !!(hasMultiGeo && (hasCompliance || hasTightTimeline))
+  }
+  
+  // Generate final report
+  async function generateReport() {
+    try {
+      setLoading(true)
+      setError(null)
+      startSmartLoader('report')
+      
+      const allAnswers = {
+        experience: experienceAnswer,
+        static: staticAnswers,
+        stage2: stage2Answers,
+        stage3: stage3Answers,
+        ...(shouldShowStage4 ? { stage4: stage4Answers } : {})
+      }
+      
+      // Generate structured report
+      const reportPrompt = NA_REPORT_PROMPT(experienceLevel!, allAnswers)
+      console.log('Generating report with prompt...', reportPrompt.substring(0, 200))
+      
+      const res = await callLLM([{ role: 'user', content: reportPrompt }])
+      console.log('LLM response:', res.content)
+      
+      let reportJson: NAReport
+      try {
+        const extractedJson = tryExtractJson(res.content)
+        console.log('Extracted JSON:', extractedJson)
+        reportJson = JSON.parse(extractedJson) as NAReport
+        
+        // Validate the report structure
+        if (!reportJson || typeof reportJson !== 'object') {
+          throw new Error('Invalid report structure: not an object')
+        }
+        if (!reportJson.summary || !reportJson.summary.problem_statement) {
+          throw new Error('Invalid report structure: missing summary.problem_statement')
+        }
+        if (!reportJson.solution || !reportJson.delivery_plan || !reportJson.measurement) {
+          throw new Error('Invalid report structure: missing required sections')
+        }
+        
+        console.log('Parsed report structure:', Object.keys(reportJson))
+      } catch (parseError: any) {
+        console.error('Failed to parse report JSON:', parseError)
+        console.error('Raw response:', res.content)
+        
+        // Try to create a basic report structure as fallback
+        console.log('Attempting to create fallback report structure...')
+        reportJson = {
+          summary: {
+            problem_statement: 'Unable to generate detailed analysis. Please ensure all required fields are filled.',
+            current_state: ['Current analysis incomplete'],
+            root_causes: ['Insufficient data provided'],
+            objectives: ['Complete needs assessment', 'Generate actionable recommendations']
+          },
+          solution: {
+            modalities: [
+              { name: 'Blended Learning', reason: 'Combines flexibility with engagement' }
+            ],
+            scope: {
+              audiences: [staticAnswers.audience_role as string || 'Target audience'],
+              competencies: ['To be determined based on complete assessment'],
+              content_outline: ['Module 1: Foundation', 'Module 2: Application', 'Module 3: Assessment']
+            }
+          },
+          learner_analysis: {
+            profile: {
+              demographics: [staticAnswers.learner_age_range as string || 'Age range to be assessed', staticAnswers.learner_education_level as string || 'Education level to be assessed'],
+              tech_readiness: staticAnswers.learner_tech_savviness ? `Tech savviness level: ${staticAnswers.learner_tech_savviness}/10` : 'Tech readiness to be evaluated',
+              learning_style_fit: staticAnswers.learning_preferences as string[] || ['Learning preferences to be identified']
+            },
+            engagement_strategy: {
+              motivation_drivers: ['Motivation factors to be determined'],
+              potential_barriers: staticAnswers.accessibility_needs as string[] || ['Barriers to be identified'],
+              support_mechanisms: ['Support needs to be assessed']
+            },
+            design_implications: {
+              content_adaptations: ['Content adaptation requirements pending'],
+              delivery_adjustments: ['Delivery adjustments to be determined'],
+              accessibility_requirements: staticAnswers.accessibility_needs as string[] || ['Accessibility needs to be confirmed'],
+              language_considerations: staticAnswers.learner_language_diversity ? [staticAnswers.learner_language_diversity as string] : ['Language requirements to be specified']
+            }
+          },
+          technology_talent: {
+            tech_enablers: {
+              available: ['Existing infrastructure to be assessed'],
+              required: ['Additional tools to be identified'],
+              integration_needs: ['Integration requirements pending']
+            },
+            talent_requirements: {
+              internal_roles: ['Team structure to be defined'],
+              external_support: ['External resources to be evaluated'],
+              development_needs: ['Skills gaps to be identified']
+            },
+            limitations_impact: {
+              tech_constraints: ['Technology constraints to be assessed'],
+              talent_gaps_impact: ['Resource impacts to be evaluated'],
+              mitigation_strategies: ['Mitigation approaches to be developed']
+            }
+          },
+          delivery_plan: {
+            phases: [
+              {
+                name: 'Discovery',
+                duration_weeks: 2,
+                goals: ['Complete needs assessment'],
+                activities: ['Stakeholder interviews', 'Current state analysis']
+              }
+            ],
+            timeline: [
+              { label: 'Phase 1', start: '2025-01-01', end: '2025-02-01' }
+            ],
+            resources: ['Project manager', 'Instructional designer']
+          },
+          measurement: {
+            success_metrics: ['Completion rate', 'Knowledge transfer', 'Performance improvement'],
+            assessment_strategy: ['Pre/post assessments', 'Manager observations'],
+            data_sources: ['LMS', 'Performance data']
+          },
+          budget: {
+            notes: 'Budget to be determined based on scope',
+            ranges: [
+              { item: 'Development', low: 'TBD', high: 'TBD' }
+            ]
+          },
+          risks: [
+            { risk: 'Incomplete data', mitigation: 'Conduct follow-up discovery session' }
+          ],
+          next_steps: ['Review and validate requirements', 'Schedule stakeholder alignment']
+        }
+        
+        console.warn('Using fallback report structure. Original error:', parseError.message)
+      }
+      
+      setReportMarkdown(formatReportAsMarkdown(reportJson))
+      
+      // Save summary to database
+      const summaryContent = formatReportAsMarkdown(reportJson)
       if (summaryContent) {
         try {
           const { error: saveError } = await saveSummary({
-            company_name: answers1.company_name || null,
+            company_name: staticAnswers.org_name as string || null,
             summary_content: summaryContent,
-            stage1_answers: answers1,
-            stage2_answers: answers2,
-            stage3_answers: answers3,
+            stage1_answers: { ...experienceAnswer, ...staticAnswers },
+            stage2_answers: stage2Answers,
+            stage3_answers: { ...stage3Answers, ...(shouldShowStage4 ? stage4Answers : {}) },
             stage2_questions: stage2Questions,
-            stage3_questions: stage3Questions,
+            stage3_questions: [...stage3Questions, ...(shouldShowStage4 ? stage4Questions : [])],
           })
           
           if (saveError) {
             console.error('Failed to save summary:', saveError)
-            // Check if it's a limit error
             if (saveError.message && saveError.message.includes('reached the limit')) {
               setShowUpgradeModal(true)
               setError('You have reached your summary limit. Please upgrade to continue.')
             }
           } else {
-            console.log('Summary saved successfully')
-            // Update the summary count
             setSummaryCount(prev => prev + 1)
           }
         } catch (saveErr) {
@@ -761,145 +426,385 @@ export default function Polaris() {
         }
       }
       
-      setActive('summary')
+      setActive('report')
     } catch (e: any) {
-      setError(e?.message || 'Failed to analyze answers.')
+      setError(e?.message || 'Failed to generate report.')
     } finally {
       setLoading(false)
       stopSmartLoader()
     }
   }
 
+  // Format report as markdown
+  function formatReportAsMarkdown(report: NAReport): string {
+    if (!report || typeof report !== 'object') {
+      console.error('Invalid report object:', report)
+      return '# Error\n\nFailed to generate report. Please try again.'
+    }
+    
+    let md = '# Needs Analysis Report\n\n'
+    
+    // Summary
+    if (report.summary) {
+      md += '## Executive Summary\n\n'
+      if (report.summary.problem_statement) {
+        md += `**Problem Statement:** ${report.summary.problem_statement}\n\n`
+      }
+      if (report.summary.current_state && Array.isArray(report.summary.current_state)) {
+        md += '**Current State:**\n'
+        report.summary.current_state.forEach(item => md += `- ${item}\n`)
+      }
+      if (report.summary.root_causes && Array.isArray(report.summary.root_causes)) {
+        md += '\n**Root Causes:**\n'
+        report.summary.root_causes.forEach(item => md += `- ${item}\n`)
+      }
+      if (report.summary.objectives && Array.isArray(report.summary.objectives)) {
+        md += '\n**Objectives:**\n'
+        report.summary.objectives.forEach(item => md += `- ${item}\n`)
+      }
+    }
+    
+    // Solution
+    if (report.solution) {
+      md += '\n## Recommended Solution\n\n'
+      if (report.solution.modalities && Array.isArray(report.solution.modalities)) {
+        md += '### Delivery Modalities\n'
+        report.solution.modalities.forEach(m => {
+          if (m && m.name && m.reason) {
+            md += `- **${m.name}:** ${m.reason}\n`
+          }
+        })
+      }
+      if (report.solution.scope) {
+        md += '\n### Scope\n'
+        if (report.solution.scope.audiences && Array.isArray(report.solution.scope.audiences)) {
+          md += '**Target Audiences:**\n'
+          report.solution.scope.audiences.forEach(a => md += `- ${a}\n`)
+        }
+        if (report.solution.scope.competencies && Array.isArray(report.solution.scope.competencies)) {
+          md += '\n**Key Competencies:**\n'
+          report.solution.scope.competencies.forEach(c => md += `- ${c}\n`)
+        }
+        if (report.solution.scope.content_outline && Array.isArray(report.solution.scope.content_outline)) {
+          md += '\n**Content Outline:**\n'
+          report.solution.scope.content_outline.forEach(c => md += `- ${c}\n`)
+        }
+      }
+    }
+    
+    // Learner Analysis
+    if (report.learner_analysis) {
+      md += '\n## Learner Analysis\n\n'
+      
+      // Learner Profile
+      if (report.learner_analysis.profile) {
+        md += '### Learner Profile\n'
+        if (report.learner_analysis.profile.demographics && Array.isArray(report.learner_analysis.profile.demographics)) {
+          md += '**Demographics:**\n'
+          report.learner_analysis.profile.demographics.forEach(d => md += `- ${d}\n`)
+        }
+        if (report.learner_analysis.profile.tech_readiness) {
+          md += `\n**Technology Readiness:** ${report.learner_analysis.profile.tech_readiness}\n`
+        }
+        if (report.learner_analysis.profile.learning_style_fit && Array.isArray(report.learner_analysis.profile.learning_style_fit)) {
+          md += '\n**Learning Style Preferences:**\n'
+          report.learner_analysis.profile.learning_style_fit.forEach(l => md += `- ${l}\n`)
+        }
+      }
+      
+      // Engagement Strategy
+      if (report.learner_analysis.engagement_strategy) {
+        md += '\n### Engagement Strategy\n'
+        if (report.learner_analysis.engagement_strategy.motivation_drivers && Array.isArray(report.learner_analysis.engagement_strategy.motivation_drivers)) {
+          md += '**Motivation Drivers:**\n'
+          report.learner_analysis.engagement_strategy.motivation_drivers.forEach(m => md += `- ${m}\n`)
+        }
+        if (report.learner_analysis.engagement_strategy.potential_barriers && Array.isArray(report.learner_analysis.engagement_strategy.potential_barriers)) {
+          md += '\n**Potential Barriers:**\n'
+          report.learner_analysis.engagement_strategy.potential_barriers.forEach(b => md += `- ${b}\n`)
+        }
+        if (report.learner_analysis.engagement_strategy.support_mechanisms && Array.isArray(report.learner_analysis.engagement_strategy.support_mechanisms)) {
+          md += '\n**Support Mechanisms:**\n'
+          report.learner_analysis.engagement_strategy.support_mechanisms.forEach(s => md += `- ${s}\n`)
+        }
+      }
+      
+      // Design Implications
+      if (report.learner_analysis.design_implications) {
+        md += '\n### Design Implications\n'
+        if (report.learner_analysis.design_implications.content_adaptations && Array.isArray(report.learner_analysis.design_implications.content_adaptations)) {
+          md += '**Content Adaptations:**\n'
+          report.learner_analysis.design_implications.content_adaptations.forEach(c => md += `- ${c}\n`)
+        }
+        if (report.learner_analysis.design_implications.delivery_adjustments && Array.isArray(report.learner_analysis.design_implications.delivery_adjustments)) {
+          md += '\n**Delivery Adjustments:**\n'
+          report.learner_analysis.design_implications.delivery_adjustments.forEach(d => md += `- ${d}\n`)
+        }
+        if (report.learner_analysis.design_implications.accessibility_requirements && Array.isArray(report.learner_analysis.design_implications.accessibility_requirements)) {
+          md += '\n**Accessibility Requirements:**\n'
+          report.learner_analysis.design_implications.accessibility_requirements.forEach(a => md += `- ${a}\n`)
+        }
+        if (report.learner_analysis.design_implications.language_considerations && Array.isArray(report.learner_analysis.design_implications.language_considerations)) {
+          md += '\n**Language Considerations:**\n'
+          report.learner_analysis.design_implications.language_considerations.forEach(l => md += `- ${l}\n`)
+        }
+      }
+    }
+    
+    // Technology & Talent Analysis
+    if (report.technology_talent) {
+      md += '\n## Technology & Talent Analysis\n\n'
+      
+      // Tech Enablers
+      if (report.technology_talent.tech_enablers) {
+        md += '### Technology Enablers\n'
+        if (report.technology_talent.tech_enablers.available && Array.isArray(report.technology_talent.tech_enablers.available)) {
+          md += '**Available Technologies:**\n'
+          report.technology_talent.tech_enablers.available.forEach(t => md += `- ${t}\n`)
+        }
+        if (report.technology_talent.tech_enablers.required && Array.isArray(report.technology_talent.tech_enablers.required)) {
+          md += '\n**Required Technologies:**\n'
+          report.technology_talent.tech_enablers.required.forEach(t => md += `- ${t}\n`)
+        }
+        if (report.technology_talent.tech_enablers.integration_needs && Array.isArray(report.technology_talent.tech_enablers.integration_needs)) {
+          md += '\n**Integration Requirements:**\n'
+          report.technology_talent.tech_enablers.integration_needs.forEach(i => md += `- ${i}\n`)
+        }
+      }
+      
+      // Talent Requirements
+      if (report.technology_talent.talent_requirements) {
+        md += '\n### Talent Requirements\n'
+        if (report.technology_talent.talent_requirements.internal_roles && Array.isArray(report.technology_talent.talent_requirements.internal_roles)) {
+          md += '**Internal Roles Needed:**\n'
+          report.technology_talent.talent_requirements.internal_roles.forEach(r => md += `- ${r}\n`)
+        }
+        if (report.technology_talent.talent_requirements.external_support && Array.isArray(report.technology_talent.talent_requirements.external_support)) {
+          md += '\n**External Support Required:**\n'
+          report.technology_talent.talent_requirements.external_support.forEach(e => md += `- ${e}\n`)
+        }
+        if (report.technology_talent.talent_requirements.development_needs && Array.isArray(report.technology_talent.talent_requirements.development_needs)) {
+          md += '\n**Skills Development Needs:**\n'
+          report.technology_talent.talent_requirements.development_needs.forEach(d => md += `- ${d}\n`)
+        }
+      }
+      
+      // Limitations & Impact
+      if (report.technology_talent.limitations_impact) {
+        md += '\n### Limitations & Mitigation\n'
+        if (report.technology_talent.limitations_impact.tech_constraints && Array.isArray(report.technology_talent.limitations_impact.tech_constraints)) {
+          md += '**Technology Constraints:**\n'
+          report.technology_talent.limitations_impact.tech_constraints.forEach(c => md += `- ${c}\n`)
+        }
+        if (report.technology_talent.limitations_impact.talent_gaps_impact && Array.isArray(report.technology_talent.limitations_impact.talent_gaps_impact)) {
+          md += '\n**Talent Gaps Impact:**\n'
+          report.technology_talent.limitations_impact.talent_gaps_impact.forEach(g => md += `- ${g}\n`)
+        }
+        if (report.technology_talent.limitations_impact.mitigation_strategies && Array.isArray(report.technology_talent.limitations_impact.mitigation_strategies)) {
+          md += '\n**Mitigation Strategies:**\n'
+          report.technology_talent.limitations_impact.mitigation_strategies.forEach(m => md += `- ${m}\n`)
+        }
+      }
+    }
+    
+    // Delivery Plan
+    if (report.delivery_plan) {
+      md += '\n## Delivery Plan\n\n'
+      if (report.delivery_plan.phases && Array.isArray(report.delivery_plan.phases)) {
+        md += '### Phases\n'
+        report.delivery_plan.phases.forEach(p => {
+          if (p && p.name && p.duration_weeks) {
+            md += `\n**${p.name}** (${p.duration_weeks} weeks)\n`
+            if (p.goals && Array.isArray(p.goals)) {
+              md += 'Goals:\n'
+              p.goals.forEach(g => md += `- ${g}\n`)
+            }
+            if (p.activities && Array.isArray(p.activities)) {
+              md += 'Activities:\n'
+              p.activities.forEach(a => md += `- ${a}\n`)
+            }
+          }
+        })
+      }
+      
+      if (report.delivery_plan.timeline && Array.isArray(report.delivery_plan.timeline)) {
+        md += '\n### Timeline\n'
+        report.delivery_plan.timeline.forEach(t => {
+          if (t && t.label && t.start && t.end) {
+            md += `- **${t.label}:** ${t.start} to ${t.end}\n`
+          }
+        })
+      }
+      
+      if (report.delivery_plan.resources && Array.isArray(report.delivery_plan.resources)) {
+        md += '\n### Resources Needed\n'
+        report.delivery_plan.resources.forEach(r => md += `- ${r}\n`)
+      }
+    }
+    
+    // Measurement
+    if (report.measurement) {
+      md += '\n## Measurement & Success\n\n'
+      if (report.measurement.success_metrics && Array.isArray(report.measurement.success_metrics)) {
+        md += '**Success Metrics:**\n'
+        report.measurement.success_metrics.forEach(m => md += `- ${m}\n`)
+      }
+      if (report.measurement.assessment_strategy && Array.isArray(report.measurement.assessment_strategy)) {
+        md += '\n**Assessment Strategy:**\n'
+        report.measurement.assessment_strategy.forEach(a => md += `- ${a}\n`)
+      }
+      if (report.measurement.data_sources && Array.isArray(report.measurement.data_sources)) {
+        md += '\n**Data Sources:**\n'
+        report.measurement.data_sources.forEach(d => md += `- ${d}\n`)
+      }
+    }
+    
+    // Budget
+    if (report.budget) {
+      md += '\n## Budget Considerations\n\n'
+      if (report.budget.notes) {
+        md += `${report.budget.notes}\n\n`
+      }
+      if (report.budget.ranges && Array.isArray(report.budget.ranges)) {
+        report.budget.ranges.forEach(r => {
+          if (r && r.item && r.low && r.high) {
+            md += `- **${r.item}:** ${r.low} - ${r.high}\n`
+          }
+        })
+      }
+    }
+    
+    // Risks
+    if (report.risks && Array.isArray(report.risks)) {
+      md += '\n## Risk Mitigation\n\n'
+      report.risks.forEach(r => {
+        if (r && r.risk && r.mitigation) {
+          md += `- **Risk:** ${r.risk}\n  **Mitigation:** ${r.mitigation}\n`
+        }
+      })
+    }
+    
+    // Next Steps
+    if (report.next_steps && Array.isArray(report.next_steps)) {
+      md += '\n## Next Steps\n\n'
+      report.next_steps.forEach((s, i) => md += `${i + 1}. ${s}\n`)
+    }
+    
+    return md
+  }
   
 
-  function markdownToHtml(md: string): string {
-    let html = md
-    html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>')
-    html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>')
-    html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>')
-    html = html.replace(/^\*\s+(.*)$/gim, '<ul><li>$1</li></ul>')
-    html = html.replace(/^\-\s+(.*)$/gim, '<ul><li>$1</li></ul>')
-    html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
-    html = html.replace(/\*(.*?)\*/gim, '<em>$1</em>')
-    html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-    html = html.replace(/\n/g, '<br />')
-    return html.trim()
-  }
-
-  // Extract simple highlights and product mentions from the markdown summary
-  function extractHighlights(md: string): { bullets: string[]; products: string[] } {
-    const bullets: string[] = []
-    const lines = md.split(/\n+/)
-    for (const line of lines) {
-      const m = line.match(/^[-*]\s+(.*)/)
-      if (m) bullets.push(m[1].trim())
-      if (bullets.length >= 6) break
-    }
-    const productCatalog = [
-      'Ignite Series',
-      'Strategic Skills Architecture',
-      'Solara', 'Polaris', 'Constellation', 'Nova', 'Orbit', 'Nebula', 'Spectrum',
-    ]
-    const lower = md.toLowerCase()
-    const products = Array.from(new Set(productCatalog.filter(p => lower.includes(p.toLowerCase()))))
-    return { bullets, products }
-  }
-
-  function downloadText(filename: string, text: string) {
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  async function exportMarkdownAsPdf(node: HTMLElement, title = 'Smartslate-Polaris-Summary') {
-    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
-      import('html2canvas'),
-      import('jspdf'),
-    ])
-    const canvas = await html2canvas(node, { backgroundColor: null, scale: 2 })
-    const imgData = canvas.toDataURL('image/png')
-    const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' })
-    const pageWidth = pdf.internal.pageSize.getWidth()
-    const pageHeight = pdf.internal.pageSize.getHeight()
-    const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height)
-    const imgWidth = canvas.width * ratio
-    const imgHeight = canvas.height * ratio
-    const x = (pageWidth - imgWidth) / 2
-    const y = 24
-    pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight)
-    pdf.save(`${title}.pdf`)
-  }
-
-  const summaryRef = useRef<HTMLDivElement | null>(null)
-
-  // Dynamic labels for later stages based on inputs
-  const orgName = (answers1.company_name || '').toString().trim()
-  const primaryGoal = (answers1.goals || '').toString().split(/\n|\.\s/)[0]?.trim()
-  const stage2Label = stageTitleOverrides.stage2 || (orgName && primaryGoal ? `Deep‑Dive: ${orgName}` : 'Stage 2')
-  const stage3Label = stageTitleOverrides.stage3 || (orgName ? `Finalization: ${orgName}` : 'Stage 3')
-  const summaryLabel = stageTitleOverrides.summary || (orgName ? `Summary: ${orgName}` : 'Summary')
-
-  // Horizontal stepper to visualize active stage
+  
+  
+  
+  // Stepper component
   function Stepper() {
-    const steps: Array<{ key: 'stage1' | 'stage2' | 'stage3' | 'summary'; label: string }> = [
-      { key: 'stage1', label: 'First Contact Intake' },
-      { key: 'stage2', label: stage2Label },
-      { key: 'stage3', label: stage3Label },
-      { key: 'summary', label: summaryLabel },
+    const steps: Array<{ key: string; label: string; enabled: boolean }> = [
+      { key: 'experience', label: 'Experience Check', enabled: true },
+      { key: 'static', label: 'Initial Assessment', enabled: hasExperience },
+      { key: 'stage2', label: stageTitles.stage2 || 'Deep Dive', enabled: staticComplete },
+      { key: 'stage3', label: stageTitles.stage3 || 'Clarification', enabled: stage2Questions.length > 0 },
+      ...(shouldShowStage4 ? [{ key: 'stage4', label: stageTitles.stage4 || 'Final Details', enabled: stage3Questions.length > 0 }] : []),
+      { key: 'report', label: 'Analysis Report', enabled: stage3Questions.length > 0 },
     ]
-    const order: Array<'stage1' | 'stage2' | 'stage3' | 'summary'> = ['stage1', 'stage2', 'stage3', 'summary']
-    const currentIndex = order.indexOf(active)
-    const progress = Math.max(0, Math.min(1, currentIndex / (steps.length - 1)))
+    
+    const activeIndex = steps.findIndex(s => s.key === active)
+    const progress = Math.max(0, Math.min(1, activeIndex / (steps.length - 1)))
 
     return (
-      <>
-        {/* Mobile: progress bar + current label */}
+      <div className="mb-5">
+        <div className="glass-card p-4 md:p-6 elevate relative">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div className="overflow-x-auto">
+              {/* Mobile: progress bar */}
         <div className="md:hidden flex items-center gap-3">
           <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
             <div className="h-full bg-gradient-to-r from-primary-400 to-secondary-400 rounded-full transition-all duration-300" style={{ width: `${progress * 100}%` }} />
           </div>
-          <span className="text-xs text-white/70 whitespace-nowrap">{Math.min(currentIndex + 1, steps.length)} / {steps.length}</span>
+                <span className="text-xs text-white/70 whitespace-nowrap">{Math.min(activeIndex + 1, steps.length)} / {steps.length}</span>
         </div>
         <div className="md:hidden mt-2">
-          <span className="inline-block max-w-full truncate px-2 py-1 text-[11px] rounded-full bg-white/10 border border-white/10 text-white/80">{steps[currentIndex]?.label || ''}</span>
+                <span className="inline-block max-w-full truncate px-2 py-1 text-[11px] rounded-full bg-white/10 border border-white/10 text-white/80">
+                  {steps[activeIndex]?.label || ''}
+                </span>
         </div>
 
-        {/* Desktop: stepper list (progress rail drawn by parent container) */}
+              {/* Desktop: stepper */}
         <div className="hidden md:block">
           <ol className="flex items-center gap-4 flex-nowrap whitespace-nowrap w-max">
             {steps.map((s, idx) => {
-              const isCompleted = idx < currentIndex
-              const isActive = idx === currentIndex
-              const baseBtn = 'pressable flex items-center gap-2 rounded-full px-3 py-1.5 border text-xs md:text-sm backdrop-blur-sm'
-              const stateBtn = isActive
-                ? 'border-primary-400 bg-white/10 shadow-[0_0_0_2px_rgba(167,218,219,0.2)_inset]'
-                : isCompleted
-                ? 'border-primary-400/40 bg-primary-400/10 text-primary-200'
-                : 'border-white/10 bg-white/5 hover:bg-white/10 text-white/80'
+                    const isCompleted = idx < activeIndex
+                    const isActive = idx === activeIndex
+                    const canNavigate = s.enabled && (isCompleted || isActive)
+                    
               return (
                 <li key={s.key} className="flex items-center gap-4">
                   <button
                     type="button"
                     title={s.label}
-                    onClick={() => setActive(s.key)}
-                    className={`${baseBtn} ${stateBtn}`}
-                    aria-current={isActive ? 'step' : undefined}
-                  >
-                    <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold ${isCompleted ? 'bg-primary-400 text-slate-900' : isActive ? 'bg-gradient-to-b from-white/90 to-primary-400/80 text-slate-900' : 'bg-white/10 text-white/70'}`}>{isCompleted ? '✓' : (idx + 1)}</span>
-                    <span className={`max-w-[240px] truncate font-medium ${isActive ? 'text-white' : isCompleted ? 'text-primary-200' : 'text-white/85'}`}>{s.label}</span>
+                          onClick={() => canNavigate && setActive(s.key as any)}
+                          disabled={!canNavigate}
+                          className={`pressable flex items-center gap-2 rounded-full px-3 py-1.5 border text-xs md:text-sm backdrop-blur-sm ${
+                            isActive
+                              ? 'border-primary-400 bg-white/10 shadow-[0_0_0_2px_rgba(167,218,219,0.2)_inset]'
+                              : isCompleted
+                              ? 'border-primary-400/40 bg-primary-400/10 text-primary-200'
+                              : s.enabled
+                              ? 'border-white/10 bg-white/5 hover:bg-white/10 text-white/80'
+                              : 'border-white/5 bg-white/5 text-white/30 cursor-not-allowed'
+                          }`}
+                        >
+                          <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold ${
+                            isCompleted ? 'bg-primary-400 text-slate-900' : isActive ? 'bg-gradient-to-b from-white/90 to-primary-400/80 text-slate-900' : 'bg-white/10 text-white/70'
+                          }`}>
+                            {isCompleted ? '✓' : (idx + 1)}
+                          </span>
+                          <span className={`max-w-[240px] truncate font-medium ${
+                            isActive ? 'text-white' : isCompleted ? 'text-primary-200' : s.enabled ? 'text-white/85' : 'text-white/40'
+                          }`}>
+                            {s.label}
+                          </span>
                   </button>
                 </li>
               )
             })}
           </ol>
         </div>
-      </>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-white/60">
+                {summaryCount}/{SUMMARY_LIMIT} briefings
+              </div>
+              <button
+                type="button"
+                className="btn-ghost px-3 py-2 text-sm"
+                onClick={() => {
+                  setExperienceAnswer({})
+                  setStaticAnswers({})
+                  setStage2Answers({})
+                  setStage3Answers({})
+                  setStage4Answers({})
+                  setStage2Questions([])
+                  setStage3Questions([])
+                  setStage4Questions([])
+                  setReportMarkdown('')
+                  setActive('experience')
+                }}
+              >
+                Start Over
+              </button>
+            </div>
+          </div>
+          
+          {/* Progress rail */}
+          <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-white/10 pointer-events-none" />
+          <div
+            className="absolute left-0 bottom-0 h-[2px] bg-primary-400 transition-all duration-500 pointer-events-none"
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
+      </div>
     )
   }
 
@@ -915,9 +820,9 @@ export default function Polaris() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Summary Limit Reached</h3>
+              <h3 className="text-xl font-semibold text-white mb-2">Briefing Limit Reached</h3>
               <p className="text-white/70 mb-4">
-                You've reached your limit of {SUMMARY_LIMIT} summaries. Upgrade to the Pro plan to create unlimited summaries and access advanced features.
+                You've reached your limit of {SUMMARY_LIMIT} briefings. Upgrade to the Pro plan to create unlimited briefings and access advanced features.
               </p>
               <div className="space-y-3">
                 <button
@@ -940,18 +845,21 @@ export default function Polaris() {
         </div>
       )}
       
+      {/* Loader overlay */}
       {loader.active && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
           <div className="glass-card p-5 md:p-6 w-[92%] max-w-md shadow-2xl border border-white/10">
             <div className="flex items-start gap-3">
-              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-400 to-secondary-400 animate-pulse" aria-hidden="true" />
+              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-400 to-secondary-400 animate-pulse" />
               <div className="flex-1 space-y-1">
                 <div className="text-sm font-semibold text-white/90">
-                  {loader.phase === 'summary' ? 'Preparing your proposal' : 'Setting up your next step'}
+                  {loader.phase === 'report' ? 'Preparing your report' : 'Setting up your next step'}
                 </div>
                 <div className="text-xs text-white/70">{loader.message}</div>
               </div>
-              <div className="text-[11px] text-white/60 whitespace-nowrap">~{String(Math.floor(loader.etaSeconds / 60)).padStart(1,'0')}:{String(loader.etaSeconds % 60).padStart(2,'0')} left</div>
+              <div className="text-[11px] text-white/60 whitespace-nowrap">
+                ~{String(Math.floor(loader.etaSeconds / 60)).padStart(1,'0')}:{String(loader.etaSeconds % 60).padStart(2,'0')} left
+              </div>
             </div>
             <div className="mt-4">
               <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
@@ -963,188 +871,187 @@ export default function Polaris() {
           </div>
         </div>
       )}
-      <div className="mb-5">
-        <div className="glass-card p-4 md:p-6 elevate relative">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="overflow-x-auto stepper-scroll">
-              {<Stepper />}
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-xs text-white/60">
-                {summaryCount}/{SUMMARY_LIMIT} summaries
-              </div>
-              <button
-                type="button"
-                className="btn-ghost px-3 py-2 text-sm"
-                onClick={() => { setAnswers1({}); setAnswers2({}); setAnswers3({}); setActive('stage1') }}
-              >
-                Start Over
-              </button>
-            </div>
-          </div>
-          {/* Bottom-aligned progress rail spanning the parent container */}
-          <div
-            className="absolute left-0 right-0 bottom-0 h-[2px] bg-white/10 pointer-events-none"
-            style={{ borderBottomLeftRadius: 'inherit', borderBottomRightRadius: 'inherit' }}
-            aria-hidden="true"
-          />
-          <div
-            className="absolute left-0 bottom-0 h-[2px] bg-primary-400 transition-all duration-500 pointer-events-none"
-            style={{
-              width: `${Math.max(0, Math.min(1, (['stage1','stage2','stage3','summary'].indexOf(active) / Math.max(1, (['stage1','stage2','stage3','summary'].length - 1))))) * 100}%`,
-              borderBottomLeftRadius: 'inherit',
-              borderBottomRightRadius: 'inherit',
-            }}
-            aria-hidden="true"
-          />
-        </div>
-      </div>
-
+      
+      <Stepper />
+      
       {error && (
         <div className="mb-4 rounded-xl border-l-4 border-red-400/80 bg-red-500/10 p-3 text-red-200 text-sm">{error}</div>
       )}
-
-      {active === 'stage1' && (() => {
-        const intakeGroups = INTAKE_GROUPS_META.map(g => ({
+      
+      {/* Experience Check */}
+      {active === 'experience' && (
+        <section className="space-y-4">
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold text-white mb-4">Welcome to Needs Analysis</h2>
+            <p className="text-white/70 mb-6">
+              Let's start by understanding your experience level so we can tailor the assessment to your needs.
+            </p>
+            <div className="max-w-md">
+              {EXPERIENCE_LEVELS.map(field => (
+                <RenderField
+                  key={field.id}
+                  field={field}
+                  value={experienceAnswer[field.id]}
+                  onChange={(id, value) => setExperienceAnswer(prev => ({ ...prev, [id]: value }))}
+                />
+              ))}
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                className={`btn-primary ${hasExperience ? '' : 'opacity-60 cursor-not-allowed'}`}
+                onClick={() => hasExperience && setActive('static')}
+                disabled={!hasExperience}
+              >
+                Continue to Assessment
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+      
+      {/* Static Intake */}
+      {active === 'static' && (() => {
+        const groups = STATIC_GROUPS_META.map(g => ({
           ...g,
-          questions: g.questionIds
-            .map(id => INTAKE_QUESTIONS.find(q => q.id === id))
-            .filter(Boolean) as Question[],
+          fields: g.fieldIds
+            .map(id => NA_STATIC_FIELDS.find(f => f.id === id))
+            .filter(Boolean) as NAField[],
         }))
-        const current = intakeGroups[intakeIndex] || intakeGroups[0]
-        const total = intakeGroups.length
-        const isFirst = intakeIndex === 0
-        const isLast = intakeIndex === total - 1
+        const current = groups[staticGroupIndex] || groups[0]
+        const total = groups.length
+        const isFirst = staticGroupIndex === 0
+        const isLast = staticGroupIndex === total - 1
+        
+        // Check if current group's required fields are filled (used below)
+        // const currentRequiredComplete = current.fields
+        //   .filter(f => f.required)
+        //   .every(f => {
+        //     const val = staticAnswers[f.id]
+        //     if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
+        //     return val !== undefined && val !== null && val !== ''
+        //   })
+        
         return (
           <section className="space-y-4">
             {/* Desktop: tabs */}
             <div className="hidden md:block">
-              <div role="tablist" aria-label="Intake sections" className="flex items-center gap-2 overflow-x-auto stepper-scroll">
-                {intakeGroups.map((g, idx) => {
-                  const selected = idx === intakeIndex
-                  const isAnswered = (qid: string) => {
-                    const q = INTAKE_QUESTIONS.find(x => x.id === qid)!
-                    const v = answers1[qid]
-                    if (q.type === 'multiselect' || q.type === 'chips') return Array.isArray(v) && v.length > 0
-                    if (q.type === 'boolean') return typeof v === 'boolean'
-                    return v !== undefined && v !== null && String(v).trim() !== ''
-                  }
-                  const requiredIds = g.questionIds.filter(id => {
-                    const q = INTAKE_QUESTIONS.find(x => x.id === id)!
-                    return Boolean(q.required)
-                  })
-                  const requiredComplete = requiredIds.length > 0 && requiredIds.every(isAnswered)
-                  const answeredCount = g.questionIds.filter(isAnswered).length
-                  const threshold = Math.ceil(g.questionIds.length / 2)
-                  const groupComplete = requiredIds.length > 0 ? requiredComplete : answeredCount >= threshold
+              <div role="tablist" className="flex items-center gap-2 overflow-x-auto">
+                {groups.map((g, idx) => {
+                  const selected = idx === staticGroupIndex
+                  const groupComplete = g.fields
+                    .filter(f => f.required)
+                    .every(f => {
+                      const val = staticAnswers[f.id]
+                      if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
+                      return val !== undefined && val !== null && val !== ''
+                    })
+                  
                   return (
                     <button
                       key={g.id}
                       role="tab"
                       aria-selected={selected}
-                      aria-controls={`intake-panel-${g.id}`}
-                      id={`intake-tab-${g.id}`}
                       type="button"
-                      onClick={() => goToGroup(idx)}
-                      className={`pressable rounded-full px-3 py-1.5 border text-xs md:text-sm whitespace-nowrap ${selected ? 'border-primary-400 bg-white/10 text-white' : 'border-white/10 bg-white/5 text-white/85 hover:bg-white/10'}`}
+                      onClick={() => setStaticGroupIndex(idx)}
+                      className={`pressable rounded-full px-3 py-1.5 border text-xs md:text-sm whitespace-nowrap ${
+                        selected 
+                          ? 'border-primary-400 bg-white/10 text-white' 
+                          : 'border-white/10 bg-white/5 text-white/85 hover:bg-white/10'
+                      }`}
                     >
                       <span className="inline-flex items-center gap-1">
                         {g.label}
-                        <span className={`ml-1 h-1.5 w-1.5 rounded-full ${groupComplete ? 'bg-green-400' : 'bg-amber-300'} ring-1 ring-black/30`} aria-label={groupComplete ? 'Complete' : 'Incomplete'} />
+                        {groupComplete && (
+                          <span className="ml-1 h-1.5 w-1.5 rounded-full bg-green-400 ring-1 ring-black/30" />
+                        )}
                       </span>
                     </button>
                   )
                 })}
               </div>
-              {/* Desktop: next section control moved to bottom actions */}
             </div>
 
-            {/* Mobile: progress + pager controls */}
+            {/* Mobile: progress */}
             <div className="md:hidden space-y-3">
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary-400 rounded-full transition-all duration-300" style={{ width: `${((intakeIndex + 1) / total) * 100}%` }} />
+                  <div className="h-full bg-primary-400 rounded-full transition-all duration-300" 
+                    style={{ width: `${((staticGroupIndex + 1) / total) * 100}%` }} 
+                  />
                 </div>
-                <span className="text-xs text-white/70 whitespace-nowrap">{intakeIndex + 1} / {total}</span>
+                <span className="text-xs text-white/70 whitespace-nowrap">{staticGroupIndex + 1} / {total}</span>
               </div>
               <div className="flex items-center justify-between">
                 <div className="text-sm font-medium text-white/90">{current.label}</div>
                 <div className="flex gap-2">
-                  <button type="button" className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setIntakeIndex(v => Math.max(0, v - 1))} disabled={isFirst}>Back</button>
-                  {(() => {
-                    const requiredIds = current.questions.filter(q => q.required).map(q => q.id)
-                    const currentRequiredComplete = requiredIds.length === 0 ? true : requiredIds.every(id => {
-                      const q = INTAKE_QUESTIONS.find(x => x.id === id)!
-                      const v = answers1[id]
-                      if (q.type === 'multiselect' || q.type === 'chips') return Array.isArray(v) && v.length > 0
-                      if (q.type === 'boolean') return typeof v === 'boolean'
-                      return v !== undefined && v !== null && String(v).trim() !== ''
-                    })
-                    const showNextArrow = currentRequiredComplete && !isLast
-                    return showNextArrow ? (
-                      <button type="button" className="btn-ghost px-3 py-1.5 text-xs" onClick={() => goToGroup(Math.min(total - 1, intakeIndex + 1))}>Next</button>
-                    ) : null
-                  })()}
+                  <button 
+                    type="button" 
+                    className="btn-ghost px-3 py-1.5 text-xs" 
+                    onClick={() => setStaticGroupIndex(v => Math.max(0, v - 1))} 
+                    disabled={isFirst}
+                  >
+                    Back
+                  </button>
+                  {!isLast && (
+                    <button 
+                      type="button" 
+                      className="btn-ghost px-3 py-1.5 text-xs" 
+                      onClick={() => setStaticGroupIndex(v => Math.min(total - 1, v + 1))}
+                    >
+                      Next
+                    </button>
+                  )}
                 </div>
               </div>
-              <p className="text*[11px] text-white/50">Complete this section to continue. Tabs show a green dot when complete and yellow when pending.</p>
             </div>
 
-            {/* Active panel */}
-            <div
-              role="tabpanel"
-              id={`intake-panel-${current.id}`}
-              aria-labelledby={`intake-tab-${current.id}`}
-            >
+            {/* Fields */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 animate-fade-in-up">
-                {current.questions.map((q) => (
-                  <div key={q.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
+              {current.fields.map((field) => (
+                <div key={field.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
                     <span className="interactive-spotlight" />
-                    <QuestionField q={q} value={answers1[q.id]} onChange={(v) => setAnswers1((prev) => ({ ...prev, [q.id]: v }))} />
+                  <RenderField
+                    field={field}
+                    value={staticAnswers[field.id]}
+                    onChange={(id, value) => setStaticAnswers(prev => ({ ...prev, [id]: value }))}
+                  />
                   </div>
                 ))}
               </div>
+            
               {current.description && (
-                <p className="mt-2 text-xs text-white/60">{current.description}</p>
+              <p className="text-xs text-white/60">{current.description}</p>
               )}
-            </div>
 
             {/* Actions */}
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setAnswers1({})}>Reset</button>
-                <div className="hidden md:block text-xs text-white/60">Fill required fields to unlock navigation.</div>
+                <button 
+                  type="button" 
+                  className="btn-ghost px-3 py-2 text-sm" 
+                  onClick={() => setActive('experience')}
+                >
+                  Back
+                </button>
               </div>
               <div className="flex items-center gap-2">
-                {(() => {
-                  const requiredIds = current.questions.filter(q => q.required).map(q => q.id)
-                  const currentRequiredComplete = requiredIds.length === 0 ? true : requiredIds.every(id => {
-                    const q = INTAKE_QUESTIONS.find(x => x.id === id)!
-                    const v = answers1[id]
-                    if (q.type === 'multiselect' || q.type === 'chips') return Array.isArray(v) && v.length > 0
-                    if (q.type === 'boolean') return typeof v === 'boolean'
-                    return v !== undefined && v !== null && String(v).trim() !== ''
-                  })
-                  const canGoNextSection = currentRequiredComplete && !isLast
-                  return canGoNextSection ? (
-                    <button type="button" className="btn-ghost px-3 py-2 text-sm hidden md:inline-flex" onClick={() => goToGroup(Math.min(total - 1, intakeIndex + 1))}>Next Section</button>
-                  ) : null
-                })()}
+                {!isLast && (
                 <button
                   type="button"
-                  className={`btn-primary text-sm hidden md:inline-flex ${intakeComplete ? '' : 'opacity-60 cursor-not-allowed'}`}
-                  onClick={genStage2}
-                  disabled={loading || !intakeComplete}
+                    className="btn-ghost px-3 py-2 text-sm hidden md:inline-flex"
+                    onClick={() => setStaticGroupIndex(Math.min(total - 1, staticGroupIndex + 1))}
                 >
-                  {loading ? 'Generating…' : `Continue to ${stage2Label}`}
+                    Next Section
                 </button>
+                )}
                 <button
                   type="button"
-                  className={`btn-primary text-sm md:hidden ${(isLast && intakeComplete) ? '' : 'opacity-60 cursor-not-allowed'}`}
-                  onClick={() => { if (isLast && intakeComplete) genStage2() }}
-                  disabled={loading || !isLast || !intakeComplete}
+                  className={`btn-primary text-sm ${staticComplete ? '' : 'opacity-60 cursor-not-allowed'}`}
+                  onClick={generateStage2}
+                  disabled={loading || !staticComplete}
                 >
-                  {loading ? 'Generating…' : (isLast ? (intakeComplete ? `Continue to ${stage2Label}` : 'Complete all sections') : 'Continue')}
+                  {loading ? 'Generating…' : 'Continue to Dynamic Questions'}
                 </button>
               </div>
             </div>
@@ -1152,135 +1059,143 @@ export default function Polaris() {
         )
       })()}
 
+      {/* Stage 2 */}
       {active === 'stage2' && (
         <section className="space-y-4">
-          {stage2Questions.length ? (
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold text-white mb-4">{stageTitles.stage2 || 'Deep Dive'}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-              {stage2Questions.map((q) => (
-                <div key={q.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
+              {stage2Questions.map((field) => (
+                <div key={field.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
                   <span className="interactive-spotlight" />
-                  <QuestionField q={q} value={answers2[q.id]} onChange={(v) => setAnswers2((prev) => ({ ...prev, [q.id]: v }))} />
+                  <RenderField
+                    field={field}
+                    value={stage2Answers[field.id]}
+                    onChange={(id, value) => setStage2Answers(prev => ({ ...prev, [id]: value }))}
+                  />
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="text-sm text-white/60">No questions yet.</div>
-          )}
-          <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage1')}>Back</button>
-            <button type="button" className="btn-primary text-sm" onClick={genStage3} disabled={loading}>{loading ? 'Generating…' : 'Next: Generate Stage 3'}</button>
+          </div>
+          <div className="flex justify-between gap-2">
+            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('static')}>
+              Back
+            </button>
+            <button type="button" className="btn-primary text-sm" onClick={generateStage3} disabled={loading}>
+              {loading ? 'Generating…' : 'Continue'}
+            </button>
           </div>
         </section>
       )}
 
+      {/* Stage 3 */}
       {active === 'stage3' && (
         <section className="space-y-4">
-          {stage3Questions.length ? (
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold text-white mb-4">{stageTitles.stage3 || 'Clarification'}</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-              {stage3Questions.map((q) => (
-                <div key={q.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
+              {stage3Questions.map((field) => (
+                <div key={field.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
                   <span className="interactive-spotlight" />
-                  <QuestionField q={q} value={answers3[q.id]} onChange={(v) => setAnswers3((prev) => ({ ...prev, [q.id]: v }))} />
+                  <RenderField
+                    field={field}
+                    value={stage3Answers[field.id]}
+                    onChange={(id, value) => setStage3Answers(prev => ({ ...prev, [id]: value }))}
+                  />
                 </div>
               ))}
             </div>
-          ) : (
-            <div className="text-sm text-white/60">No questions yet.</div>
-          )}
-          <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage2')}>Back</button>
-            <button type="button" className="btn-primary text-sm" onClick={analyze} disabled={loading}>{loading ? 'Analyzing…' : 'Analyze & Propose'}</button>
+          </div>
+          <div className="flex justify-between gap-2">
+            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage2')}>
+              Back
+            </button>
+            {shouldShowStage4 ? (
+              <button type="button" className="btn-primary text-sm" onClick={generateStage4} disabled={loading}>
+                {loading ? 'Generating…' : 'Continue to Final Details'}
+              </button>
+            ) : (
+              <button type="button" className="btn-primary text-sm" onClick={generateReport} disabled={loading}>
+                {loading ? 'Analyzing…' : 'Generate Report'}
+              </button>
+            )}
           </div>
         </section>
       )}
 
-      {active === 'summary' && (
+      {/* Stage 4 (optional) */}
+      {active === 'stage4' && shouldShowStage4 && (
         <section className="space-y-4">
-          {!analysis ? (
-            <div className="text-sm text-white/60">Run the analysis to see a tailored proposal mapped to Ignite / Strategic Skills Architecture / Solara.</div>
-          ) : (
-            <div className="space-y-4">
-              {/* Summary header actions */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <h3 className="text-lg font-semibold text-white">Proposal Summary</h3>
-                <div className="flex flex-wrap gap-2">
-                  <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => navigator.clipboard.writeText(analysis || '')}>Copy</button>
-                  <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => downloadText('Smartslate-Polaris-Summary.md', analysis || '')}>Download .md</button>
-                  <button type="button" className="btn-primary text-sm" onClick={() => { if (summaryRef.current) exportMarkdownAsPdf(summaryRef.current) }}>Export PDF</button>
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold text-white mb-4">{stageTitles.stage4 || 'Final Details'}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+              {stage4Questions.map((field) => (
+                <div key={field.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
+                  <span className="interactive-spotlight" />
+                  <RenderField
+                    field={field}
+                    value={stage4Answers[field.id]}
+                    onChange={(id, value) => setStage4Answers(prev => ({ ...prev, [id]: value }))}
+                  />
                 </div>
+              ))}
+              </div>
+                  </div>
+          <div className="flex justify-between gap-2">
+            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage3')}>
+              Back
+            </button>
+            <button type="button" className="btn-primary text-sm" onClick={generateReport} disabled={loading}>
+              {loading ? 'Analyzing…' : 'Generate Report'}
+            </button>
+                </div>
+        </section>
+      )}
+      
+      {/* Final Report */}
+      {active === 'report' && reportMarkdown && (
+        <section className="space-y-4">
+          {/* Sticky minimal toolbar */}
+          <div className="sticky top-16 z-30 bg-[rgb(var(--bg))]/70 backdrop-blur-md border-b border-white/10">
+            <div className="flex items-center justify-between gap-3 px-1 py-2">
+              <h3 className="text-lg font-semibold text-white">Needs Analysis Report</h3>
+            </div>
+          </div>
+          
+          {/* Use the shared ReportDisplay component */}
+          <div ref={summaryRef} className="needs-analysis-report-content">
+            <ReportDisplay reportMarkdown={reportMarkdown} />
               </div>
 
-              {/* Layout */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
-                {/* Main proposal */}
-                <div className="lg:col-span-2">
-                  <div ref={summaryRef} className="glass-card p-4 md:p-6">
-                    <div className="prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: markdownToHtml(analysis) }} />
-                  </div>
-                </div>
-                {/* Sidebar insights */}
-                <div className="space-y-4">
-                  {(() => {
-                    const { bullets, products } = extractHighlights(analysis)
-                    return (
-                      <>
-                        <div className="glass-card p-4 md:p-5">
-                          <h4 className="text-sm font-semibold mb-2 text-white/90">Key Takeaways</h4>
-                          {bullets.length ? (
-                            <ul className="list-disc list-inside space-y-1 text-sm text-white/80">
-                              {bullets.map((b, i) => (<li key={i}>{b}</li>))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-white/60">Highlights will appear here once analysis includes bullets.</p>
-                          )}
-                        </div>
-                        <div className="glass-card p-4 md:p-5">
-                          <h4 className="text-sm font-semibold mb-2 text-white/90">Recommended Products</h4>
-                          {products.length ? (
-                            <div className="flex flex-wrap gap-2">
-                              {products.map(p => (
-                                <span key={p} className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-white/90 text-xs">{p}</span>
-                              ))}
-                            </div>
-                          ) : (
-                            <p className="text-sm text-white/60">Products detected from the summary will appear here.</p>
-                          )}
-                        </div>
-                      </>
-                    )
-                  })()}
-                  <div className="glass-card p-4 md:p-5">
-                    <h4 className="text-sm font-semibold mb-2 text-white/90">Next Steps</h4>
-                    <ol className="list-decimal list-inside space-y-1 text-sm text-white/80">
-                      <li>Review proposal with stakeholders</li>
-                      <li>Confirm scope, budget, and timeline</li>
-                      <li>Schedule discovery workshop with Smartslate</li>
-                    </ol>
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer actions */}
-              <div className="flex justify-between gap-2">
+          <div className="flex justify-between gap-2 mt-6">
                 <button 
                   type="button" 
                   className="btn-ghost px-3 py-2 text-sm" 
-                  onClick={() => window.location.href = '/portal/summaries'}
+                  onClick={() => window.location.href = '/portal/starmaps'}
                 >
-                  View All Summaries
+                  View All Starmaps
                 </button>
-                <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage1')}>Start Over</button>
+            <button 
+              type="button" 
+              className="btn-ghost px-3 py-2 text-sm" 
+              onClick={() => {
+                setExperienceAnswer({})
+                setStaticAnswers({})
+                setStage2Answers({})
+                setStage3Answers({})
+                setStage4Answers({})
+                setStage2Questions([])
+                setStage3Questions([])
+                setStage4Questions([])
+                setReportMarkdown('')
+                setActive('experience')
+              }}
+            >
+              Start New Analysis
+            </button>
               </div>
-              <details className="mt-2">
-                <summary className="cursor-pointer text-sm text-white/60">Developer debug: raw JSON</summary>
-                <pre className="text-xs bg-white/5 p-3 rounded-md overflow-auto border border-white/10 text-white/80">{JSON.stringify({ answers1, answers2, answers3, stage2Questions, stage3Questions, intakeQuestions: INTAKE_QUESTIONS.map(q => q.id) }, null, 2)}</pre>
-              </details>
-            </div>
-          )}
         </section>
       )}
     </div>
   )
 }
-
-

@@ -2,8 +2,7 @@ import { useEffect, useRef, useState, type ComponentType } from 'react'
 import { useLocation, useNavigate, useParams, useOutlet } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { getSupabase } from '@/services/supabase'
-import html2canvas from 'html2canvas'
-import jsPDF from 'jspdf'
+ 
 import { paths, portalUserPath, publicProfilePath } from '@/routes/paths'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { getCapitalizedFirstName } from '@/lib/textUtils'
@@ -160,8 +159,8 @@ function WorkspaceActionCard({ href, label, description, icon: Icon }: Workspace
 
 function Brand() {
   return (
-    <a href="http://app.smartslate.io" className="inline-flex items-center gap-2" aria-label="SmartSlate">
-      <img src="/images/logos/logo.png" alt="SmartSlate" className="h-6 w-auto logo-glow" />
+    <a href="http://app.smartslate.io" className="inline-flex items-center gap-2" aria-label="Smartslate">
+      <img src="/images/logos/logo.png" alt="Smartslate" className="h-6 w-auto logo-glow" />
     </a>
   )
 }
@@ -342,7 +341,7 @@ export function PortalPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const isSettings = location.pathname.endsWith('/settings')
-  const isSummaries = location.pathname.endsWith('/summaries')
+  const isStarmaps = location.pathname.endsWith('/starmaps')
   const { user: userParam } = useParams()
   const outlet = useOutlet()
   const viewingProfile = Boolean(userParam)
@@ -361,8 +360,6 @@ export function PortalPage() {
 
 
   const [toast, setToast] = useState<{ id: number; kind: 'success' | 'error'; message: string } | null>(null)
-  const [copySuccess, setCopySuccess] = useState<boolean>(false)
-  const [downloading, setDownloading] = useState<boolean>(false)
   const profileCardRef = useRef<HTMLDivElement>(null)
   useDocumentTitle(isSettings ? 'Smartslate | Settings' : (viewingProfile ? 'Smartslate | My Profile' : 'Smartslate | Portal'))
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
@@ -423,7 +420,7 @@ export function PortalPage() {
 
   // Reload summaries when returning from Polaris page
   useEffect(() => {
-    if (location.pathname === '/portal' || location.pathname === '/portal/summaries') {
+    if (location.pathname === '/portal' || location.pathname === '/portal/starmaps') {
       loadRecentSummaries()
     }
   }, [location.pathname])
@@ -570,37 +567,7 @@ export function PortalPage() {
 
 
 
-  async function downloadProfilePdf() {
-    const element = profileCardRef.current
-    if (!element) return
-    try {
-      setDownloading(true)
-      const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#0b0b0b' })
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
-      const pageWidth = pdf.internal.pageSize.getWidth()
-      const pageHeight = pdf.internal.pageSize.getHeight()
-      const margin = 10
-      let renderWidth = pageWidth - margin * 2
-      const imgProps = (pdf as any).getImageProperties(imgData)
-      let renderHeight = (imgProps.height * renderWidth) / imgProps.width
-      const maxHeight = pageHeight - margin * 2
-      if (renderHeight > maxHeight) {
-        renderHeight = maxHeight
-        renderWidth = (imgProps.width * renderHeight) / imgProps.height
-      }
-      const x = (pageWidth - renderWidth) / 2
-      const y = margin
-      pdf.addImage(imgData, 'PNG', x, y, renderWidth, renderHeight)
-      pdf.save(`${username || 'profile'}.pdf`)
-      setToast({ id: Date.now(), kind: 'success', message: 'PDF downloaded successfully.' })
-    } catch (err) {
-      setToast({ id: Date.now(), kind: 'error', message: 'Failed to generate PDF.' })
-      console.error(err)
-    } finally {
-      setDownloading(false)
-    }
-  }
+  
 
   const collapsedQuickItems = [
     { title: 'Ignite', icon: IconGraduationCap },
@@ -679,10 +646,10 @@ export function PortalPage() {
                 </div>
               </div>
               
-              {/* Recent Summaries Section */}
+              {/* Recent Starmaps Section */}
               <div className="select-none border-t border-white/10 pt-3">
                 <div className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
-                  <span>Recent Summaries</span>
+                  <span className="accent-text-soft">Recent Starmaps</span>
                   {recentSummaries.length > 0 && (
                     <span className="text-xs text-white/50">{recentSummaries.length}</span>
                   )}
@@ -694,10 +661,10 @@ export function PortalPage() {
                         <li key={summary.id}>
                           <button
                             type="button"
-                            onClick={() => navigate(`/portal/summaries`)}
+                            onClick={() => navigate(`/portal/starmaps/${summary.id}`)}
                             className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
                           >
-                            <span className="truncate">
+                            <span className="truncate accent-text-soft">
                               {summary.company_name || 'Untitled Discovery'}
                             </span>
                             <span className="text-[10px] text-white/40">
@@ -709,16 +676,16 @@ export function PortalPage() {
                       <li>
                         <button
                           type="button"
-                          onClick={() => navigate('/portal/summaries')}
-                          className="w-full text-left px-3 py-1.5 text-sm text-primary-400 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
+                          onClick={() => navigate('/portal/starmaps')}
+                          className="w-full text-left px-3 py-1.5 text-sm text-primary-400 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable underline-accent"
                         >
-                          View all summaries →
+                          View all starmaps →
                         </button>
                       </li>
                     </ul>
                   ) : (
                     <div className="px-3 py-2 text-xs text-white/40">
-                      No summaries yet
+                      No starmaps yet
                     </div>
                   )}
                 </div>
@@ -809,11 +776,11 @@ export function PortalPage() {
                       Manage your account, settings, and preferences.
                     </p>
                   </>
-                ) : isSummaries ? (
+                ) : isStarmaps ? (
                   <>
-                    <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">Discovery Summaries</h1>
+                    <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">Discovery Starmaps</h1>
                     <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
-                      View and manage all your Polaris discovery summaries.
+                      View and manage all your Polaris discovery starmaps.
                     </p>
                   </>
                 ) : viewingProfile ? (
@@ -895,30 +862,6 @@ export function PortalPage() {
                         </h2>
                         <div className="flex items-center gap-2 text-white/60">
                           <span>@{username || 'user'}</span>
-                          <button 
-                            type="button"
-                            onClick={async () => {
-                              try {
-                                await navigator.clipboard.writeText(`@${username || 'user'}`)
-                                setCopySuccess(true)
-                                setTimeout(() => setCopySuccess(false), 2000)
-                              } catch (err) {
-                                console.log('Copy failed:', err)
-                              }
-                            }}
-                            className={`p-1 hover:text-primary-400 transition-colors ${copySuccess ? 'text-green-400' : 'text-white/40'}`}
-                            title={copySuccess ? 'Copied!' : 'Copy username'}
-                          >
-                            {copySuccess ? (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                              </svg>
-                            ) : (
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                              </svg>
-                            )}
-                          </button>
                         </div>
                       </div>
                       
@@ -935,44 +878,7 @@ export function PortalPage() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                           </svg>
                         </button>
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            const profileUrl = `${window.location.origin}${publicProfilePath(username || 'user')}`
-                            if (navigator.share) {
-                              navigator.share({
-                                title: `${displayName || getFirstName()} - Smartslate Profile`,
-                                text: `Check out ${displayName || getFirstName()}'s professional profile on Smartslate`,
-                                url: profileUrl
-                              })
-                            } else {
-                              navigator.clipboard.writeText(profileUrl)
-                            }
-                          }}
-                          className="p-2 bg-secondary-500 hover:bg-secondary-600 text-white rounded-lg transition-colors"
-                          title="Share Profile"
-                          aria-label="Share Profile"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                          </svg>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={downloadProfilePdf}
-                          disabled={downloading}
-                          className={`p-2 border border-white/20 text-white/80 hover:text-white hover:border-white/40 rounded-lg transition-colors ${downloading ? 'opacity-70 cursor-not-allowed' : ''}`}
-                          title={downloading ? 'Generating PDF…' : 'Download PDF'}
-                          aria-label={downloading ? 'Generating PDF' : 'Download PDF'}
-                        >
-                          {downloading ? (
-                            <div className="w-5 h-5 border-2 border-white/50 border-t-transparent rounded-full animate-spin" />
-                          ) : (
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 3v12m0 0l-4-4m4 4l4-4M5 19h14" />
-                            </svg>
-                          )}
-                        </button>
+                        
 
                       </div>
                     </div>
@@ -1269,10 +1175,10 @@ export function PortalPage() {
                   <NavSection title="Strategic Skills Architecture" items={["Explore Partnership", "My Architecture"]} defaultOpen />
                   <NavSection title="Solara" items={solaraItems} defaultOpen />
                   
-                  {/* Recent Summaries Section for Mobile */}
+                  {/* Recent Starmaps Section for Mobile */}
                   <div className="select-none border-t border-white/10 pt-3">
                     <div className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
-                      <span>Recent Summaries</span>
+                      <span>Recent Starmaps</span>
                       {recentSummaries.length > 0 && (
                         <span className="text-xs text-white/50">{recentSummaries.length}</span>
                       )}
@@ -1286,7 +1192,7 @@ export function PortalPage() {
                                 type="button"
                                 onClick={() => {
                                   setMobileMenuOpen(false)
-                                  navigate(`/portal/summaries`)
+                                  navigate(`/portal/starmaps/${summary.id}`)
                                 }}
                                 className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
                               >
@@ -1304,17 +1210,17 @@ export function PortalPage() {
                               type="button"
                               onClick={() => {
                                 setMobileMenuOpen(false)
-                                navigate('/portal/summaries')
+                                navigate('/portal/starmaps')
                               }}
                               className="w-full text-left px-3 py-1.5 text-sm text-primary-400 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
                             >
-                              View all summaries →
+                              View all starmaps →
                             </button>
                           </li>
                         </ul>
                       ) : (
                         <div className="px-3 py-2 text-xs text-white/40">
-                          No summaries yet
+                          No starmaps yet
                         </div>
                       )}
                     </div>

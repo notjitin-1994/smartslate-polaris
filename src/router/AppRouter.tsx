@@ -6,7 +6,8 @@ import { PortalPage } from '@/pages/PortalPage'
 import { SettingsContent } from '@/portal/SettingsContent'
 import { PublicProfile } from '@/pages/PublicProfile'
 import Polaris from '@/pages/Polaris'
-import AllSummaries from '@/pages/AllSummaries'
+import AllStarmaps from '@/pages/AllBriefings'
+import StarmapDetail from '@/pages/StarmapDetail'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 
 export function AppRouter() {
@@ -26,7 +27,10 @@ export function AppRouter() {
           <Route path={paths.portal} element={<PortalPage />}>
             <Route index element={<Navigate to="/" replace />} />
             <Route path="settings" element={<SettingsContent />} />
-            <Route path="summaries" element={<AllSummaries />} />
+            <Route path="starmaps" element={<AllStarmaps />} />
+            <Route path="starmaps/:id" element={<StarmapDetail />} />
+            <Route path="briefings" element={<Navigate to="/portal/starmaps" replace />} />
+            <Route path="summaries" element={<Navigate to="/portal/starmaps" replace />} />
           </Route>
           <Route path={paths.portalUser} element={<PortalPage />} />
         </Route>

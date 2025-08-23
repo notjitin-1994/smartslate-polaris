@@ -1,26 +1,26 @@
-# Polaris Summaries Feature Setup
+# Polaris Starmaps Feature Setup
 
 ## Overview
-This feature allows users to save and access their Polaris Guided Discovery summaries. Each summary is stored in the database and is accessible only to the user who created it.
+This feature allows users to save and access their Polaris Guided Discovery starmaps. Each starmap is stored in the database and is accessible only to the user who created it.
 
 ## Features Implemented
 
-### 1. **Save Summaries**
-- Automatically saves each final summary when generated in Polaris
+### 1. **Save Starmaps**
+- Automatically saves each final starmap when generated in Polaris
 - Stores all user inputs from all three stages
 - Preserves the company name and full analysis
 
-### 2. **Recent Summaries in Sidebar**
-- Shows the last 3 recent summaries in the sidebar
-- Quick access to view summaries
-- Link to view all summaries
+### 2. **Recent Starmaps in Sidebar**
+- Shows the last 3 recent starmaps in the sidebar
+- Quick access to view starmaps
+- Link to view all starmaps
 
-### 3. **All Summaries Page**
-- View all saved summaries in one place
+### 3. **Starmaps Page**
+- View all saved starmaps in one place
 - Search and filter capabilities
-- Download summaries as markdown files
-- Delete unwanted summaries
-- View detailed discovery inputs for each summary
+- Download starmaps as markdown files
+- Delete unwanted starmaps
+- View detailed discovery inputs for each starmap
 
 ## Database Setup
 
@@ -50,32 +50,32 @@ supabase/migrations/20240101000000_create_polaris_summaries.sql
 
 ### New Files Created:
 1. **`src/types/database.types.ts`** - Database type definitions
-2. **`src/services/polarisSummaryService.ts`** - Service for managing summaries
-3. **`src/pages/AllSummaries.tsx`** - Page to view all summaries
+2. **`src/services/polarisSummaryService.ts`** - Service for managing starmaps
+3. **`src/pages/AllBriefings.tsx`** - Page to view all starmaps
 4. **`supabase/migrations/20240101000000_create_polaris_summaries.sql`** - Database migration
 
 ### Modified Files:
-1. **`src/pages/Polaris.tsx`** - Added summary saving functionality
-2. **`src/portal/PortalPage.tsx`** - Added recent summaries to sidebar
-3. **`src/router/AppRouter.tsx`** - Added route for all summaries page
+1. **`src/pages/Polaris.tsx`** - Added starmap saving functionality
+2. **`src/portal/PortalPage.tsx`** - Added recent starmaps to sidebar
+3. **`src/router/AppRouter.tsx`** - Added route for starmaps page
 
 ## Usage
 
 ### For Users:
 1. Complete a Polaris discovery session
-2. The summary is automatically saved when generated
-3. Access recent summaries from the sidebar
-4. Click "View all summaries" to see all saved summaries
-5. From the summaries page, you can:
-   - View full summary details
-   - Download summaries as markdown
-   - Delete unwanted summaries
+2. The starmap is automatically saved when generated
+3. Access recent starmaps from the sidebar
+4. Click "View all starmaps" to see all saved starmaps
+5. From the starmaps page, you can:
+   - View full starmap details
+   - Download starmaps as markdown
+   - Delete unwanted starmaps
    - View all inputs from the discovery process
 
 ### Navigation:
-- **Recent Summaries**: Visible in the sidebar (shows last 3)
-- **All Summaries**: `/portal/summaries`
-- **New Discovery**: Click "New Discovery" button from summaries page
+- **Recent Starmaps**: Visible in the sidebar (shows last 3)
+- **Starmaps**: `/portal/starmaps`
+- **New Discovery**: Click "New Discovery" button from starmaps page
 
 ## Security
 - Row Level Security (RLS) ensures users can only see their own summaries
@@ -108,20 +108,20 @@ polaris_summaries:
 
 ## Troubleshooting
 
-### If summaries are not saving:
+### If starmaps are not saving:
 1. Check that the database migration has been run
 2. Verify user is authenticated
 3. Check browser console for errors
 4. Ensure Supabase environment variables are configured
 
-### If summaries are not visible:
+### If starmaps are not visible:
 1. Verify RLS policies are enabled
 2. Check that user is logged in
 3. Refresh the page to reload summaries
 
 ## Future Enhancements
-- Search and filter summaries
-- Export summaries to PDF
-- Share summaries with team members
+- Search and filter starmaps
+- Export starmaps to PDF
+- Share starmaps with team members
 - Add tags and categories
-- Summary templates
+- Starmap templates

@@ -1,57 +1,39 @@
-import { useEffect, useState } from 'react'
-import { Navigate, Outlet } from 'react-router-dom'
-import { getSupabase } from '@/services/supabase'
-import type { User } from '@supabase/supabase-js'
+import { Navigate, Outlet, useLocation } from 'react-router-dom'
+import { useAuth } from '@/contexts/AuthContext'
 
-export function ProtectedRoute() {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let isMounted = true
-
-    // Check current session
-    // Use getUser to ensure we get the freshest user metadata across subdomains
-    getSupabase().auth.getUser().then(({ data: { user: currentUser } }) => {
-      if (isMounted) {
-        setUser(currentUser ?? null)
-        setLoading(false)
-      }
-    })
-
-    // Listen for auth changes
-    const { data: { subscription } } = getSupabase().auth.onAuthStateChange(async (_event) => {
-      if (isMounted) {
-        // On any auth change, re-fetch the user to pick up updated metadata (e.g., avatar_url)
-        const { data: { user: nextUser } } = await getSupabase().auth.getUser()
-        setUser(nextUser ?? null)
-        setLoading(false)
-      }
-    })
-
-    return () => {
-      isMounted = false
-      subscription.unsubscribe()
-    }
-  }, [])
-
-  // Show loading state while checking authentication
-  if (loading) {
-    return (
-      <div className="min-h-screen w-full flex items-center justify-center p-4 bg-slate-950 text-white">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-primary-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <div className="opacity-70 animate-fade-in-up">Checking authentication...</div>
-        </div>
+/**
+ * Loading component while checking authentication
+ */
+const AuthLoading = () => (
+  <div className="min-h-screen bg-gradient-to-br from-[#020C1B] to-[#0A1628] flex items-center justify-center">
+    <div className="text-center">
+      <div className="relative inline-block">
+        <div className="w-12 h-12 border-3 border-white/20 rounded-full"></div>
+        <div className="absolute top-0 left-0 w-12 h-12 border-3 border-primary-400 rounded-full animate-spin border-t-transparent"></div>
       </div>
-    )
-  }
+      <p className="mt-4 text-white/60 text-sm">Checking authentication...</p>
+    </div>
+  </div>
+)
 
+/**
+ * Protected route wrapper that requires authentication
+ */
+export function ProtectedRoute() {
+  const { isAuthenticated, loading } = useAuth()
+  const location = useLocation()
+  
+  // Show loading state while checking auth
+  if (loading) {
+    return <AuthLoading />
+  }
+  
   // Redirect to login if not authenticated
-  if (!user) {
-    return <Navigate to="/login" replace />
+  if (!isAuthenticated) {
+    // Save the attempted location for redirect after login
+    return <Navigate to="/login" state={{ from: location }} replace />
   }
-
-  // Render the protected content
+  
+  // Render child routes if authenticated
   return <Outlet />
 }

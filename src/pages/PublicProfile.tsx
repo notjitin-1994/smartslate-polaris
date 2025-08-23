@@ -172,7 +172,7 @@ export function PublicProfile() {
         areaPadding={24}
       />
       {/* Header with Smartslate Branding */}
-      <header className="relative z-10 border-b border-white/10 bg-[rgb(var(--bg))]/80 backdrop-blur-xl">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-[rgb(var(--bg))]/80 backdrop-blur-xl">
         <div className="mx-auto max-w-4xl px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex flex-col items-start">

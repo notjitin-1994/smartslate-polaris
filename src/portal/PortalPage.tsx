@@ -689,7 +689,7 @@ export function PortalPage() {
                             className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
                           >
                             <span className="truncate accent-text-soft">
-                              {summary.company_name || 'Untitled Discovery'}
+                              {summary.report_title || summary.company_name || 'Untitled Discovery'}
                             </span>
                             <span className="text-[10px] text-white/40">
                               {new Date(summary.created_at).toLocaleDateString()}

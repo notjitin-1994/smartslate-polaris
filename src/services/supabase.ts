@@ -75,6 +75,8 @@ async function adoptSessionFromCookie(client: SupabaseClient) {
   if (!tokens) return
   try {
     await client.auth.setSession({ access_token: tokens.at, refresh_token: tokens.rt })
+    // Ensure we fetch the freshest user metadata after adopting the session
+    await client.auth.getUser()
   } finally {
     clearHandoffCookie()
   }
@@ -86,7 +88,7 @@ function setupCrossSubdomainHandoff(client: SupabaseClient) {
 
   // 2) On any sign-in or token refresh, write a short-lived handoff cookie so other subdomains can import it
   client.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+    if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
       writeHandoffCookie(session)
     }
     if (event === 'SIGNED_OUT') {

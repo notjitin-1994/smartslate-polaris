@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { callLLM } from '@/services/llmClient'
-import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT } from '@/services/polarisSummaryService'
+import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle } from '@/services/polarisSummaryService'
 import RenderField from '@/polaris/needs-analysis/RenderField'
 import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
 import { EXPERIENCE_LEVELS } from '@/polaris/needs-analysis/experience'
@@ -119,6 +119,11 @@ export default function Polaris() {
   // UI state
   const [staticGroupIndex, setStaticGroupIndex] = useState<number>(0)
   const summaryRef = useRef<HTMLDivElement | null>(null)
+  const [lastSavedSummaryId, setLastSavedSummaryId] = useState<string | null>(null)
+  const [reportTitle, setReportTitle] = useState<string>('')
+  const [savingTitle, setSavingTitle] = useState<boolean>(false)
+  // marker state to create a tiny re-render after save; may be useful for future toasts
+  const [, setTitleSavedAt] = useState<number>(0)
   const staticTabsContainerRef = useRef<HTMLDivElement | null>(null)
   const staticTabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const staticSectionRef = useRef<HTMLDivElement | null>(null)
@@ -517,8 +522,9 @@ export default function Polaris() {
       const summaryContent = formatReportAsMarkdown(reportJson)
       if (summaryContent) {
         try {
-          const { error: saveError } = await saveSummary({
+          const { data: saved, error: saveError } = await saveSummary({
             company_name: staticAnswers.org_name as string || null,
+            report_title: null,
             summary_content: summaryContent,
             stage1_answers: { ...experienceAnswer, ...staticAnswers },
             stage2_answers: stage2Answers,
@@ -535,6 +541,9 @@ export default function Polaris() {
             }
           } else {
             setSummaryCount(prev => prev + 1)
+            setLastSavedSummaryId(saved?.id || null)
+            // Initialize title input with org name as a hint (doesn't change heading unless saved)
+            setReportTitle((staticAnswers.org_name as string) || '')
           }
         } catch (saveErr) {
           console.error('Error saving summary:', saveErr)
@@ -1466,8 +1475,26 @@ export default function Polaris() {
           
           {/* Use the shared ReportDisplay component */}
           <div ref={summaryRef} className="needs-analysis-report-content">
-            <ReportDisplay reportMarkdown={reportMarkdown} />
-              </div>
+            <ReportDisplay
+              reportMarkdown={reportMarkdown}
+              reportTitle={reportTitle.trim() || undefined}
+              editableTitle={Boolean(lastSavedSummaryId)}
+              savingTitle={savingTitle}
+              onSaveTitle={async (newTitle) => {
+                if (!lastSavedSummaryId) return
+                try {
+                  setSavingTitle(true)
+                  const { error } = await updateSummaryTitle(lastSavedSummaryId, newTitle)
+                  if (!error) {
+                    setReportTitle(newTitle)
+                    setTitleSavedAt(Date.now())
+                  }
+                } finally {
+                  setSavingTitle(false)
+                }
+              }}
+            />
+          </div>
 
           <div className="flex items-center justify-between gap-2 mt-6">
             {/* Back action moved to the bottom, icon-only, brand-accented */}

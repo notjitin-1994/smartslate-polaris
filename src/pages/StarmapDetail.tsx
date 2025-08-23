@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { getSummaryById, type PolarisSummary } from '@/services/polarisSummaryService'
+import { getSummaryById, type PolarisSummary, updateSummaryTitle } from '@/services/polarisSummaryService'
 import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
 
 export default function StarmapDetail() {
@@ -9,6 +9,8 @@ export default function StarmapDetail() {
   const [summary, setSummary] = useState<PolarisSummary | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [titleInput, setTitleInput] = useState<string>('')
+  const [savingTitle, setSavingTitle] = useState<boolean>(false)
 
   useEffect(() => {
     async function load() {
@@ -18,7 +20,10 @@ export default function StarmapDetail() {
         setError(null)
         const { data, error } = await getSummaryById(id)
         if (error) setError('Failed to load starmap')
-        else setSummary(data)
+        else {
+          setSummary(data)
+          setTitleInput((data?.report_title as string) || '')
+        }
       } catch (e) {
         setError('Failed to load starmap')
       } finally {
@@ -53,7 +58,25 @@ export default function StarmapDetail() {
         </div>
       </div>
 
-      <ReportDisplay reportMarkdown={summary.summary_content} />
+      <ReportDisplay
+        reportMarkdown={summary.summary_content}
+        reportTitle={titleInput.trim() || undefined}
+        editableTitle
+        savingTitle={savingTitle}
+        onSaveTitle={async (newTitle) => {
+          if (!id || !newTitle.trim()) return
+          try {
+            setSavingTitle(true)
+            const { error } = await updateSummaryTitle(id, newTitle.trim())
+            if (!error) {
+              setTitleInput(newTitle.trim())
+              setSummary(prev => prev ? { ...prev, report_title: newTitle.trim() } as PolarisSummary : prev)
+            }
+          } finally {
+            setSavingTitle(false)
+          }
+        }}
+      />
 
       {/* Bottom action bar with brand-aligned Back icon */}
       <div className="flex items-center justify-between gap-2 mt-6">

@@ -11,20 +11,20 @@ export function ProtectedRoute() {
     let isMounted = true
 
     // Check current session
-    getSupabase()
-      .auth
-      .getSession()
-      .then(({ data: { session } }) => {
-        if (isMounted) {
-          setUser(session?.user ?? null)
-          setLoading(false)
-        }
-      })
+    // Use getUser to ensure we get the freshest user metadata across subdomains
+    getSupabase().auth.getUser().then(({ data: { user: currentUser } }) => {
+      if (isMounted) {
+        setUser(currentUser ?? null)
+        setLoading(false)
+      }
+    })
 
     // Listen for auth changes
-    const { data: { subscription } } = getSupabase().auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = getSupabase().auth.onAuthStateChange(async (_event) => {
       if (isMounted) {
-        setUser(session?.user ?? null)
+        // On any auth change, re-fetch the user to pick up updated metadata (e.g., avatar_url)
+        const { data: { user: nextUser } } = await getSupabase().auth.getUser()
+        setUser(nextUser ?? null)
         setLoading(false)
       }
     })

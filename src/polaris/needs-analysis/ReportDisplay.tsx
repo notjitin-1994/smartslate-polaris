@@ -1,9 +1,13 @@
 // src/polaris/needs-analysis/ReportDisplay.tsx
 import type { NAReport } from './report'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 interface ReportDisplayProps {
   reportMarkdown: string
+  reportTitle?: string
+  editableTitle?: boolean
+  savingTitle?: boolean
+  onSaveTitle?: (newTitle: string) => void | Promise<void>
   className?: string
 }
 
@@ -235,8 +239,10 @@ function parseMarkdownToReport(markdown: string): NAReport | null {
   }
 }
 
-export default function ReportDisplay({ reportMarkdown, className = '' }: ReportDisplayProps) {
+export default function ReportDisplay({ reportMarkdown, reportTitle, editableTitle = false, savingTitle = false, onSaveTitle, className = '' }: ReportDisplayProps) {
   const report = parseMarkdownToReport(reportMarkdown)
+  const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false)
+  const [titleInput, setTitleInput] = useState<string>(reportTitle || 'Needs Analysis Report')
   
   // Simple inline icon set (stroke-current), sized via className
   function Icon({ name, className = 'w-4 h-4' }: { name: 'summary' | 'solution' | 'delivery' | 'metrics' | 'timeline' | 'steps' | 'risks' | 'audience' | 'modality' | 'tech' | 'doc' | 'blend' | 'online' | 'workshop' | 'coach' | 'toolbox' | 'check' | 'database' | 'assessment' | 'target'; className?: string }) {
@@ -431,7 +437,58 @@ export default function ReportDisplay({ reportMarkdown, className = '' }: Report
         {/* Main report */}
         <div className="lg:col-span-2">
           <article className="read-surface p-6" role="article" aria-labelledby="report-title">
-            <h1 id="report-title" className="heading-accent text-2xl md:text-3xl font-bold text-white tracking-tight mb-4">Needs Analysis Report</h1>
+            <div className="flex items-center gap-2 mb-4">
+              {isEditingTitle ? (
+                <>
+                  <input
+                    id="report-title"
+                    className="input w-full md:w-96"
+                    value={titleInput}
+                    onChange={(e) => setTitleInput(e.target.value)}
+                    placeholder="Name this report"
+                    aria-label="Report name"
+                  />
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-primary"
+                    aria-label={savingTitle ? 'Saving' : 'Save report name'}
+                    title={savingTitle ? 'Saving' : 'Save report name'}
+                    disabled={savingTitle || !titleInput.trim()}
+                    onClick={async () => {
+                      if (!titleInput.trim()) return
+                      if (onSaveTitle) await onSaveTitle(titleInput.trim())
+                      setIsEditingTitle(false)
+                    }}
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    aria-label="Cancel"
+                    title="Cancel"
+                    onClick={() => { setIsEditingTitle(false); setTitleInput(reportTitle || 'Needs Analysis Report') }}
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h1 id="report-title" className="heading-accent text-2xl md:text-3xl font-bold text-white tracking-tight">{reportTitle || 'Needs Analysis Report'}</h1>
+                  {editableTitle && (
+                    <button
+                      type="button"
+                      className="icon-btn icon-btn-sm"
+                      aria-label="Rename report"
+                      title="Rename report"
+                      onClick={() => setIsEditingTitle(true)}
+                    >
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
             
             {/* Stat tiles - Row 1 */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">

@@ -143,7 +143,7 @@ export default function AllSummaries() {
               <div key={summary.id} className="glass-card p-4 transition-all hover:bg-white/10">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <h3 className="font-semibold text-white/90 truncate">{summary.company_name || 'Untitled Discovery'}</h3>
+                    <h3 className="font-semibold text-white/90 truncate">{summary.report_title || summary.company_name || 'Untitled Discovery'}</h3>
                     <p className="text-xs text-white/60 mt-1">{formatDate(summary.created_at)}</p>
                     <p className="text-xs text-white/50 mt-2 line-clamp-2">{extractHighlights(summary.summary_content)}</p>
                   </div>

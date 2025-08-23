@@ -423,11 +423,13 @@ export function PortalPage() {
           }
         }
       })
-    const { data: { subscription } } = getSupabase().auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = getSupabase().auth.onAuthStateChange(async (_event) => {
       if (isMounted) {
-        setUser(session?.user ?? null)
+        // Always fetch the freshest user metadata on any auth change
+        const { data: { user: nextUser } } = await getSupabase().auth.getUser()
+        setUser(nextUser ?? null)
         // Reload recent summaries when auth state changes
-        if (session?.user) {
+        if (nextUser) {
           loadRecentSummaries()
         }
       }

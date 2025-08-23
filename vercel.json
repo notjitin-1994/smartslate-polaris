@@ -1,8 +1,7 @@
 {
   "version": 2,
   "functions": {
-    "api/**/*.ts": { "maxDuration": 60 },
-    "api/**/*.js": { "maxDuration": 60 }
+    "api/**/*.ts": { "maxDuration": 60 }
   },
   "routes": [
     { "handle": "filesystem" },

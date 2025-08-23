@@ -51,10 +51,24 @@ export default function StarmapDetail() {
           <h1 className="text-xl font-semibold text-white">{summary.company_name || 'Discovery Starmap'}</h1>
           <p className="text-sm text-white/60 mt-1">{new Date(summary.created_at).toLocaleString()}</p>
         </div>
-        <button type="button" onClick={() => navigate('/portal/starmaps')} className="btn-ghost px-3 py-2 text-sm">Back</button>
       </div>
 
       <ReportDisplay reportMarkdown={summary.summary_content} />
+
+      {/* Bottom action bar with brand-aligned Back icon */}
+      <div className="flex items-center justify-between gap-2 mt-6">
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={() => navigate('/portal/starmaps')}
+          aria-label="Back"
+          title="Back"
+        >
+          <svg className="w-4 h-4 accent-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 }

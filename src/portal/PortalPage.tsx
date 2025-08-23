@@ -306,6 +306,26 @@ function IconChecklist({ className = '' }: { className?: string }) {
   )
 }
 
+function IconLogout({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+      <path d="M16 17l5-5-5-5" />
+      <path d="M21 12H9" />
+    </svg>
+  )
+}
+
 function IconSun({ className = '' }: { className?: string }) {
   return (
     <svg
@@ -477,7 +497,11 @@ export function PortalPage() {
     try {
       await getSupabase().auth.signOut()
     } finally {
-      navigate('/login', { replace: true })
+      if (typeof window !== 'undefined') {
+        window.location.href = 'https://app.smartslate.io'
+      } else {
+        navigate('/login', { replace: true })
+      }
     }
   }
 
@@ -742,6 +766,15 @@ export function PortalPage() {
                 >
                   <SettingsIconImg className="w-5 h-5" />
                   <span>Settings</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
+                  title="Logout from Polaris"
+                >
+                  <IconLogout className="w-5 h-5" />
+                  <span>Logout from Polaris</span>
                 </button>
               </div>
             )}
@@ -1237,14 +1270,24 @@ export function PortalPage() {
                       >
                         <UserAvatar user={user} sizeClass="w-10 h-10" textClass="text-sm font-semibold" />
                       </button>
-                      <button
-                        type="button"
-                        title="Settings"
-                        onClick={() => (window.location.href = 'http://app.smartslate.io/portal/settings')}
-                        className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
-                      >
-                        <SettingsIconImg className="w-10 h-10" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          title="Settings"
+                          onClick={() => (window.location.href = 'http://app.smartslate.io/portal/settings')}
+                          className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
+                        >
+                          <SettingsIconImg className="w-10 h-10" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Logout from Polaris"
+                          onClick={onLogout}
+                          className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
+                        >
+                          <IconLogout className="w-6 h-6" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

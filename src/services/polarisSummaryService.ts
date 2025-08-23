@@ -9,6 +9,7 @@ export const SUMMARY_LIMIT = 10
 
 export async function saveSummary(data: {
   company_name: string | null
+  report_title?: string | null
   summary_content: string
   stage1_answers: Record<string, any>
   stage2_answers: Record<string, any>
@@ -39,6 +40,7 @@ export async function saveSummary(data: {
   const summaryData: CreatePolarisSummary = {
     user_id: user.id,
     company_name: data.company_name,
+    report_title: data.report_title ?? data.company_name ?? 'Discovery Starmap',
     summary_content: data.summary_content,
     stage1_answers: data.stage1_answers,
     stage2_answers: data.stage2_answers,
@@ -54,6 +56,23 @@ export async function saveSummary(data: {
     .single()
 
   return { data: savedSummary, error }
+}
+
+export async function updateSummaryTitle(id: string, newTitle: string): Promise<{ error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: new Error('User not authenticated') }
+  }
+
+  const { error } = await supabase
+    .from('polaris_summaries')
+    .update({ report_title: newTitle })
+    .eq('id', id)
+    .eq('user_id', user.id)
+
+  return { error }
 }
 
 export async function getRecentSummaries(limit = 3): Promise<{ data: PolarisSummary[] | null; error: any }> {

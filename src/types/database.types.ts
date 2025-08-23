@@ -55,6 +55,7 @@ export interface Database {
           id: string
           user_id: string
           company_name: string | null
+          report_title: string | null
           summary_content: string
           stage1_answers: Json
           stage2_answers: Json
@@ -67,6 +68,7 @@ export interface Database {
           id?: string
           user_id: string
           company_name?: string | null
+          report_title?: string | null
           summary_content: string
           stage1_answers: Json
           stage2_answers: Json
@@ -79,6 +81,7 @@ export interface Database {
           id?: string
           user_id?: string
           company_name?: string | null
+          report_title?: string | null
           summary_content?: string
           stage1_answers?: Json
           stage2_answers?: Json

@@ -1469,25 +1469,39 @@ export default function Polaris() {
             <ReportDisplay reportMarkdown={reportMarkdown} />
               </div>
 
-          <div className="flex justify-between gap-2 mt-6">
-            <button 
-              type="button" 
-              className="icon-btn" 
-              onClick={() => window.location.href = '/portal/starmaps'}
-              aria-label="View all starmaps"
-              title="View all starmaps"
+          <div className="flex items-center justify-between gap-2 mt-6">
+            {/* Back action moved to the bottom, icon-only, brand-accented */}
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => (window.history.length > 1 ? window.history.back() : (window.location.href = '/portal'))}
+              aria-label="Back"
+              title="Back"
             >
-              <IconGrid className="w-4 h-4" />
+              <IconChevronLeft className="w-4 h-4 accent-icon" />
             </button>
-            <button 
-              type="button" 
-              className="icon-btn icon-btn-ghost" 
-              onClick={resetAll}
-              aria-label="Start new analysis"
-              title="Start new analysis"
-            >
-              <IconReset className="w-4 h-4" />
-            </button>
+
+            {/* Right-side utility actions */}
+            <div className="flex gap-2">
+              <button 
+                type="button" 
+                className="icon-btn" 
+                onClick={() => window.location.href = '/portal/starmaps'}
+                aria-label="View all starmaps"
+                title="View all starmaps"
+              >
+                <IconGrid className="w-4 h-4" />
+              </button>
+              <button 
+                type="button" 
+                className="icon-btn icon-btn-ghost" 
+                onClick={resetAll}
+                aria-label="Start new analysis"
+                title="Start new analysis"
+              >
+                <IconReset className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </section>
       )}

@@ -552,6 +552,9 @@ export default function Polaris() {
   const [analysis, setAnalysis] = useState<string>('')
   const [intakeIndex, setIntakeIndex] = useState<number>(0)
   const [stageTitleOverrides, setStageTitleOverrides] = useState<{ stage2?: string; stage3?: string; summary?: string }>({})
+  // Smooth, informative loading overlay state
+  const [loader, setLoader] = useState<{ active: boolean; phase?: 'stage2'|'stage3'|'summary'; message: string; progress: number; etaSeconds: number }>({ active: false, message: '', progress: 0, etaSeconds: 0 })
+  const loaderIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   
   // Validate all intake fields are filled
   const allIntakeIds = INTAKE_QUESTIONS.map(q => q.id)
@@ -576,10 +579,46 @@ export default function Polaris() {
     }
   }
 
+  function easeInOutCubic(t: number) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+  }
+
+  function startSmartLoader(phase: 'stage2' | 'stage3' | 'summary') {
+    const base = phase === 'stage2' ? 8000 : phase === 'stage3' ? 7000 : 6000
+    const signal = phase === 'stage2' ? Object.keys(answers1 || {}).length : phase === 'stage3' ? Object.keys(answers2 || {}).length : Object.keys(answers3 || {}).length
+    const targetMs = Math.min(14000, Math.max(5500, base + signal * 120))
+    const start = Date.now()
+    const step = () => {
+      const elapsed = Date.now() - start
+      const ratio = Math.min(1, elapsed / targetMs)
+      const progress = Math.min(95, Math.max(5, Math.round(easeInOutCubic(ratio) * 95)))
+      let message = 'Preparing inputs…'
+      if (progress > 15) message = 'Gathering context…'
+      if (progress > 45) message = phase === 'summary' ? 'Analyzing and drafting proposal…' : 'Creating tailored questions…'
+      if (progress > 70) message = 'Refining wording and structure…'
+      if (progress > 85) message = 'Finalizing…'
+      const etaSeconds = Math.max(1, Math.ceil((targetMs - elapsed) / 1000))
+      setLoader({ active: true, phase, message, progress, etaSeconds })
+    }
+    step()
+    if (loaderIntervalRef.current) clearInterval(loaderIntervalRef.current)
+    loaderIntervalRef.current = setInterval(step, 180)
+  }
+
+  function stopSmartLoader() {
+    if (loaderIntervalRef.current) {
+      clearInterval(loaderIntervalRef.current)
+      loaderIntervalRef.current = null
+    }
+    setLoader((prev) => ({ ...prev, active: true, progress: 100, message: 'Ready' }))
+    window.setTimeout(() => setLoader({ active: false, message: '', progress: 0, etaSeconds: 0 }), 450)
+  }
+
   async function genStage2() {
     try {
       setLoading(true)
       setError(null)
+      startSmartLoader('stage2')
       // Ask LLM for stage titles using intake responses (do this before stage 2 questions)
       try {
         const titleMessages: ChatMessage[] = [
@@ -608,6 +647,7 @@ export default function Polaris() {
       setError(e?.message || 'Failed to create Stage 2 questionnaire.')
     } finally {
       setLoading(false)
+      stopSmartLoader()
     }
   }
 
@@ -615,6 +655,7 @@ export default function Polaris() {
     try {
       setLoading(true)
       setError(null)
+      startSmartLoader('stage3')
       // Optionally refresh titles with more context (answers2)
       try {
         const titleMessages: ChatMessage[] = [
@@ -643,6 +684,7 @@ export default function Polaris() {
       setError(e?.message || 'Failed to create Stage 3 questionnaire.')
     } finally {
       setLoading(false)
+      stopSmartLoader()
     }
   }
 
@@ -650,6 +692,7 @@ export default function Polaris() {
     try {
       setLoading(true)
       setError(null)
+      startSmartLoader('summary')
       // Finalize titles with full context
       try {
         const titleMessages: ChatMessage[] = [
@@ -677,6 +720,7 @@ export default function Polaris() {
       setError(e?.message || 'Failed to analyze answers.')
     } finally {
       setLoading(false)
+      stopSmartLoader()
     }
   }
 
@@ -815,6 +859,29 @@ export default function Polaris() {
 
   return (
     <div className="px-4 py-6 page-enter">
+      {loader.active && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
+          <div className="glass-card p-5 md:p-6 w-[92%] max-w-md shadow-2xl border border-white/10">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-400 to-secondary-400 animate-pulse" aria-hidden="true" />
+              <div className="flex-1 space-y-1">
+                <div className="text-sm font-semibold text-white/90">
+                  {loader.phase === 'summary' ? 'Preparing your proposal' : 'Setting up your next step'}
+                </div>
+                <div className="text-xs text-white/70">{loader.message}</div>
+              </div>
+              <div className="text-[11px] text-white/60 whitespace-nowrap">~{String(Math.floor(loader.etaSeconds / 60)).padStart(1,'0')}:{String(loader.etaSeconds % 60).padStart(2,'0')} left</div>
+            </div>
+            <div className="mt-4">
+              <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-secondary-400 transition-all duration-200" style={{ width: `${loader.progress}%` }} />
+              </div>
+              <div className="mt-2 text-right text-[11px] text-white/60">{loader.progress}%</div>
+            </div>
+            <div className="mt-3 text-[11px] text-white/50">This takes a few seconds as we tailor content to your inputs.</div>
+          </div>
+        </div>
+      )}
       <div className="mb-5">
         <div className="glass-card p-4 md:p-6 elevate relative">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -871,17 +938,21 @@ export default function Polaris() {
               <div role="tablist" aria-label="Intake sections" className="flex items-center gap-2 overflow-x-auto stepper-scroll">
                 {intakeGroups.map((g, idx) => {
                   const selected = idx === intakeIndex
+                  const isAnswered = (qid: string) => {
+                    const q = INTAKE_QUESTIONS.find(x => x.id === qid)!
+                    const v = answers1[qid]
+                    if (q.type === 'multiselect' || q.type === 'chips') return Array.isArray(v) && v.length > 0
+                    if (q.type === 'boolean') return typeof v === 'boolean'
+                    return v !== undefined && v !== null && String(v).trim() !== ''
+                  }
                   const requiredIds = g.questionIds.filter(id => {
                     const q = INTAKE_QUESTIONS.find(x => x.id === id)!
                     return Boolean(q.required)
                   })
-                  const groupComplete = requiredIds.length === 0 ? true : requiredIds.every(id => {
-                    const q = INTAKE_QUESTIONS.find(x => x.id === id)!
-                    const v = answers1[id]
-                    if (q.type === 'multiselect' || q.type === 'chips') return Array.isArray(v) && v.length > 0
-                    if (q.type === 'boolean') return typeof v === 'boolean'
-                    return v !== undefined && v !== null && String(v).trim() !== ''
-                  })
+                  const requiredComplete = requiredIds.length > 0 && requiredIds.every(isAnswered)
+                  const answeredCount = g.questionIds.filter(isAnswered).length
+                  const threshold = Math.ceil(g.questionIds.length / 2)
+                  const groupComplete = requiredIds.length > 0 ? requiredComplete : answeredCount >= threshold
                   return (
                     <button
                       key={g.id}
@@ -895,36 +966,13 @@ export default function Polaris() {
                     >
                       <span className="inline-flex items-center gap-1">
                         {g.label}
-                        {groupComplete && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-green-400" aria-label="Complete" />}
+                        <span className={`ml-1 h-1.5 w-1.5 rounded-full ${groupComplete ? 'bg-green-400' : 'bg-amber-300'} ring-1 ring-black/30`} aria-label={groupComplete ? 'Complete' : 'Incomplete'} />
                       </span>
                     </button>
                   )
                 })}
               </div>
-              {/* Desktop: conditional next arrow for current group */}
-              {(() => {
-                const requiredIds = current.questions.filter(q => q.required).map(q => q.id)
-                const currentRequiredComplete = requiredIds.length === 0 ? true : requiredIds.every(id => {
-                  const q = INTAKE_QUESTIONS.find(x => x.id === id)!
-                  const v = answers1[id]
-                  if (q.type === 'multiselect' || q.type === 'chips') return Array.isArray(v) && v.length > 0
-                  if (q.type === 'boolean') return typeof v === 'boolean'
-                  return v !== undefined && v !== null && String(v).trim() !== ''
-                })
-                const showNextArrow = currentRequiredComplete && !isLast
-                return showNextArrow ? (
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      className="btn-ghost px-3 py-1.5 text-xs inline-flex items-center gap-1"
-                      onClick={() => goToGroup(Math.min(total - 1, intakeIndex + 1))}
-                      aria-label="Next section"
-                    >
-                      Next <span aria-hidden>→</span>
-                    </button>
-                  </div>
-                ) : null
-              })()}
+              {/* Desktop: next section control moved to bottom actions */}
             </div>
 
             {/* Mobile: progress + pager controls */}
@@ -955,7 +1003,7 @@ export default function Polaris() {
                   })()}
                 </div>
               </div>
-              <p className="text-[11px] text-white/50">Complete this section to continue. Tabs show a green dot when done.</p>
+              <p className="text*[11px] text-white/50">Complete this section to continue. Tabs show a green dot when complete and yellow when pending.</p>
             </div>
 
             {/* Active panel */}
@@ -984,13 +1032,27 @@ export default function Polaris() {
                 <div className="hidden md:block text-xs text-white/60">Fill required fields to unlock navigation.</div>
               </div>
               <div className="flex items-center gap-2">
+                {(() => {
+                  const requiredIds = current.questions.filter(q => q.required).map(q => q.id)
+                  const currentRequiredComplete = requiredIds.length === 0 ? true : requiredIds.every(id => {
+                    const q = INTAKE_QUESTIONS.find(x => x.id === id)!
+                    const v = answers1[id]
+                    if (q.type === 'multiselect' || q.type === 'chips') return Array.isArray(v) && v.length > 0
+                    if (q.type === 'boolean') return typeof v === 'boolean'
+                    return v !== undefined && v !== null && String(v).trim() !== ''
+                  })
+                  const canGoNextSection = currentRequiredComplete && !isLast
+                  return canGoNextSection ? (
+                    <button type="button" className="btn-ghost px-3 py-2 text-sm hidden md:inline-flex" onClick={() => goToGroup(Math.min(total - 1, intakeIndex + 1))}>Next Section</button>
+                  ) : null
+                })()}
                 <button
                   type="button"
                   className={`btn-primary text-sm hidden md:inline-flex ${intakeComplete ? '' : 'opacity-60 cursor-not-allowed'}`}
                   onClick={genStage2}
                   disabled={loading || !intakeComplete}
                 >
-                  {loading ? 'Generating…' : 'Next: Dynamic Deep‑Dive'}
+                  {loading ? 'Generating…' : `Continue to ${stage2Label}`}
                 </button>
                 <button
                   type="button"
@@ -998,7 +1060,7 @@ export default function Polaris() {
                   onClick={() => { if (isLast && intakeComplete) genStage2() }}
                   disabled={loading || !isLast || !intakeComplete}
                 >
-                  {loading ? 'Generating…' : (isLast ? (intakeComplete ? 'Next: Dynamic Deep‑Dive' : 'Complete all sections') : 'Continue')}
+                  {loading ? 'Generating…' : (isLast ? (intakeComplete ? `Continue to ${stage2Label}` : 'Complete all sections') : 'Continue')}
                 </button>
               </div>
             </div>

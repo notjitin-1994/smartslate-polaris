@@ -159,7 +159,7 @@ function WorkspaceActionCard({ href, label, description, icon: Icon }: Workspace
 
 function Brand() {
   return (
-    <a href="/portal" className="inline-flex items-center gap-2" aria-label="SmartSlate">
+    <a href="http://app.smartslate.io" className="inline-flex items-center gap-2" aria-label="SmartSlate">
       <img src="/images/logos/logo.png" alt="SmartSlate" className="h-6 w-auto logo-glow" />
     </a>
   )
@@ -528,9 +528,8 @@ export function PortalPage() {
   }, [username, viewingProfile, userParam, navigate])
 
   function goToProfile() {
-    const handle = getUsernameFromMeta() || sanitizeUsername(getFirstName())
     closeProfileMenu()
-    navigate(portalUserPath(handle))
+    window.location.href = 'http://app.smartslate.io/portal/notjitin'
   }
 
 
@@ -663,7 +662,7 @@ export function PortalPage() {
                 <button
                   type="button"
                   title="Settings"
-                  onClick={() => navigate(paths.settings)}
+                  onClick={() => (window.location.href = 'http://app.smartslate.io/portal/settings')}
                   className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
                 >
                   <SettingsIconImg className="w-5 h-5" />
@@ -692,7 +691,7 @@ export function PortalPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => navigate(paths.settings)}
+                  onClick={() => (window.location.href = 'http://app.smartslate.io/portal/settings')}
                   className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
                   title="Settings"
                 >
@@ -1199,7 +1198,7 @@ export function PortalPage() {
                       <button
                         type="button"
                         title="Settings"
-                        onClick={() => navigate(paths.settings)}
+                        onClick={() => (window.location.href = 'http://app.smartslate.io/portal/settings')}
                         className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
                       >
                         <SettingsIconImg className="w-10 h-10" />

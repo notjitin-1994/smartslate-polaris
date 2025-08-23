@@ -12,13 +12,13 @@ export default function AuthCallback() {
     getSupabase().auth.getSession().then(({ data: { session } }) => {
       if (!isMounted) return
       if (session) {
-        navigate(paths.portal, { replace: true })
+        navigate(paths.home, { replace: true })
         return
       }
       // Even if session isn't immediately available, auth.onAuthStateChange will handle it
     })
     const { data: { subscription } } = getSupabase().auth.onAuthStateChange((_event, session) => {
-      if (session) navigate(paths.portal, { replace: true })
+      if (session) navigate(paths.home, { replace: true })
     })
     return () => {
       isMounted = false

@@ -13,10 +13,10 @@ export default function AuthLanding() {
   useEffect(() => {
     let isMounted = true
     getSupabase().auth.getSession().then(({ data: { session } }) => {
-      if (isMounted && session) navigate(paths.portal, { replace: true })
+      if (isMounted && session) navigate(paths.home, { replace: true })
     })
     const { data: { subscription } } = getSupabase().auth.onAuthStateChange((_event, session) => {
-      if (session) navigate(paths.portal, { replace: true })
+      if (session) navigate(paths.home, { replace: true })
     })
     return () => {
       isMounted = false

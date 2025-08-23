@@ -327,7 +327,7 @@ export function SettingsContent() {
     try {
       await getSupabase().auth.signOut()
     } finally {
-      navigate('/', { replace: true })
+      navigate('/login', { replace: true })
     }
   }
 
@@ -345,7 +345,7 @@ export function SettingsContent() {
     try {
       await getSupabase().auth.signOut()
     } finally {
-      navigate('/', { replace: true })
+      navigate('/login', { replace: true })
     }
   }
 

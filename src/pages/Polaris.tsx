@@ -287,6 +287,17 @@ const INTAKE_GROUPS_META: Array<{ id: string; label: string; description?: strin
   },
 ]
 
+// LLM prompt to generate elegant, organization-personalized stage titles
+const STAGE_TITLES_SYSTEM_PROMPT = `You are Smartslate's Stage Title Namer.
+Return JSON ONLY with keys {"stage2": string, "stage3": string, "summary": string}.
+Requirements:
+- Titles should be relevant, elegant, and personalized to the organization and their goals.
+- 2–5 words each, Title Case, no numbering or punctuation at the end.
+- Avoid generic terms like "Stage", "Step", or "Summary" in the text itself.
+- No brand names unless they are part of the organization's inputs.
+- Keep them clear and professional (e.g., "Skills Acceleration Plan", "Rollout Readiness Review").
+Output valid JSON with the exact keys: stage2, stage3, summary.`
+
 const SYSTEM_PROMPT = `You are Smartslate's Product Discovery Copilot.
 You will produce JSON ONLY (no markdown) describing a questionnaire tailored to a prospect.
 JSON schema:
@@ -437,24 +448,48 @@ const QuestionField = memo(function QuestionField({ q, value, onChange }: Questi
     )
   }
   if (q.type === 'select' || q.type === 'radio') {
+    const options = (q.options || [])
+    const optionValues = new Set(options.map(o => o.value))
+    const selectValue = value == null || value === '' ? '' : (optionValues.has(value) ? value : '__custom__')
     return (
-      <label className="block space-y-2">
-        {label}
-        <select className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
-          <option value="">{q.placeholder || 'Select an option'}</option>
-          {(q.options || []).map((o) => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </label>
+      <div className="space-y-2">
+        <label className="block space-y-2">
+          {label}
+          <select className="input" value={selectValue} onChange={(e) => onChange(e.target.value === '__custom__' ? (typeof value === 'string' ? value : '') : e.target.value)}>
+            <option value="">{q.placeholder || 'Select an option'}</option>
+            {options.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+            <option value="__custom__">Custom…</option>
+          </select>
+        </label>
+        {selectValue === '__custom__' && (
+          <div className="pl-0">
+            <input
+              className="input"
+              placeholder="Type a custom value"
+              value={typeof value === 'string' ? value : ''}
+              onChange={(e) => onChange(e.target.value)}
+            />
+            <p className="mt-1 text-[11px] text-white/50">Your custom value will be used for this field.</p>
+          </div>
+        )}
+      </div>
     )
   }
   if (q.type === 'multiselect' || q.type === 'chips') {
+    const selected: string[] = Array.isArray(value) ? value : []
+    const optionValues = new Set((q.options || []).map(o => o.value))
+    const combined = [
+      ...(q.options || []).map(o => ({ value: o.value, label: o.label })),
+      // include custom selections not in options so they render as chips
+      ...selected.filter(v => !optionValues.has(v)).map(v => ({ value: v, label: v })),
+    ]
     return (
       <div className="space-y-2">
         {label}
         <div className="flex flex-wrap gap-2">
-          {(q.options || []).map((o) => {
+          {combined.map((o) => {
             const active = Array.isArray(value) && value.includes(o.value)
             return (
               <button key={o.value} type="button" onClick={() => {
@@ -467,6 +502,25 @@ const QuestionField = memo(function QuestionField({ q, value, onChange }: Questi
             )
           })}
         </div>
+        <div className="flex items-center gap-2">
+          <input
+            className="input flex-1"
+            placeholder="Add custom item and press Enter"
+            onKeyDown={(e) => {
+              const t = e.target as HTMLInputElement
+              if (e.key === 'Enter') {
+                const v = t.value.trim()
+                if (v) {
+                  const next = new Set(Array.isArray(value) ? value : [])
+                  next.add(v)
+                  onChange(Array.from(next))
+                  t.value = ''
+                }
+              }
+            }}
+          />
+        </div>
+        <p className="mt-1 text-[11px] text-white/50">Click to toggle items. Add your own with Enter.</p>
       </div>
     )
   }
@@ -497,11 +551,51 @@ export default function Polaris() {
   const [answers3, setAnswers3] = useState<Record<string, any>>({})
   const [analysis, setAnalysis] = useState<string>('')
   const [intakeIndex, setIntakeIndex] = useState<number>(0)
+  const [stageTitleOverrides, setStageTitleOverrides] = useState<{ stage2?: string; stage3?: string; summary?: string }>({})
+  
+  // Validate all intake fields are filled
+  const allIntakeIds = INTAKE_QUESTIONS.map(q => q.id)
+  const intakeMissing: string[] = allIntakeIds.filter(id => {
+    const q = INTAKE_QUESTIONS.find(x => x.id === id)!
+    const val = answers1[id]
+    if (q.type === 'multiselect' || q.type === 'chips') return !Array.isArray(val) || val.length === 0
+    if (q.type === 'boolean') return typeof val !== 'boolean'
+    return val === undefined || val === null || String(val).trim() === ''
+  })
+  const intakeComplete = intakeMissing.length === 0
+
+  // Manual navigation helper for intake groups (with smooth scroll)
+  function goToGroup(idx: number) {
+    setIntakeIndex(idx)
+    const nextId = INTAKE_GROUPS_META[idx]?.id
+    if (nextId) {
+      window.setTimeout(() => {
+        const el = document.getElementById(`intake-panel-${nextId}`)
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }, 10)
+    }
+  }
 
   async function genStage2() {
     try {
       setLoading(true)
       setError(null)
+      // Ask LLM for stage titles using intake responses (do this before stage 2 questions)
+      try {
+        const titleMessages: ChatMessage[] = [
+          { role: 'system', content: STAGE_TITLES_SYSTEM_PROMPT },
+          { role: 'user', content: `Organization intake (JSON):\n${JSON.stringify(answers1, null, 2)}\nReturn JSON titles now.` },
+        ]
+        const titleRes = await callLLM(titleMessages)
+        const titles = extractJsonBlock(titleRes.content)
+        if (titles && (titles.stage2 || titles.stage3 || titles.summary)) {
+          setStageTitleOverrides({
+            stage2: typeof titles.stage2 === 'string' ? titles.stage2 : undefined,
+            stage3: typeof titles.stage3 === 'string' ? titles.stage3 : undefined,
+            summary: typeof titles.summary === 'string' ? titles.summary : undefined,
+          })
+        }
+      } catch {}
       const messages: ChatMessage[] = [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPromptForStage(2, { answers1 }) },
@@ -521,6 +615,22 @@ export default function Polaris() {
     try {
       setLoading(true)
       setError(null)
+      // Optionally refresh titles with more context (answers2)
+      try {
+        const titleMessages: ChatMessage[] = [
+          { role: 'system', content: STAGE_TITLES_SYSTEM_PROMPT },
+          { role: 'user', content: `Organization inputs so far (JSON):\n${JSON.stringify({ answers1, answers2 }, null, 2)}\nReturn JSON titles now.` },
+        ]
+        const titleRes = await callLLM(titleMessages)
+        const titles = extractJsonBlock(titleRes.content)
+        if (titles && (titles.stage2 || titles.stage3 || titles.summary)) {
+          setStageTitleOverrides((prev) => ({
+            stage2: typeof titles.stage2 === 'string' ? titles.stage2 : prev.stage2,
+            stage3: typeof titles.stage3 === 'string' ? titles.stage3 : prev.stage3,
+            summary: typeof titles.summary === 'string' ? titles.summary : prev.summary,
+          }))
+        }
+      } catch {}
       const messages: ChatMessage[] = [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPromptForStage(3, { answers1, answers2 }) },
@@ -540,6 +650,22 @@ export default function Polaris() {
     try {
       setLoading(true)
       setError(null)
+      // Finalize titles with full context
+      try {
+        const titleMessages: ChatMessage[] = [
+          { role: 'system', content: STAGE_TITLES_SYSTEM_PROMPT },
+          { role: 'user', content: `All inputs (JSON):\n${JSON.stringify({ answers1, answers2, answers3 }, null, 2)}\nReturn JSON titles now.` },
+        ]
+        const titleRes = await callLLM(titleMessages)
+        const titles = extractJsonBlock(titleRes.content)
+        if (titles && (titles.stage2 || titles.stage3 || titles.summary)) {
+          setStageTitleOverrides((prev) => ({
+            stage2: typeof titles.stage2 === 'string' ? titles.stage2 : prev.stage2,
+            stage3: typeof titles.stage3 === 'string' ? titles.stage3 : prev.stage3,
+            summary: typeof titles.summary === 'string' ? titles.summary : prev.summary,
+          }))
+        }
+      } catch {}
       const messages: ChatMessage[] = [
         { role: 'system', content: 'You are a senior Solutions Architect at Smartslate. Analyze prospect inputs across three stages and produce a concise solution proposal mapping to Smartslate offerings with rationale and next steps. Output in markdown.' },
         { role: 'user', content: `Prospect inputs (JSON):\n${JSON.stringify({ answers1, answers2, answers3 }, null, 2)}` },
@@ -622,53 +748,67 @@ export default function Polaris() {
 
   const summaryRef = useRef<HTMLDivElement | null>(null)
 
+  // Dynamic labels for later stages based on inputs
+  const orgName = (answers1.company_name || '').toString().trim()
+  const primaryGoal = (answers1.goals || '').toString().split(/\n|\.\s/)[0]?.trim()
+  const stage2Label = stageTitleOverrides.stage2 || (orgName && primaryGoal ? `Deep‑Dive: ${orgName}` : 'Stage 2')
+  const stage3Label = stageTitleOverrides.stage3 || (orgName ? `Finalization: ${orgName}` : 'Stage 3')
+  const summaryLabel = stageTitleOverrides.summary || (orgName ? `Summary: ${orgName}` : 'Summary')
+
   // Horizontal stepper to visualize active stage
   function Stepper() {
     const steps: Array<{ key: 'stage1' | 'stage2' | 'stage3' | 'summary'; label: string }> = [
       { key: 'stage1', label: 'First Contact Intake' },
-      { key: 'stage2', label: 'Stage 2' },
-      { key: 'stage3', label: 'Stage 3' },
-      { key: 'summary', label: 'Summary' },
+      { key: 'stage2', label: stage2Label },
+      { key: 'stage3', label: stage3Label },
+      { key: 'summary', label: summaryLabel },
     ]
     const order: Array<'stage1' | 'stage2' | 'stage3' | 'summary'> = ['stage1', 'stage2', 'stage3', 'summary']
     const currentIndex = order.indexOf(active)
+    const progress = Math.max(0, Math.min(1, currentIndex / (steps.length - 1)))
 
     return (
       <>
-        {/* Mobile: simple progress bar with status text */}
+        {/* Mobile: progress bar + current label */}
         <div className="md:hidden flex items-center gap-3">
           <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary-400 rounded-full transition-all duration-300"
-              style={{ width: `${Math.max(0, Math.min(1, currentIndex / (steps.length - 1))) * 100}%` }}
-            />
+            <div className="h-full bg-gradient-to-r from-primary-400 to-secondary-400 rounded-full transition-all duration-300" style={{ width: `${progress * 100}%` }} />
           </div>
-          <span className="text-xs text-white/70 whitespace-nowrap">Stage {Math.min(currentIndex + 1, 3)} of 3</span>
+          <span className="text-xs text-white/70 whitespace-nowrap">{Math.min(currentIndex + 1, steps.length)} / {steps.length}</span>
+        </div>
+        <div className="md:hidden mt-2">
+          <span className="inline-block max-w-full truncate px-2 py-1 text-[11px] rounded-full bg-white/10 border border-white/10 text-white/80">{steps[currentIndex]?.label || ''}</span>
         </div>
 
-        {/* Desktop: clickable stepper with labels */}
-        <ol className="hidden md:flex items-center gap-3 md:gap-4 flex-nowrap whitespace-nowrap w-max snap-x">
-          {steps.map((s, idx) => {
-            const isCompleted = idx < currentIndex
-            const isActive = idx === currentIndex
-            return (
-              <li key={s.key} className="flex items-center gap-3 snap-start">
-                <button
-                  type="button"
-                  onClick={() => setActive(s.key)}
-                  className={`pressable flex items-center gap-2 rounded-full px-3 py-1.5 border ${isActive ? 'border-primary-400 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10'} text-xs md:text-sm`}
-                  aria-current={isActive ? 'step' : undefined}
-                >
-                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${isCompleted ? 'bg-primary-400 text-slate-900' : isActive ? 'bg-white/90 text-slate-900' : 'bg-white/10 text-white/80'}`}>{idx + 1}</span>
-                  <span className={`font-medium ${isCompleted ? 'text-primary-400' : 'text-white/85'}`}>{s.label}</span>
-                </button>
-                {idx !== steps.length - 1 && (
-                  <div className={`h-[2px] w-6 md:w-10 ${idx < currentIndex ? 'bg-primary-400/80' : 'bg-white/10'}`} />
-                )}
-              </li>
-            )
-          })}
-        </ol>
+        {/* Desktop: stepper list (progress rail drawn by parent container) */}
+        <div className="hidden md:block">
+          <ol className="flex items-center gap-4 flex-nowrap whitespace-nowrap w-max">
+            {steps.map((s, idx) => {
+              const isCompleted = idx < currentIndex
+              const isActive = idx === currentIndex
+              const baseBtn = 'pressable flex items-center gap-2 rounded-full px-3 py-1.5 border text-xs md:text-sm backdrop-blur-sm'
+              const stateBtn = isActive
+                ? 'border-primary-400 bg-white/10 shadow-[0_0_0_2px_rgba(167,218,219,0.2)_inset]'
+                : isCompleted
+                ? 'border-primary-400/40 bg-primary-400/10 text-primary-200'
+                : 'border-white/10 bg-white/5 hover:bg-white/10 text-white/80'
+              return (
+                <li key={s.key} className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    title={s.label}
+                    onClick={() => setActive(s.key)}
+                    className={`${baseBtn} ${stateBtn}`}
+                    aria-current={isActive ? 'step' : undefined}
+                  >
+                    <span className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold ${isCompleted ? 'bg-primary-400 text-slate-900' : isActive ? 'bg-gradient-to-b from-white/90 to-primary-400/80 text-slate-900' : 'bg-white/10 text-white/70'}`}>{isCompleted ? '✓' : (idx + 1)}</span>
+                    <span className={`max-w-[240px] truncate font-medium ${isActive ? 'text-white' : isCompleted ? 'text-primary-200' : 'text-white/85'}`}>{s.label}</span>
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
+        </div>
       </>
     )
   }
@@ -676,7 +816,7 @@ export default function Polaris() {
   return (
     <div className="px-4 py-6 page-enter">
       <div className="mb-5">
-        <div className="glass-card p-4 md:p-6 elevate">
+        <div className="glass-card p-4 md:p-6 elevate relative">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div className="overflow-x-auto stepper-scroll">
               {<Stepper />}
@@ -691,6 +831,21 @@ export default function Polaris() {
               </button>
             </div>
           </div>
+          {/* Bottom-aligned progress rail spanning the parent container */}
+          <div
+            className="absolute left-0 right-0 bottom-0 h-[2px] bg-white/10 pointer-events-none"
+            style={{ borderBottomLeftRadius: 'inherit', borderBottomRightRadius: 'inherit' }}
+            aria-hidden="true"
+          />
+          <div
+            className="absolute left-0 bottom-0 h-[2px] bg-primary-400 transition-all duration-500 pointer-events-none"
+            style={{
+              width: `${Math.max(0, Math.min(1, (['stage1','stage2','stage3','summary'].indexOf(active) / Math.max(1, (['stage1','stage2','stage3','summary'].length - 1))))) * 100}%`,
+              borderBottomLeftRadius: 'inherit',
+              borderBottomRightRadius: 'inherit',
+            }}
+            aria-hidden="true"
+          />
         </div>
       </div>
 
@@ -716,6 +871,17 @@ export default function Polaris() {
               <div role="tablist" aria-label="Intake sections" className="flex items-center gap-2 overflow-x-auto stepper-scroll">
                 {intakeGroups.map((g, idx) => {
                   const selected = idx === intakeIndex
+                  const requiredIds = g.questionIds.filter(id => {
+                    const q = INTAKE_QUESTIONS.find(x => x.id === id)!
+                    return Boolean(q.required)
+                  })
+                  const groupComplete = requiredIds.length === 0 ? true : requiredIds.every(id => {
+                    const q = INTAKE_QUESTIONS.find(x => x.id === id)!
+                    const v = answers1[id]
+                    if (q.type === 'multiselect' || q.type === 'chips') return Array.isArray(v) && v.length > 0
+                    if (q.type === 'boolean') return typeof v === 'boolean'
+                    return v !== undefined && v !== null && String(v).trim() !== ''
+                  })
                   return (
                     <button
                       key={g.id}
@@ -724,14 +890,41 @@ export default function Polaris() {
                       aria-controls={`intake-panel-${g.id}`}
                       id={`intake-tab-${g.id}`}
                       type="button"
-                      onClick={() => setIntakeIndex(idx)}
+                      onClick={() => goToGroup(idx)}
                       className={`pressable rounded-full px-3 py-1.5 border text-xs md:text-sm whitespace-nowrap ${selected ? 'border-primary-400 bg-white/10 text-white' : 'border-white/10 bg-white/5 text-white/85 hover:bg-white/10'}`}
                     >
-                      {g.label}
+                      <span className="inline-flex items-center gap-1">
+                        {g.label}
+                        {groupComplete && <span className="ml-1 h-1.5 w-1.5 rounded-full bg-green-400" aria-label="Complete" />}
+                      </span>
                     </button>
                   )
                 })}
               </div>
+              {/* Desktop: conditional next arrow for current group */}
+              {(() => {
+                const requiredIds = current.questions.filter(q => q.required).map(q => q.id)
+                const currentRequiredComplete = requiredIds.length === 0 ? true : requiredIds.every(id => {
+                  const q = INTAKE_QUESTIONS.find(x => x.id === id)!
+                  const v = answers1[id]
+                  if (q.type === 'multiselect' || q.type === 'chips') return Array.isArray(v) && v.length > 0
+                  if (q.type === 'boolean') return typeof v === 'boolean'
+                  return v !== undefined && v !== null && String(v).trim() !== ''
+                })
+                const showNextArrow = currentRequiredComplete && !isLast
+                return showNextArrow ? (
+                  <div className="mt-2 flex justify-end">
+                    <button
+                      type="button"
+                      className="btn-ghost px-3 py-1.5 text-xs inline-flex items-center gap-1"
+                      onClick={() => goToGroup(Math.min(total - 1, intakeIndex + 1))}
+                      aria-label="Next section"
+                    >
+                      Next <span aria-hidden>→</span>
+                    </button>
+                  </div>
+                ) : null
+              })()}
             </div>
 
             {/* Mobile: progress + pager controls */}
@@ -746,9 +939,23 @@ export default function Polaris() {
                 <div className="text-sm font-medium text-white/90">{current.label}</div>
                 <div className="flex gap-2">
                   <button type="button" className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setIntakeIndex(v => Math.max(0, v - 1))} disabled={isFirst}>Back</button>
-                  <button type="button" className="btn-ghost px-3 py-1.5 text-xs" onClick={() => setIntakeIndex(v => Math.min(total - 1, v + 1))} disabled={isLast}>Next</button>
+                  {(() => {
+                    const requiredIds = current.questions.filter(q => q.required).map(q => q.id)
+                    const currentRequiredComplete = requiredIds.length === 0 ? true : requiredIds.every(id => {
+                      const q = INTAKE_QUESTIONS.find(x => x.id === id)!
+                      const v = answers1[id]
+                      if (q.type === 'multiselect' || q.type === 'chips') return Array.isArray(v) && v.length > 0
+                      if (q.type === 'boolean') return typeof v === 'boolean'
+                      return v !== undefined && v !== null && String(v).trim() !== ''
+                    })
+                    const showNextArrow = currentRequiredComplete && !isLast
+                    return showNextArrow ? (
+                      <button type="button" className="btn-ghost px-3 py-1.5 text-xs" onClick={() => goToGroup(Math.min(total - 1, intakeIndex + 1))}>Next</button>
+                    ) : null
+                  })()}
                 </div>
               </div>
+              <p className="text-[11px] text-white/50">Complete this section to continue. Tabs show a green dot when done.</p>
             </div>
 
             {/* Active panel */}
@@ -774,24 +981,24 @@ export default function Polaris() {
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setAnswers1({})}>Reset</button>
-                <div className="hidden md:block text-xs text-white/60">Fill out what you can. You can refine next stages.</div>
+                <div className="hidden md:block text-xs text-white/60">Fill required fields to unlock navigation.</div>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="btn-primary text-sm hidden md:inline-flex"
+                  className={`btn-primary text-sm hidden md:inline-flex ${intakeComplete ? '' : 'opacity-60 cursor-not-allowed'}`}
                   onClick={genStage2}
-                  disabled={loading}
+                  disabled={loading || !intakeComplete}
                 >
                   {loading ? 'Generating…' : 'Next: Dynamic Deep‑Dive'}
                 </button>
                 <button
                   type="button"
-                  className={`btn-primary text-sm md:hidden ${isLast ? '' : 'opacity-60 cursor-not-allowed'}`}
-                  onClick={() => { if (isLast) genStage2() }}
-                  disabled={loading || !isLast}
+                  className={`btn-primary text-sm md:hidden ${(isLast && intakeComplete) ? '' : 'opacity-60 cursor-not-allowed'}`}
+                  onClick={() => { if (isLast && intakeComplete) genStage2() }}
+                  disabled={loading || !isLast || !intakeComplete}
                 >
-                  {loading ? 'Generating…' : (isLast ? 'Next: Dynamic Deep‑Dive' : 'Complete sections to continue')}
+                  {loading ? 'Generating…' : (isLast ? (intakeComplete ? 'Next: Dynamic Deep‑Dive' : 'Complete all sections') : 'Continue')}
                 </button>
               </div>
             </div>

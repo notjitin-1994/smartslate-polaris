@@ -1,6 +1,6 @@
-import { memo, useRef, useState } from 'react'
+import { memo, useRef, useState, useEffect } from 'react'
 import { callLLM, type ChatMessage } from '@/services/llmClient'
-import { saveSummary } from '@/services/polarisSummaryService'
+import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT } from '@/services/polarisSummaryService'
 
 type QuestionType = 'text' | 'textarea' | 'number' | 'select' | 'multiselect' | 'radio' | 'chips' | 'boolean' | 'date'
 
@@ -553,9 +553,22 @@ export default function Polaris() {
   const [analysis, setAnalysis] = useState<string>('')
   const [intakeIndex, setIntakeIndex] = useState<number>(0)
   const [stageTitleOverrides, setStageTitleOverrides] = useState<{ stage2?: string; stage3?: string; summary?: string }>({})
+  const [summaryCount, setSummaryCount] = useState<number>(0)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   // Smooth, informative loading overlay state
   const [loader, setLoader] = useState<{ active: boolean; phase?: 'stage2'|'stage3'|'summary'; message: string; progress: number; etaSeconds: number }>({ active: false, message: '', progress: 0, etaSeconds: 0 })
   const loaderIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  
+  // Load user's current summary count on mount
+  useEffect(() => {
+    async function loadSummaryCount() {
+      const { count, error } = await getUserSummaryCount()
+      if (!error && count !== null) {
+        setSummaryCount(count)
+      }
+    }
+    loadSummaryCount()
+  }, [])
   
   // Validate all intake fields are filled
   const allIntakeIds = INTAKE_QUESTIONS.map(q => q.id)
@@ -733,8 +746,15 @@ export default function Polaris() {
           
           if (saveError) {
             console.error('Failed to save summary:', saveError)
+            // Check if it's a limit error
+            if (saveError.message && saveError.message.includes('reached the limit')) {
+              setShowUpgradeModal(true)
+              setError('You have reached your summary limit. Please upgrade to continue.')
+            }
           } else {
             console.log('Summary saved successfully')
+            // Update the summary count
+            setSummaryCount(prev => prev + 1)
           }
         } catch (saveErr) {
           console.error('Error saving summary:', saveErr)
@@ -885,6 +905,41 @@ export default function Polaris() {
 
   return (
     <div className="px-4 py-6 page-enter">
+      {/* Upgrade Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+          <div className="glass-card p-6 w-[92%] max-w-md shadow-2xl border border-white/20">
+            <div className="text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Summary Limit Reached</h3>
+              <p className="text-white/70 mb-4">
+                You've reached your limit of {SUMMARY_LIMIT} summaries. Upgrade to the Pro plan to create unlimited summaries and access advanced features.
+              </p>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => window.open('https://smartslate.io/upgrade', '_blank')}
+                  className="w-full btn-primary"
+                >
+                  Upgrade to Pro
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUpgradeModal(false)}
+                  className="w-full btn-ghost"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {loader.active && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
           <div className="glass-card p-5 md:p-6 w-[92%] max-w-md shadow-2xl border border-white/10">
@@ -914,7 +969,10 @@ export default function Polaris() {
             <div className="overflow-x-auto stepper-scroll">
               {<Stepper />}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-white/60">
+                {summaryCount}/{SUMMARY_LIMIT} summaries
+              </div>
               <button
                 type="button"
                 className="btn-ghost px-3 py-2 text-sm"

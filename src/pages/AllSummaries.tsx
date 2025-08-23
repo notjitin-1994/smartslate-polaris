@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getAllSummaries, deleteSummary, type PolarisSummary } from '@/services/polarisSummaryService'
+import { getAllSummaries, deleteSummary, getUserSummaryCount, SUMMARY_LIMIT, type PolarisSummary } from '@/services/polarisSummaryService'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 export default function AllSummaries() {
@@ -10,6 +10,7 @@ export default function AllSummaries() {
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [selectedSummary, setSelectedSummary] = useState<PolarisSummary | null>(null)
+  const [summaryCount, setSummaryCount] = useState<number>(0)
   
   useDocumentTitle('Smartslate | All Summaries')
 
@@ -21,13 +22,20 @@ export default function AllSummaries() {
     try {
       setLoading(true)
       setError(null)
-      const { data, error } = await getAllSummaries()
+      const [summariesResult, countResult] = await Promise.all([
+        getAllSummaries(),
+        getUserSummaryCount()
+      ])
       
-      if (error) {
+      if (summariesResult.error) {
         setError('Failed to load summaries')
-        console.error('Error loading summaries:', error)
+        console.error('Error loading summaries:', summariesResult.error)
       } else {
-        setSummaries(data || [])
+        setSummaries(summariesResult.data || [])
+      }
+      
+      if (!countResult.error && countResult.count !== null) {
+        setSummaryCount(countResult.count)
       }
     } catch (err) {
       setError('Failed to load summaries')
@@ -49,6 +57,7 @@ export default function AllSummaries() {
         console.error('Error deleting summary:', error)
       } else {
         setSummaries(prev => prev.filter(s => s.id !== id))
+        setSummaryCount(prev => Math.max(0, prev - 1))
         if (selectedSummary?.id === id) {
           setSelectedSummary(null)
         }
@@ -81,11 +90,28 @@ export default function AllSummaries() {
     <div className="px-4 py-6 page-enter">
       <div className="mb-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-white">All Polaris Summaries</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-white">All Polaris Summaries</h1>
+            <div className="flex items-center gap-3 mt-1">
+              <span className="text-sm text-white/60">
+                {summaryCount} of {SUMMARY_LIMIT} summaries used
+              </span>
+              {summaryCount >= SUMMARY_LIMIT && (
+                <button
+                  type="button"
+                  onClick={() => window.open('https://smartslate.io/upgrade', '_blank')}
+                  className="text-xs text-amber-400 hover:text-amber-300 underline"
+                >
+                  Upgrade for more
+                </button>
+              )}
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => navigate('/polaris')}
             className="btn-primary text-sm"
+            disabled={summaryCount >= SUMMARY_LIMIT}
           >
             New Discovery
           </button>

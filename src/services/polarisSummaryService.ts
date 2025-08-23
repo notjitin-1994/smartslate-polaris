@@ -4,6 +4,9 @@ import type { Database } from '@/types/database.types'
 export type PolarisSummary = Database['public']['Tables']['polaris_summaries']['Row']
 export type CreatePolarisSummary = Database['public']['Tables']['polaris_summaries']['Insert']
 
+// Free tier limit for summaries
+export const SUMMARY_LIMIT = 10
+
 export async function saveSummary(data: {
   company_name: string | null
   summary_content: string
@@ -18,6 +21,19 @@ export async function saveSummary(data: {
   
   if (!user) {
     return { data: null, error: new Error('User not authenticated') }
+  }
+
+  // Check if user has reached the summary limit
+  const { count, error: countError } = await getUserSummaryCount()
+  if (countError) {
+    return { data: null, error: countError }
+  }
+
+  if (count !== null && count >= SUMMARY_LIMIT) {
+    return { 
+      data: null, 
+      error: new Error(`You have reached the limit of ${SUMMARY_LIMIT} summaries. Please upgrade to create more summaries.`) 
+    }
   }
 
   const summaryData: CreatePolarisSummary = {
@@ -108,4 +124,20 @@ export async function deleteSummary(id: string): Promise<{ error: any }> {
     .eq('user_id', user.id)
 
   return { error }
+}
+
+export async function getUserSummaryCount(): Promise<{ count: number | null; error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { count: null, error: new Error('User not authenticated') }
+  }
+
+  const { count, error } = await supabase
+    .from('polaris_summaries')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+
+  return { count, error }
 }

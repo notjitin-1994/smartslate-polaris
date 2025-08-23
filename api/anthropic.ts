@@ -31,7 +31,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const rawBody: unknown = ((): unknown => {
       if (typeof req.body === 'string') return req.body
-      // @ts-expect-error Node's body can be a Buffer
       if (Buffer.isBuffer(req.body)) return req.body.toString('utf-8')
       return req.body
     })()

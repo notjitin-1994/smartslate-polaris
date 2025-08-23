@@ -3,7 +3,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/**/*.ts": { "maxDuration": 60 }
+    "api/**/*.ts": { 
+      "maxDuration": 60,
+      "runtime": "nodejs20.x"
+    }
   },
   "routes": [
     { "handle": "filesystem" },

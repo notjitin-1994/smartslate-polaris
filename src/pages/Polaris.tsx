@@ -224,7 +224,7 @@ export default function Polaris() {
 
   function Field({ q, value, onChange }: { q: Question; value: any; onChange: (v: any) => void }) {
     const label = (
-      <div className="space-y-1">
+      <div className="space-y-1 break-words">
         <div className="text-sm font-medium text-white/90">{q.label}{q.required ? ' *' : ''}</div>
         {q.description && <div className="text-xs text-white/60">{q.description}</div>}
       </div>
@@ -333,28 +333,42 @@ export default function Polaris() {
     const currentIndex = order.indexOf(active)
 
     return (
-      <ol className="relative flex items-center gap-3 md:gap-4">
-        {steps.map((s, idx) => {
-          const isCompleted = idx < currentIndex
-          const isActive = idx === currentIndex
-          return (
-            <li key={s.key} className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setActive(s.key)}
-                className={`pressable flex items-center gap-2 rounded-full px-3 py-1.5 border ${isActive ? 'border-primary-400 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10'} text-xs md:text-sm`}
-                aria-current={isActive ? 'step' : undefined}
-              >
-                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${isCompleted ? 'bg-primary-400 text-slate-900' : isActive ? 'bg-white/90 text-slate-900' : 'bg-white/10 text-white/80'}`}>{idx + 1}</span>
-                <span className={`font-medium ${isCompleted ? 'text-primary-400' : 'text-white/85'}`}>{s.label}</span>
-              </button>
-              {idx !== steps.length - 1 && (
-                <div className={`h-[2px] w-6 md:w-10 ${idx < currentIndex ? 'bg-primary-400/80' : 'bg-white/10'}`} />
-              )}
-            </li>
-          )
-        })}
-      </ol>
+      <>
+        {/* Mobile: simple progress bar with status text */}
+        <div className="md:hidden flex items-center gap-3">
+          <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary-400 rounded-full transition-all duration-300"
+              style={{ width: `${Math.max(0, Math.min(1, currentIndex / (steps.length - 1))) * 100}%` }}
+            />
+          </div>
+          <span className="text-xs text-white/70 whitespace-nowrap">Stage {Math.min(currentIndex + 1, 3)} of 3</span>
+        </div>
+
+        {/* Desktop: clickable stepper with labels */}
+        <ol className="hidden md:flex items-center gap-3 md:gap-4 flex-nowrap whitespace-nowrap w-max snap-x">
+          {steps.map((s, idx) => {
+            const isCompleted = idx < currentIndex
+            const isActive = idx === currentIndex
+            return (
+              <li key={s.key} className="flex items-center gap-3 snap-start">
+                <button
+                  type="button"
+                  onClick={() => setActive(s.key)}
+                  className={`pressable flex items-center gap-2 rounded-full px-3 py-1.5 border ${isActive ? 'border-primary-400 bg-white/10' : 'border-white/10 bg-white/5 hover:bg-white/10'} text-xs md:text-sm`}
+                  aria-current={isActive ? 'step' : undefined}
+                >
+                  <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold ${isCompleted ? 'bg-primary-400 text-slate-900' : isActive ? 'bg-white/90 text-slate-900' : 'bg-white/10 text-white/80'}`}>{idx + 1}</span>
+                  <span className={`font-medium ${isCompleted ? 'text-primary-400' : 'text-white/85'}`}>{s.label}</span>
+                </button>
+                {idx !== steps.length - 1 && (
+                  <div className={`h-[2px] w-6 md:w-10 ${idx < currentIndex ? 'bg-primary-400/80' : 'bg-white/10'}`} />
+                )}
+              </li>
+            )
+          })}
+        </ol>
+      </>
     )
   }
 
@@ -363,7 +377,7 @@ export default function Polaris() {
       <div className="mb-5">
         <div className="glass-card p-4 md:p-6 elevate">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto stepper-scroll">
               {<Stepper />}
             </div>
             <div className="flex items-center gap-2">

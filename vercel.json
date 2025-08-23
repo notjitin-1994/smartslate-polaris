@@ -4,8 +4,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/**/*.ts": { 
-      "maxDuration": 60,
-      "runtime": "nodejs20.x"
+      "maxDuration": 60
     }
   },
   "routes": [

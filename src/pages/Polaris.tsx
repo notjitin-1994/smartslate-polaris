@@ -1,5 +1,6 @@
 import { memo, useRef, useState } from 'react'
 import { callLLM, type ChatMessage } from '@/services/llmClient'
+import { saveSummary } from '@/services/polarisSummaryService'
 
 type QuestionType = 'text' | 'textarea' | 'number' | 'select' | 'multiselect' | 'radio' | 'chips' | 'boolean' | 'date'
 
@@ -714,7 +715,32 @@ export default function Polaris() {
         { role: 'user', content: `Prospect inputs (JSON):\n${JSON.stringify({ answers1, answers2, answers3 }, null, 2)}` },
       ]
       const res = await callLLM(messages, { temperature: 0.1 })
-      setAnalysis(res.content || '')
+      const summaryContent = res.content || ''
+      setAnalysis(summaryContent)
+      
+      // Save the summary to database
+      if (summaryContent) {
+        try {
+          const { error: saveError } = await saveSummary({
+            company_name: answers1.company_name || null,
+            summary_content: summaryContent,
+            stage1_answers: answers1,
+            stage2_answers: answers2,
+            stage3_answers: answers3,
+            stage2_questions: stage2Questions,
+            stage3_questions: stage3Questions,
+          })
+          
+          if (saveError) {
+            console.error('Failed to save summary:', saveError)
+          } else {
+            console.log('Summary saved successfully')
+          }
+        } catch (saveErr) {
+          console.error('Error saving summary:', saveErr)
+        }
+      }
+      
       setActive('summary')
     } catch (e: any) {
       setError(e?.message || 'Failed to analyze answers.')
@@ -1177,7 +1203,14 @@ export default function Polaris() {
               </div>
 
               {/* Footer actions */}
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-between gap-2">
+                <button 
+                  type="button" 
+                  className="btn-ghost px-3 py-2 text-sm" 
+                  onClick={() => window.location.href = '/portal/summaries'}
+                >
+                  View All Summaries
+                </button>
                 <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage1')}>Start Over</button>
               </div>
               <details className="mt-2">

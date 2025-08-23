@@ -7,6 +7,7 @@ import jsPDF from 'jspdf'
 import { paths, portalUserPath, publicProfilePath } from '@/routes/paths'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { getCapitalizedFirstName } from '@/lib/textUtils'
+import { getRecentSummaries, type PolarisSummary } from '@/services/polarisSummaryService'
 
 
 type NavItem = string | { label: string; tagText?: string; tagTone?: 'success' | 'preview' | 'soon' | 'info' }
@@ -341,9 +342,11 @@ export function PortalPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const isSettings = location.pathname.endsWith('/settings')
+  const isSummaries = location.pathname.endsWith('/summaries')
   const { user: userParam } = useParams()
   const outlet = useOutlet()
   const viewingProfile = Boolean(userParam)
+  const [recentSummaries, setRecentSummaries] = useState<PolarisSummary[]>([])
   // Profile form state
   const [username, setUsername] = useState<string>('')
   const [displayName, setDisplayName] = useState<string>('')
@@ -395,16 +398,46 @@ export function PortalPage() {
       .auth
       .getUser()
       .then(({ data: { user: currentUser } }) => {
-        if (isMounted) setUser(currentUser ?? null)
+        if (isMounted) {
+          setUser(currentUser ?? null)
+          // Load recent summaries when user is authenticated
+          if (currentUser) {
+            loadRecentSummaries()
+          }
+        }
       })
     const { data: { subscription } } = getSupabase().auth.onAuthStateChange((_event, session) => {
-      if (isMounted) setUser(session?.user ?? null)
+      if (isMounted) {
+        setUser(session?.user ?? null)
+        // Reload recent summaries when auth state changes
+        if (session?.user) {
+          loadRecentSummaries()
+        }
+      }
     })
     return () => {
       isMounted = false
       subscription.unsubscribe()
     }
   }, [])
+
+  // Reload summaries when returning from Polaris page
+  useEffect(() => {
+    if (location.pathname === '/portal' || location.pathname === '/portal/summaries') {
+      loadRecentSummaries()
+    }
+  }, [location.pathname])
+
+  async function loadRecentSummaries() {
+    try {
+      const { data } = await getRecentSummaries(3)
+      if (data) {
+        setRecentSummaries(data)
+      }
+    } catch (err) {
+      console.error('Failed to load recent summaries:', err)
+    }
+  }
 
   // profile menu opener removed; profile page navigation is used instead
 
@@ -645,6 +678,51 @@ export function PortalPage() {
                   </ul>
                 </div>
               </div>
+              
+              {/* Recent Summaries Section */}
+              <div className="select-none border-t border-white/10 pt-3">
+                <div className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
+                  <span>Recent Summaries</span>
+                  {recentSummaries.length > 0 && (
+                    <span className="text-xs text-white/50">{recentSummaries.length}</span>
+                  )}
+                </div>
+                <div className="mt-1 pl-2">
+                  {recentSummaries.length > 0 ? (
+                    <ul className="space-y-0.5">
+                      {recentSummaries.map((summary) => (
+                        <li key={summary.id}>
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/portal/summaries`)}
+                            className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
+                          >
+                            <span className="truncate">
+                              {summary.company_name || 'Untitled Discovery'}
+                            </span>
+                            <span className="text-[10px] text-white/40">
+                              {new Date(summary.created_at).toLocaleDateString()}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                      <li>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/portal/summaries')}
+                          className="w-full text-left px-3 py-1.5 text-sm text-primary-400 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
+                        >
+                          View all summaries →
+                        </button>
+                      </li>
+                    </ul>
+                  ) : (
+                    <div className="px-3 py-2 text-xs text-white/40">
+                      No summaries yet
+                    </div>
+                  )}
+                </div>
+              </div>
             </nav>
           )}
 
@@ -729,6 +807,13 @@ export function PortalPage() {
                     <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">Settings</h1>
                     <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
                       Manage your account, settings, and preferences.
+                    </p>
+                  </>
+                ) : isSummaries ? (
+                  <>
+                    <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">Discovery Summaries</h1>
+                    <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
+                      View and manage all your Polaris discovery summaries.
                     </p>
                   </>
                 ) : viewingProfile ? (
@@ -1183,6 +1268,57 @@ export function PortalPage() {
                   <NavSection title="Ignite" items={["Explore Learning", "My Learning"]} defaultOpen />
                   <NavSection title="Strategic Skills Architecture" items={["Explore Partnership", "My Architecture"]} defaultOpen />
                   <NavSection title="Solara" items={solaraItems} defaultOpen />
+                  
+                  {/* Recent Summaries Section for Mobile */}
+                  <div className="select-none border-t border-white/10 pt-3">
+                    <div className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
+                      <span>Recent Summaries</span>
+                      {recentSummaries.length > 0 && (
+                        <span className="text-xs text-white/50">{recentSummaries.length}</span>
+                      )}
+                    </div>
+                    <div className="mt-1 pl-2">
+                      {recentSummaries.length > 0 ? (
+                        <ul className="space-y-0.5">
+                          {recentSummaries.map((summary) => (
+                            <li key={summary.id}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMobileMenuOpen(false)
+                                  navigate(`/portal/summaries`)
+                                }}
+                                className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
+                              >
+                                <span className="truncate">
+                                  {summary.company_name || 'Untitled Discovery'}
+                                </span>
+                                <span className="text-[10px] text-white/40">
+                                  {new Date(summary.created_at).toLocaleDateString()}
+                                </span>
+                              </button>
+                            </li>
+                          ))}
+                          <li>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setMobileMenuOpen(false)
+                                navigate('/portal/summaries')
+                              }}
+                              className="w-full text-left px-3 py-1.5 text-sm text-primary-400 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
+                            >
+                              View all summaries →
+                            </button>
+                          </li>
+                        </ul>
+                      ) : (
+                        <div className="px-3 py-2 text-xs text-white/40">
+                          No summaries yet
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </nav>
                 <div className="mt-auto">
                   <div className="px-1 py-2 border-t border-white/10">

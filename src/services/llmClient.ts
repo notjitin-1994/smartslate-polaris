@@ -18,9 +18,12 @@ async function callOpenAI(
   const res = await fetch(`/api/openai`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, temperature, messages }),
+    body: JSON.stringify({ model, temperature, messages, max_tokens: 4096 }),
   })
-  if (!res.ok) throw new Error(`OpenAI error: ${res.status}`)
+  if (!res.ok) {
+    const detail = await safeReadText(res)
+    throw new Error(`OpenAI error: ${res.status}${detail ? ` - ${detail}` : ''}`)
+  }
   const data = await res.json()
   return { content: data?.choices?.[0]?.message?.content ?? '' }
 }
@@ -48,15 +51,27 @@ async function callAnthropic(
       temperature,
       system,
       messages: nonSystem,
-      max_tokens: env.anthropicMaxTokens ? Number(env.anthropicMaxTokens) : 1024,
+      max_tokens: env.anthropicMaxTokens ? Number(env.anthropicMaxTokens) : 4096,
     }),
   })
-  if (!res.ok) throw new Error(`Anthropic error: ${res.status}`)
+  if (!res.ok) {
+    const detail = await safeReadText(res)
+    throw new Error(`Anthropic error: ${res.status}${detail ? ` - ${detail}` : ''}`)
+  }
   const data = await res.json()
   const content = Array.isArray(data?.content)
     ? data.content.map((c: any) => c?.text || '').join('\n')
     : ''
   return { content }
+}
+
+async function safeReadText(res: Response): Promise<string | undefined> {
+  try {
+    const text = await res.text()
+    return text?.slice(0, 500)
+  } catch {
+    return undefined
+  }
 }
 
 

@@ -3,7 +3,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 function allowCors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, anthropic-version')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, anthropic-version, anthropic-dangerous-direct-browser-access')
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -17,17 +17,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = (process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || '').trim()
   if (!apiKey) {
     res.status(500).json({ error: 'Server not configured: ANTHROPIC_API_KEY missing' })
     return
   }
 
   try {
-    const baseUrl = (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '')
-    const version = process.env.ANTHROPIC_VERSION || '2023-06-01'
-    const defaultModel = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest'
-    const defaultMax = Number(process.env.ANTHROPIC_MAX_TOKENS) || 1024
+    const baseUrl = ((process.env.ANTHROPIC_BASE_URL || process.env.VITE_ANTHROPIC_BASE_URL || 'https://api.anthropic.com').trim()).replace(/\/$/, '')
+    const version = (process.env.ANTHROPIC_VERSION || '2023-06-01').trim()
+    const defaultModel = (process.env.ANTHROPIC_MODEL || process.env.VITE_ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest').trim()
+    const defaultMax = Number(process.env.ANTHROPIC_MAX_TOKENS || process.env.VITE_ANTHROPIC_MAX_TOKENS) || 4096
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
     const payload = {

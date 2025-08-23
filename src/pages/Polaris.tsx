@@ -47,20 +47,87 @@ function userPromptForStage(stage: 1 | 2 | 3, prior: any) {
 }
 
 function extractJsonBlock(s: string): any {
-  const trimmed = s.trim()
-  try {
-    return JSON.parse(trimmed)
-  } catch {
-    const start = trimmed.indexOf('{')
-    const end = trimmed.lastIndexOf('}')
-    if (start !== -1 && end !== -1 && end > start) {
-      const slice = trimmed.slice(start, end + 1)
+  const text = (s || '').trim()
+
+  function fixJsonCommonIssues(input: string) {
+    let out = input
+    // normalize smart quotes
+    out = out.replace(/[“”]/g, '"').replace(/[‘’]/g, "'")
+    // strip code fences
+    out = out.replace(/```json\s*([\s\S]*?)```/gi, '$1').replace(/```\s*([\s\S]*?)```/g, '$1')
+    // remove trailing commas before } or ]
+    out = out.replace(/,(\s*[}\]])/g, '$1')
+    return out
+  }
+
+  function tryParse(candidate: string) {
+    try {
+      return JSON.parse(candidate)
+    } catch {
       try {
-        return JSON.parse(slice)
-      } catch {}
+        const fixed = fixJsonCommonIssues(candidate)
+        return JSON.parse(fixed)
+      } catch {
+        return undefined
+      }
     }
   }
-  throw new Error('Could not parse LLM JSON')
+
+  // direct parse
+  let parsed = tryParse(text)
+  if (parsed !== undefined) {
+    return Array.isArray(parsed) ? { questions: parsed } : parsed
+  }
+
+  // ```json ... ``` fenced block
+  const fenceJson = text.match(/```json\s*([\s\S]*?)```/i)
+  if (fenceJson) {
+    parsed = tryParse(fenceJson[1].trim())
+    if (parsed !== undefined) return Array.isArray(parsed) ? { questions: parsed } : parsed
+  }
+
+  // generic ``` ... ``` fenced block
+  const fence = text.match(/```\s*([\s\S]*?)```/)
+  if (fence) {
+    parsed = tryParse(fence[1].trim())
+    if (parsed !== undefined) return Array.isArray(parsed) ? { questions: parsed } : parsed
+  }
+
+  function extractBalanced(startChar: '{' | '[', endChar: '}' | ']', source: string): string | undefined {
+    const start = source.indexOf(startChar)
+    if (start === -1) return undefined
+    let depth = 0
+    let inString = false
+    let prev = ''
+    for (let i = start; i < source.length; i++) {
+      const ch = source[i]
+      if (ch === '"' && prev !== '\\') inString = !inString
+      if (!inString) {
+        if (ch === startChar) depth++
+        if (ch === endChar) depth--
+        if (depth === 0) return source.slice(start, i + 1)
+      }
+      prev = ch
+    }
+    return undefined
+  }
+
+  // balanced object
+  const balancedObj = extractBalanced('{', '}', text)
+  if (balancedObj) {
+    parsed = tryParse(balancedObj)
+    if (parsed !== undefined) return Array.isArray(parsed) ? { questions: parsed } : parsed
+  }
+
+  // balanced array
+  const balancedArr = extractBalanced('[', ']', text)
+  if (balancedArr) {
+    parsed = tryParse(balancedArr)
+    if (parsed !== undefined) return Array.isArray(parsed) ? { questions: parsed } : parsed
+  }
+
+  const snippet = text.slice(0, 200)
+  throw new Error(`Could not parse LLM JSON. Snippet: ${snippet}`)
 }
 
 export default function Polaris() {

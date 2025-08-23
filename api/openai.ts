@@ -17,21 +17,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return
   }
 
-  const apiKey = process.env.OPENAI_API_KEY
+  const apiKey = (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '').trim()
   if (!apiKey) {
     res.status(500).json({ error: 'Server not configured: OPENAI_API_KEY missing' })
     return
   }
 
   try {
-    const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com').replace(/\/$/, '')
-    const defaultModel = process.env.OPENAI_MODEL || 'gpt-5'
+    const baseUrl = ((process.env.OPENAI_BASE_URL || process.env.VITE_OPENAI_BASE_URL || 'https://api.openai.com').trim()).replace(/\/$/, '')
+    const defaultModel = (process.env.OPENAI_MODEL || process.env.VITE_OPENAI_MODEL || 'gpt-5').trim()
+    const defaultMax = Number(process.env.OPENAI_MAX_TOKENS || process.env.VITE_OPENAI_MAX_TOKENS) || 4096
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
     const payload = {
       model: body.model || defaultModel,
       temperature: body.temperature ?? 0.2,
       messages: body.messages,
+      max_tokens: typeof body.max_tokens === 'number' ? body.max_tokens : defaultMax,
     }
 
     const upstream = await fetch(`${baseUrl}/v1/chat/completions`, {

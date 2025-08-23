@@ -61,6 +61,26 @@ const STATIC_GROUPS_META: Array<{ id: string; label: string; description?: strin
     fieldIds: ['available_technologies', 'tech_expertise_level', 'talent_availability', 'talent_gaps', 'tech_limitations', 'talent_constraints', 'tech_investment_appetite'],
   },
   {
+    id: 'content_tools',
+    label: 'Content Creation Tools',
+    description: 'Authoring, media, AI, platforms & providers for content delivery',
+    fieldIds: [
+      'content_delivery_types',
+      'authoring_tools',
+      'video_audio_tools',
+      'visual_design_tools',
+      'interactive_tools',
+      'ai_content_tools',
+      'translation_tools',
+      'content_libraries',
+      'lms_lxp_platforms',
+      'assessment_survey_tools',
+      'knowledge_doc_tools',
+      'other_content_tools',
+      'integration_constraints_content_tools',
+    ],
+  },
+  {
     id: 'contacts',
     label: 'Contacts',
     description: 'Primary stakeholder information',
@@ -69,7 +89,7 @@ const STATIC_GROUPS_META: Array<{ id: string; label: string; description?: strin
 ]
 
 export default function Polaris() {
-  const [active, setActive] = useState<'experience' | 'static' | 'stage2' | 'stage3' | 'stage4' | 'report'>('experience')
+  const [active, setActive] = useState<'experience' | 'static' | 'stage2' | 'stage3' | 'stage4' | 'stage5' | 'report'>('experience')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [summaryCount, setSummaryCount] = useState<number>(0)
@@ -81,15 +101,17 @@ export default function Polaris() {
   const [stage2Answers, setStage2Answers] = useState<NAResponseMap>({})
   const [stage3Answers, setStage3Answers] = useState<NAResponseMap>({})
   const [stage4Answers, setStage4Answers] = useState<NAResponseMap>({})
+  const [stage5Answers, setStage5Answers] = useState<NAResponseMap>({})
   
   // Dynamic questions state
   const [stage2Questions, setStage2Questions] = useState<NAField[]>([])
   const [stage3Questions, setStage3Questions] = useState<NAField[]>([])
   const [stage4Questions, setStage4Questions] = useState<NAField[]>([])
+  const [stage5Questions, setStage5Questions] = useState<NAField[]>([])
   const [shouldShowStage4, setShouldShowStage4] = useState(false)
   
   // Stage titles
-  const [stageTitles, setStageTitles] = useState<{ stage2?: string; stage3?: string; stage4?: string }>({})
+  const [stageTitles, setStageTitles] = useState<{ stage2?: string; stage3?: string; stage4?: string; stage5?: string }>({})
   
   // Final report
   const [reportMarkdown, setReportMarkdown] = useState<string>('')
@@ -97,6 +119,9 @@ export default function Polaris() {
   // UI state
   const [staticGroupIndex, setStaticGroupIndex] = useState<number>(0)
   const summaryRef = useRef<HTMLDivElement | null>(null)
+  const staticTabsContainerRef = useRef<HTMLDivElement | null>(null)
+  const staticTabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
+  const staticSectionRef = useRef<HTMLDivElement | null>(null)
   
   // Smooth loading overlay state
   const [loader, setLoader] = useState<{ active: boolean; phase?: string; message: string; progress: number; etaSeconds: number }>({ 
@@ -114,6 +139,25 @@ export default function Polaris() {
     }
     loadSummaryCount()
   }, [])
+
+  // Ensure the selected static tab and its content are visible when navigating sections
+  useEffect(() => {
+    if (active !== 'static') return
+    const groups = STATIC_GROUPS_META
+    const safeIndex = Math.max(0, Math.min(staticGroupIndex, groups.length - 1))
+    const group = groups[safeIndex]
+    const btn = group ? staticTabButtonRefs.current[group.id] : null
+    if (btn && typeof (btn as any).scrollIntoView === 'function') {
+      try {
+        btn.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+      } catch {}
+    }
+    if (staticSectionRef.current && typeof (staticSectionRef.current as any).scrollIntoView === 'function') {
+      try {
+        staticSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      } catch {}
+    }
+  }, [active, staticGroupIndex])
   
   // Check if experience is selected
   const experienceLevel = experienceAnswer.exp_level as string | undefined
@@ -123,8 +167,21 @@ export default function Polaris() {
   const staticRequiredFields = NA_STATIC_FIELDS.filter(f => f.required)
   const staticComplete = staticRequiredFields.every(f => {
     const val = staticAnswers[f.id]
-    if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
-    return val !== undefined && val !== null && val !== ''
+    switch (f.type) {
+      case 'multi_select':
+        return Array.isArray(val) && val.length > 0
+      case 'calendar_range': {
+        const v = (val || {}) as { start?: string; end?: string }
+        return typeof v.start === 'string' && v.start !== '' && typeof v.end === 'string' && v.end !== ''
+      }
+      case 'calendar_date':
+        return typeof val === 'string' && val !== ''
+      case 'slider':
+      case 'number':
+        return typeof val === 'number' && !Number.isNaN(val)
+      default:
+        return val !== undefined && val !== null && val !== ''
+    }
   })
   
   // Helper for smooth loader animation
@@ -133,7 +190,7 @@ export default function Polaris() {
   }
 
   function startSmartLoader(phase: string) {
-    const baseTime = phase === 'stage2' ? 8000 : phase === 'stage3' ? 7000 : phase === 'stage4' ? 6500 : 9000
+    const baseTime = phase === 'stage2' ? 8000 : phase === 'stage3' ? 7000 : phase === 'stage4' ? 6500 : phase === 'stage5' ? 6500 : 9000
     const targetMs = Math.min(14000, Math.max(5500, baseTime))
     const start = Date.now()
     
@@ -162,6 +219,36 @@ export default function Polaris() {
     }
     setLoader((prev) => ({ ...prev, active: true, progress: 100, message: 'Ready' }))
     window.setTimeout(() => setLoader({ active: false, message: '', progress: 0, etaSeconds: 0 }), 450)
+  }
+
+  // Centralized reset to restart the whole process
+  function resetAll() {
+    try {
+      if (loaderIntervalRef.current) {
+        clearInterval(loaderIntervalRef.current)
+        loaderIntervalRef.current = null
+      }
+    } catch {}
+
+    setLoader({ active: false, message: '', progress: 0, etaSeconds: 0 })
+
+    setExperienceAnswer({})
+    setStaticAnswers({})
+    setStage2Answers({})
+    setStage3Answers({})
+    setStage4Answers({})
+    setStage5Answers({})
+
+    setStage2Questions([])
+    setStage3Questions([])
+    setStage4Questions([])
+    setStage5Questions([])
+
+    setReportMarkdown('')
+    setStageTitles({})
+    setShouldShowStage4(false)
+    setStaticGroupIndex(0)
+    setActive('experience')
   }
 
   // Generate Stage 2 questions
@@ -252,6 +339,33 @@ export default function Polaris() {
       stopSmartLoader()
     }
   }
+
+  // Generate Stage 5 questions (Talent, Tools & Resources consolidation)
+  async function generateStage5() {
+    try {
+      setLoading(true)
+      setError(null)
+      startSmartLoader('stage5')
+
+      const prior = { ...staticAnswers, ...stage2Answers, ...stage3Answers, ...(shouldShowStage4 ? stage4Answers : {}) }
+      const titlePrompt = NA_STAGE_TITLE_PROMPT(experienceLevel!, 5 as any, prior)
+      const titleRes = await callLLM([{ role: 'user', content: titlePrompt }])
+      const stage5Title = titleRes.content.trim()
+
+      const questionsPrompt = NA_QUESTIONNAIRE_PROMPT(experienceLevel!, 5 as any, staticAnswers, { ...stage2Answers, ...stage3Answers, ...(shouldShowStage4 ? stage4Answers : {}) })
+      const res = await callLLM([{ role: 'user', content: questionsPrompt }])
+      const json = JSON.parse(tryExtractJson(res.content))
+
+      setStage5Questions(json.questions || [])
+      setStageTitles(prev => ({ ...prev, stage5: json.title || stage5Title }))
+      setActive('stage5')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to create Stage 5 questions.')
+    } finally {
+      setLoading(false)
+      stopSmartLoader()
+    }
+  }
   
   // Check complexity to determine if Stage 4 is needed
   function checkComplexity(): boolean {
@@ -276,7 +390,8 @@ export default function Polaris() {
         static: staticAnswers,
         stage2: stage2Answers,
         stage3: stage3Answers,
-        ...(shouldShowStage4 ? { stage4: stage4Answers } : {})
+        ...(shouldShowStage4 ? { stage4: stage4Answers } : {}),
+        stage5: stage5Answers,
       }
       
       // Generate structured report
@@ -407,9 +522,9 @@ export default function Polaris() {
             summary_content: summaryContent,
             stage1_answers: { ...experienceAnswer, ...staticAnswers },
             stage2_answers: stage2Answers,
-            stage3_answers: { ...stage3Answers, ...(shouldShowStage4 ? stage4Answers : {}) },
+            stage3_answers: { ...stage3Answers, ...(shouldShowStage4 ? stage4Answers : {}), ...stage5Answers },
             stage2_questions: stage2Questions,
-            stage3_questions: [...stage3Questions, ...(shouldShowStage4 ? stage4Questions : [])],
+            stage3_questions: [...stage3Questions, ...(shouldShowStage4 ? stage4Questions : []), ...stage5Questions],
           })
           
           if (saveError) {
@@ -693,6 +808,57 @@ export default function Polaris() {
     return md
   }
   
+  // Minimal icon set for Material-inspired icon-only actions
+  function IconChevronLeft({ className = '' }: { className?: string }) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M15 18l-6-6 6-6" />
+      </svg>
+    )
+  }
+
+  function IconChevronRight({ className = '' }: { className?: string }) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9 18l6-6-6-6" />
+      </svg>
+    )
+  }
+
+  function IconReset({ className = '' }: { className?: string }) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <polyline points="1 4 1 10 7 10" />
+        <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+      </svg>
+    )
+  }
+
+  // IconPlay removed (unused)
+
+  function IconReport({ className = '' }: { className?: string }) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <path d="M14 2v6h6" />
+        <path d="M16 13H8" />
+        <path d="M16 17H8" />
+        <path d="M10 9H8" />
+      </svg>
+    )
+  }
+
+  function IconGrid({ className = '' }: { className?: string }) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="7" height="7" />
+        <rect x="14" y="3" width="7" height="7" />
+        <rect x="14" y="14" width="7" height="7" />
+        <rect x="3" y="14" width="7" height="7" />
+      </svg>
+    )
+  }
+
 
   
   
@@ -705,7 +871,8 @@ export default function Polaris() {
       { key: 'stage2', label: stageTitles.stage2 || 'Deep Dive', enabled: staticComplete },
       { key: 'stage3', label: stageTitles.stage3 || 'Clarification', enabled: stage2Questions.length > 0 },
       ...(shouldShowStage4 ? [{ key: 'stage4', label: stageTitles.stage4 || 'Final Details', enabled: stage3Questions.length > 0 }] : []),
-      { key: 'report', label: 'Analysis Report', enabled: stage3Questions.length > 0 },
+      { key: 'stage5', label: stageTitles.stage5 || 'Talent, Tools & Resources', enabled: (shouldShowStage4 ? stage4Questions.length > 0 : stage3Questions.length > 0) },
+      { key: 'report', label: 'Analysis Report', enabled: stage5Questions.length > 0 },
     ]
     
     const activeIndex = steps.findIndex(s => s.key === active)
@@ -715,7 +882,7 @@ export default function Polaris() {
       <div className="mb-5">
         <div className="glass-card p-4 md:p-6 elevate relative">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto hide-scrollbar pr-4 md:pr-6">
               {/* Mobile: progress bar */}
         <div className="md:hidden flex items-center gap-3">
           <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -731,7 +898,7 @@ export default function Polaris() {
 
               {/* Desktop: stepper */}
         <div className="hidden md:block">
-          <ol className="flex items-center gap-4 flex-nowrap whitespace-nowrap w-max">
+          <ol className="flex items-center gap-4 flex-nowrap whitespace-nowrap w-max overflow-x-auto hide-scrollbar">
             {steps.map((s, idx) => {
                     const isCompleted = idx < activeIndex
                     const isActive = idx === activeIndex
@@ -770,6 +937,8 @@ export default function Polaris() {
             })}
           </ol>
         </div>
+                {/* Right-edge fade to indicate more content */}
+                <div className="fade-right hidden md:block" aria-hidden="true" />
             </div>
             
             <div className="flex items-center gap-3">
@@ -778,21 +947,12 @@ export default function Polaris() {
               </div>
               <button
                 type="button"
-                className="btn-ghost px-3 py-2 text-sm"
-                onClick={() => {
-                  setExperienceAnswer({})
-                  setStaticAnswers({})
-                  setStage2Answers({})
-                  setStage3Answers({})
-                  setStage4Answers({})
-                  setStage2Questions([])
-                  setStage3Questions([])
-                  setStage4Questions([])
-                  setReportMarkdown('')
-                  setActive('experience')
-                }}
+                className="icon-btn icon-btn-sm icon-btn-ghost"
+                aria-label="Reset"
+                title="Reset"
+                onClick={resetAll}
               >
-                Start Over
+                <IconReset className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -899,11 +1059,13 @@ export default function Polaris() {
             <div className="mt-6 flex justify-end">
               <button
                 type="button"
-                className={`btn-primary ${hasExperience ? '' : 'opacity-60 cursor-not-allowed'}`}
+                className={`icon-btn icon-btn-primary ${hasExperience ? '' : 'opacity-60 cursor-not-allowed'}`}
                 onClick={() => hasExperience && setActive('static')}
                 disabled={!hasExperience}
+                aria-label="Continue"
+                title="Continue"
               >
-                Continue to Assessment
+                <IconChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>
@@ -936,19 +1098,37 @@ export default function Polaris() {
           <section className="space-y-4">
             {/* Desktop: tabs */}
             <div className="hidden md:block">
-              <div role="tablist" className="flex items-center gap-2 overflow-x-auto">
+              <div role="tablist" ref={staticTabsContainerRef} className="flex items-center gap-2 overflow-x-auto hide-scrollbar">
                 {groups.map((g, idx) => {
                   const selected = idx === staticGroupIndex
-                  const groupComplete = g.fields
-                    .filter(f => f.required)
-                    .every(f => {
-                      const val = staticAnswers[f.id]
-                      if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
-                      return val !== undefined && val !== null && val !== ''
-                    })
+                  const requiredFields = g.fields.filter(f => f.required)
+                  const groupComplete = requiredFields.length > 0
+                    ? requiredFields.every(f => {
+                        const val = staticAnswers[f.id]
+                        if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
+                        if (f.type === 'calendar_range') {
+                          const v = (val || {}) as { start?: string; end?: string }
+                          return typeof v.start === 'string' && v.start !== '' && typeof v.end === 'string' && v.end !== ''
+                        }
+                        if (f.type === 'calendar_date') return typeof val === 'string' && val !== ''
+                        if (f.type === 'slider' || f.type === 'number') return typeof val === 'number' && !Number.isNaN(val)
+                        return val !== undefined && val !== null && val !== ''
+                      })
+                    : g.fields.some(f => {
+                        const val = staticAnswers[f.id]
+                        if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
+                        if (f.type === 'calendar_range') {
+                          const v = (val || {}) as { start?: string; end?: string }
+                          return typeof v.start === 'string' && v.start !== '' && typeof v.end === 'string' && v.end !== ''
+                        }
+                        if (f.type === 'calendar_date') return typeof val === 'string' && val !== ''
+                        if (f.type === 'slider' || f.type === 'number') return typeof val === 'number' && !Number.isNaN(val)
+                        return val !== undefined && val !== null && val !== ''
+                      })
                   
                   return (
                     <button
+                      ref={(el) => { staticTabButtonRefs.current[g.id] = el }}
                       key={g.id}
                       role="tab"
                       aria-selected={selected}
@@ -962,9 +1142,11 @@ export default function Polaris() {
                     >
                       <span className="inline-flex items-center gap-1">
                         {g.label}
-                        {groupComplete && (
-                          <span className="ml-1 h-1.5 w-1.5 rounded-full bg-green-400 ring-1 ring-black/30" />
-                        )}
+                        <span
+                          className={`ml-1 h-1.5 w-1.5 rounded-full ring-1 ring-black/30 ${groupComplete ? 'bg-green-400' : 'bg-amber-400'}`}
+                          aria-label={groupComplete ? 'Complete' : 'Incomplete'}
+                          title={groupComplete ? 'Complete' : 'Incomplete'}
+                        />
                       </span>
                     </button>
                   )
@@ -972,7 +1154,7 @@ export default function Polaris() {
               </div>
             </div>
 
-            {/* Mobile: progress */}
+            {/* Mobile: progress & controls */}
             <div className="md:hidden space-y-3">
               <div className="flex items-center gap-3">
                 <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
@@ -987,27 +1169,70 @@ export default function Polaris() {
                 <div className="flex gap-2">
                   <button 
                     type="button" 
-                    className="btn-ghost px-3 py-1.5 text-xs" 
+                    className="icon-btn icon-btn-sm" 
                     onClick={() => setStaticGroupIndex(v => Math.max(0, v - 1))} 
                     disabled={isFirst}
+                    aria-label="Previous section"
+                    title="Previous section"
                   >
-                    Back
+                    <IconChevronLeft className="w-4 h-4" />
                   </button>
                   {!isLast && (
                     <button 
                       type="button" 
-                      className="btn-ghost px-3 py-1.5 text-xs" 
+                      className="icon-btn icon-btn-sm" 
                       onClick={() => setStaticGroupIndex(v => Math.min(total - 1, v + 1))}
+                      aria-label="Next section"
+                      title="Next section"
                     >
-                      Next
+                      <IconChevronRight className="w-4 h-4" />
                     </button>
                   )}
                 </div>
               </div>
+              {/* Mobile section status dots */}
+              <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
+                {groups.map((g, idx) => {
+                  const requiredFields = g.fields.filter(f => f.required)
+                  const groupComplete = requiredFields.length > 0
+                    ? requiredFields.every(f => {
+                        const val = staticAnswers[f.id]
+                        if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
+                        if (f.type === 'calendar_range') {
+                          const v = (val || {}) as { start?: string; end?: string }
+                          return typeof v.start === 'string' && v.start !== '' && typeof v.end === 'string' && v.end !== ''
+                        }
+                        if (f.type === 'calendar_date') return typeof val === 'string' && val !== ''
+                        if (f.type === 'slider' || f.type === 'number') return typeof val === 'number' && !Number.isNaN(val)
+                        return val !== undefined && val !== null && val !== ''
+                      })
+                    : g.fields.some(f => {
+                        const val = staticAnswers[f.id]
+                        if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
+                        if (f.type === 'calendar_range') {
+                          const v = (val || {}) as { start?: string; end?: string }
+                          return typeof v.start === 'string' && v.start !== '' && typeof v.end === 'string' && v.end !== ''
+                        }
+                        if (f.type === 'calendar_date') return typeof val === 'string' && val !== ''
+                        if (f.type === 'slider' || f.type === 'number') return typeof val === 'number' && !Number.isNaN(val)
+                        return val !== undefined && val !== null && val !== ''
+                      })
+                  return (
+                    <button
+                      type="button"
+                      key={g.id}
+                      onClick={() => setStaticGroupIndex(idx)}
+                      aria-label={`Go to ${g.label}`}
+                      title={g.label}
+                      className={`inline-flex items-center justify-center h-2 w-2 rounded-full ring-1 ring-black/30 ${groupComplete ? 'bg-green-400' : 'bg-amber-400'}`}
+                    />
+                  )
+                })}
+              </div>
             </div>
 
             {/* Fields */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 animate-fade-in-up">
+              <div ref={staticSectionRef} className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5 animate-fade-in-up">
               {current.fields.map((field) => (
                 <div key={field.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
                     <span className="interactive-spotlight" />
@@ -1024,35 +1249,83 @@ export default function Polaris() {
               <p className="text-xs text-white/60">{current.description}</p>
               )}
 
-            {/* Actions */}
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <button 
-                  type="button" 
-                  className="btn-ghost px-3 py-2 text-sm" 
-                  onClick={() => setActive('experience')}
-                >
-                  Back
-                </button>
+            {/* Bottom progress & navigation rail */}
+            <div className="mt-6">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-full bg-primary-200/80 rounded-full bar-smooth" style={{ width: `${((staticGroupIndex + 1) / total) * 100}%` }} />
+                </div>
+                <span className="text-xs text-white/60 whitespace-nowrap">{staticGroupIndex + 1} / {total}</span>
               </div>
-              <div className="flex items-center gap-2">
-                {!isLast && (
-                <button
-                  type="button"
-                    className="btn-ghost px-3 py-2 text-sm hidden md:inline-flex"
-                    onClick={() => setStaticGroupIndex(Math.min(total - 1, staticGroupIndex + 1))}
-                >
-                    Next Section
-                </button>
-                )}
-                <button
-                  type="button"
-                  className={`btn-primary text-sm ${staticComplete ? '' : 'opacity-60 cursor-not-allowed'}`}
-                  onClick={generateStage2}
-                  disabled={loading || !staticComplete}
-                >
-                  {loading ? 'Generating…' : 'Continue to Dynamic Questions'}
-                </button>
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-white/90">{current.label}</div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-sm"
+                    onClick={() => setStaticGroupIndex(v => Math.max(0, v - 1))}
+                    disabled={isFirst}
+                    aria-label="Previous section"
+                    title="Previous section"
+                  >
+                    <IconChevronLeft className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn-sm"
+                    onClick={() => {
+                      if (!isLast) {
+                        setStaticGroupIndex(Math.min(total - 1, staticGroupIndex + 1))
+                      } else if (!loading && staticComplete) {
+                        generateStage2()
+                      }
+                    }}
+                    disabled={loading || (isLast && !staticComplete)}
+                    aria-label={isLast ? (staticComplete ? 'Continue' : 'Complete required fields to continue') : 'Next section'}
+                    title={isLast ? (staticComplete ? 'Continue' : 'Complete required fields to continue') : 'Next section'}
+                  >
+                    <IconChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="mt-2 flex items-center gap-1 overflow-x-auto hide-scrollbar">
+                {groups.map((g, idx) => {
+                  const requiredFields = g.fields.filter(f => f.required)
+                  const groupComplete = requiredFields.length > 0
+                    ? requiredFields.every(f => {
+                        const val = staticAnswers[f.id]
+                        if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
+                        if (f.type === 'calendar_range') {
+                          const v = (val || {}) as { start?: string; end?: string }
+                          return typeof v.start === 'string' && v.start !== '' && typeof v.end === 'string' && v.end !== ''
+                        }
+                        if (f.type === 'calendar_date') return typeof val === 'string' && val !== ''
+                        if (f.type === 'slider' || f.type === 'number') return typeof val === 'number' && !Number.isNaN(val)
+                        return val !== undefined && val !== null && val !== ''
+                      })
+                    : g.fields.some(f => {
+                        const val = staticAnswers[f.id]
+                        if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
+                        if (f.type === 'calendar_range') {
+                          const v = (val || {}) as { start?: string; end?: string }
+                          return typeof v.start === 'string' && v.start !== '' && typeof v.end === 'string' && v.end !== ''
+                        }
+                        if (f.type === 'calendar_date') return typeof val === 'string' && val !== ''
+                        if (f.type === 'slider' || f.type === 'number') return typeof val === 'number' && !Number.isNaN(val)
+                        return val !== undefined && val !== null && val !== ''
+                      })
+                  const isActive = idx === staticGroupIndex
+                  return (
+                    <button
+                      type="button"
+                      key={g.id}
+                      onClick={() => setStaticGroupIndex(idx)}
+                      aria-label={`Go to ${g.label}`}
+                      title={g.label}
+                      className={`inline-flex items-center justify-center h-2 w-2 rounded-full ring-1 ring-black/30 ${isActive ? 'bg-primary-400' : groupComplete ? 'bg-green-400' : 'bg-amber-400'}`}
+                    />
+                  )
+                })}
               </div>
             </div>
           </section>
@@ -1078,11 +1351,11 @@ export default function Polaris() {
             </div>
           </div>
           <div className="flex justify-between gap-2">
-            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('static')}>
-              Back
+            <button type="button" className="icon-btn" aria-label="Back" title="Back" onClick={() => setActive('static')}>
+              <IconChevronLeft className="w-4 h-4" />
             </button>
-            <button type="button" className="btn-primary text-sm" onClick={generateStage3} disabled={loading}>
-              {loading ? 'Generating…' : 'Continue'}
+            <button type="button" className="icon-btn icon-btn-primary" aria-label={loading ? 'Generating' : 'Continue'} title={loading ? 'Generating' : 'Continue'} onClick={generateStage3} disabled={loading}>
+              <IconChevronRight className="w-4 h-4" />
             </button>
           </div>
         </section>
@@ -1107,16 +1380,16 @@ export default function Polaris() {
             </div>
           </div>
           <div className="flex justify-between gap-2">
-            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage2')}>
-              Back
+            <button type="button" className="icon-btn" aria-label="Back" title="Back" onClick={() => setActive('stage2')}>
+              <IconChevronLeft className="w-4 h-4" />
             </button>
             {shouldShowStage4 ? (
-              <button type="button" className="btn-primary text-sm" onClick={generateStage4} disabled={loading}>
-                {loading ? 'Generating…' : 'Continue to Final Details'}
+              <button type="button" className="icon-btn icon-btn-primary" aria-label={loading ? 'Generating' : 'Continue'} title={loading ? 'Generating' : 'Continue'} onClick={generateStage4} disabled={loading}>
+                <IconChevronRight className="w-4 h-4" />
               </button>
             ) : (
-              <button type="button" className="btn-primary text-sm" onClick={generateReport} disabled={loading}>
-                {loading ? 'Analyzing…' : 'Generate Report'}
+              <button type="button" className="icon-btn icon-btn-primary" aria-label={loading ? 'Generating' : 'Continue'} title={loading ? 'Generating' : 'Continue'} onClick={generateStage5} disabled={loading}>
+                <IconChevronRight className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -1142,13 +1415,42 @@ export default function Polaris() {
               </div>
                   </div>
           <div className="flex justify-between gap-2">
-            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage3')}>
-              Back
+            <button type="button" className="icon-btn" aria-label="Back" title="Back" onClick={() => setActive('stage3')}>
+              <IconChevronLeft className="w-4 h-4" />
             </button>
-            <button type="button" className="btn-primary text-sm" onClick={generateReport} disabled={loading}>
-              {loading ? 'Analyzing…' : 'Generate Report'}
+            <button type="button" className="icon-btn icon-btn-primary" aria-label={loading ? 'Generating' : 'Continue'} title={loading ? 'Generating' : 'Continue'} onClick={generateStage5} disabled={loading}>
+              <IconChevronRight className="w-4 h-4" />
             </button>
+          </div>
+        </section>
+      )}
+
+      {/* Stage 5 */}
+      {active === 'stage5' && (
+        <section className="space-y-4">
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold text-white mb-4">{stageTitles.stage5 || 'Talent, Tools & Resources'}</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
+              {stage5Questions.map((field) => (
+                <div key={field.id} className="glass-card group p-4 md:p-5 relative overflow-hidden">
+                  <span className="interactive-spotlight" />
+                  <RenderField
+                    field={field}
+                    value={stage5Answers[field.id]}
+                    onChange={(id, value) => setStage5Answers(prev => ({ ...prev, [id]: value }))}
+                  />
                 </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex justify-between gap-2">
+            <button type="button" className="icon-btn" aria-label="Back" title="Back" onClick={() => (shouldShowStage4 ? setActive('stage4') : setActive('stage3'))}>
+              <IconChevronLeft className="w-4 h-4" />
+            </button>
+            <button type="button" className="icon-btn icon-btn-primary" aria-label={loading ? 'Analyzing' : 'Generate Report'} title={loading ? 'Analyzing' : 'Generate Report'} onClick={generateReport} disabled={loading}>
+              <IconReport className="w-4 h-4" />
+            </button>
+          </div>
         </section>
       )}
       
@@ -1168,32 +1470,25 @@ export default function Polaris() {
               </div>
 
           <div className="flex justify-between gap-2 mt-6">
-                <button 
-                  type="button" 
-                  className="btn-ghost px-3 py-2 text-sm" 
-                  onClick={() => window.location.href = '/portal/starmaps'}
-                >
-                  View All Starmaps
-                </button>
             <button 
               type="button" 
-              className="btn-ghost px-3 py-2 text-sm" 
-              onClick={() => {
-                setExperienceAnswer({})
-                setStaticAnswers({})
-                setStage2Answers({})
-                setStage3Answers({})
-                setStage4Answers({})
-                setStage2Questions([])
-                setStage3Questions([])
-                setStage4Questions([])
-                setReportMarkdown('')
-                setActive('experience')
-              }}
+              className="icon-btn" 
+              onClick={() => window.location.href = '/portal/starmaps'}
+              aria-label="View all starmaps"
+              title="View all starmaps"
             >
-              Start New Analysis
+              <IconGrid className="w-4 h-4" />
             </button>
-              </div>
+            <button 
+              type="button" 
+              className="icon-btn icon-btn-ghost" 
+              onClick={resetAll}
+              aria-label="Start new analysis"
+              title="Start new analysis"
+            >
+              <IconReset className="w-4 h-4" />
+            </button>
+          </div>
         </section>
       )}
     </div>

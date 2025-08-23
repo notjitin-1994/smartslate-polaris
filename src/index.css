@@ -83,6 +83,13 @@
   select.input::-ms-expand { display: none; }
   .btn-primary {@apply inline-flex items-center justify-center rounded-xl bg-secondary-500 px-4 py-3 text-sm font-medium text-white hover:bg-secondary-600 active:bg-secondary-600 disabled:opacity-50 disabled:cursor-not-allowed transition;}
   .btn-ghost {@apply inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 transition;}
+  /* Icon-only buttons (Material-inspired) */
+  .icon-btn { @apply inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white active:bg-white/10 transition focus:outline-none focus:ring-2 focus:ring-primary-400/60; width: 36px; height: 36px; }
+  .icon-btn.icon-btn-sm { width: 32px; height: 32px; }
+  .icon-btn.icon-btn-lg { width: 44px; height: 44px; }
+  .icon-btn-primary { @apply bg-secondary-500 hover:bg-secondary-600 text-white border-0; }
+  .icon-btn-ghost { @apply bg-white/5 hover:bg-white/10 text-white/85; }
+  .icon-btn:disabled { @apply opacity-50 cursor-not-allowed; }
   .tab {@apply relative flex-1 text-center py-2 text-sm font-medium text-primary-500 transition;}
   .tab-active {@apply text-primary-500;}
   /* Micro-interactions */
@@ -237,6 +244,29 @@
 }
 
 @layer utilities {
+  /* Cross-browser hide scrollbar while preserving scroll */
+  .hide-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+  .hide-scrollbar::-webkit-scrollbar { /* Chrome, Safari */
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  /* Subtle right-edge fade to indicate more content */
+  .fade-right {
+    position: absolute;
+    right: 0;
+    top: 0.5rem;
+    bottom: 0.5rem;
+    width: 28px;
+    pointer-events: none;
+    background: linear-gradient(to right, rgba(2,12,27,0), rgba(2,12,27,0.75));
+    border-top-right-radius: 0.75rem;
+    border-bottom-right-radius: 0.75rem;
+  }
   /* Animation keyframes */
   @keyframes fadeInUp {
     from {

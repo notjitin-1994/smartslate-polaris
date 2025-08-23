@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { callLLM, type ChatMessage } from '@/services/llmClient'
 
 type QuestionType = 'text' | 'textarea' | 'number' | 'select' | 'multiselect' | 'radio' | 'chips' | 'boolean' | 'date'
@@ -321,6 +321,58 @@ export default function Polaris() {
     return html.trim()
   }
 
+  // Extract simple highlights and product mentions from the markdown summary
+  function extractHighlights(md: string): { bullets: string[]; products: string[] } {
+    const bullets: string[] = []
+    const lines = md.split(/\n+/)
+    for (const line of lines) {
+      const m = line.match(/^[-*]\s+(.*)/)
+      if (m) bullets.push(m[1].trim())
+      if (bullets.length >= 6) break
+    }
+    const productCatalog = [
+      'Ignite Series',
+      'Strategic Skills Architecture',
+      'Solara', 'Polaris', 'Constellation', 'Nova', 'Orbit', 'Nebula', 'Spectrum',
+    ]
+    const lower = md.toLowerCase()
+    const products = Array.from(new Set(productCatalog.filter(p => lower.includes(p.toLowerCase()))))
+    return { bullets, products }
+  }
+
+  function downloadText(filename: string, text: string) {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  async function exportMarkdownAsPdf(node: HTMLElement, title = 'Smartslate-Polaris-Summary') {
+    const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+      import('html2canvas'),
+      import('jspdf'),
+    ])
+    const canvas = await html2canvas(node, { backgroundColor: null, scale: 2 })
+    const imgData = canvas.toDataURL('image/png')
+    const pdf = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' })
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height)
+    const imgWidth = canvas.width * ratio
+    const imgHeight = canvas.height * ratio
+    const x = (pageWidth - imgWidth) / 2
+    const y = 24
+    pdf.addImage(imgData, 'PNG', x, y, imgWidth, imgHeight)
+    pdf.save(`${title}.pdf`)
+  }
+
+  const summaryRef = useRef<HTMLDivElement | null>(null)
+
   // Horizontal stepper to visualize active stage
   function Stepper() {
     const steps: Array<{ key: 'stage1' | 'stage2' | 'stage3' | 'summary'; label: string }> = [
@@ -471,19 +523,80 @@ export default function Polaris() {
 
       {active === 'summary' && (
         <section className="space-y-4">
-          {analysis ? (
-            <div className="prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: markdownToHtml(analysis) }} />
-          ) : (
+          {!analysis ? (
             <div className="text-sm text-white/60">Run the analysis to see a tailored proposal mapped to Ignite / Strategic Skills Architecture / Solara.</div>
+          ) : (
+            <div className="space-y-4">
+              {/* Summary header actions */}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <h3 className="text-lg font-semibold text-white">Proposal Summary</h3>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => navigator.clipboard.writeText(analysis || '')}>Copy</button>
+                  <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => downloadText('Smartslate-Polaris-Summary.md', analysis || '')}>Download .md</button>
+                  <button type="button" className="btn-primary text-sm" onClick={() => { if (summaryRef.current) exportMarkdownAsPdf(summaryRef.current) }}>Export PDF</button>
+                </div>
+              </div>
+
+              {/* Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
+                {/* Main proposal */}
+                <div className="lg:col-span-2">
+                  <div ref={summaryRef} className="glass-card p-4 md:p-6">
+                    <div className="prose prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: markdownToHtml(analysis) }} />
+                  </div>
+                </div>
+                {/* Sidebar insights */}
+                <div className="space-y-4">
+                  {(() => {
+                    const { bullets, products } = extractHighlights(analysis)
+                    return (
+                      <>
+                        <div className="glass-card p-4 md:p-5">
+                          <h4 className="text-sm font-semibold mb-2 text-white/90">Key Takeaways</h4>
+                          {bullets.length ? (
+                            <ul className="list-disc list-inside space-y-1 text-sm text-white/80">
+                              {bullets.map((b, i) => (<li key={i}>{b}</li>))}
+                            </ul>
+                          ) : (
+                            <p className="text-sm text-white/60">Highlights will appear here once analysis includes bullets.</p>
+                          )}
+                        </div>
+                        <div className="glass-card p-4 md:p-5">
+                          <h4 className="text-sm font-semibold mb-2 text-white/90">Recommended Products</h4>
+                          {products.length ? (
+                            <div className="flex flex-wrap gap-2">
+                              {products.map(p => (
+                                <span key={p} className="px-3 py-1.5 rounded-full border border-white/10 bg-white/5 text-white/90 text-xs">{p}</span>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-white/60">Products detected from the summary will appear here.</p>
+                          )}
+                        </div>
+                      </>
+                    )
+                  })()}
+                  <div className="glass-card p-4 md:p-5">
+                    <h4 className="text-sm font-semibold mb-2 text-white/90">Next Steps</h4>
+                    <ol className="list-decimal list-inside space-y-1 text-sm text-white/80">
+                      <li>Review proposal with stakeholders</li>
+                      <li>Confirm scope, budget, and timeline</li>
+                      <li>Schedule discovery workshop with Smartslate</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer actions */}
+              <div className="flex justify-end gap-2">
+                <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage1')}>Start Over</button>
+              </div>
+              <details className="mt-2">
+                <summary className="cursor-pointer text-sm text-white/60">Developer debug: raw JSON</summary>
+                <pre className="text-xs bg-white/5 p-3 rounded-md overflow-auto border border-white/10 text-white/80">{JSON.stringify({ answers1, answers2, answers3, stage1Questions, stage2Questions, stage3Questions }, null, 2)}</pre>
+              </details>
+            </div>
           )}
-          <div className="flex justify-end gap-2">
-            <button type="button" className="btn-ghost px-3 py-2 text-sm" onClick={() => setActive('stage1')}>Start Over</button>
-            <button type="button" className="btn-primary text-sm" onClick={() => navigator.clipboard.writeText(analysis || '')}>Copy Summary</button>
-          </div>
-          <details className="mt-2">
-            <summary className="cursor-pointer text-sm text-white/60">Developer debug: raw JSON</summary>
-            <pre className="text-xs bg-white/5 p-3 rounded-md overflow-auto border border-white/10 text-white/80">{JSON.stringify({ answers1, answers2, answers3, stage1Questions, stage2Questions, stage3Questions }, null, 2)}</pre>
-          </details>
         </section>
       )}
     </div>

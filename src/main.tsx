@@ -6,6 +6,19 @@ import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { getSupabase } from '@/services/supabase'
 import { performanceMonitor } from '@/utils/performance'
 
+// Ensure a consistent title on Polaris hosts as early as possible
+if (typeof window !== 'undefined') {
+  const host = window.location.hostname.toLowerCase()
+  const isPolarisHost =
+    host === 'polaris.smartslate.io' ||
+    host.startsWith('polaris.') ||
+    host.startsWith('polaris-') ||
+    host.split('.').includes('polaris')
+  if (isPolarisHost) {
+    document.title = 'Smartslate | Polaris'
+  }
+}
+
 // Initialize Supabase early so cross-subdomain session adoption (cookie handoff) runs at startup
 getSupabase()
 

@@ -50,7 +50,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { messages, model, temperature = 0.2, max_tokens = 4096 } = req.body
 
     if (!messages || !Array.isArray(messages)) {
+      console.error('Invalid request body - messages missing or not an array:', req.body)
       return res.status(400).json({ error: 'Messages array is required' })
+    }
+    
+    // Validate message format
+    for (const msg of messages) {
+      if (!msg.role || !msg.content) {
+        console.error('Invalid message format - missing role or content:', msg)
+        return res.status(400).json({ error: 'Each message must have role and content' })
+      }
+      if (msg.role !== 'user' && msg.role !== 'assistant') {
+        console.error('Invalid message role - only "user" and "assistant" are supported:', msg.role)
+        return res.status(400).json({ error: 'Message role must be "user" or "assistant"' })
+      }
     }
 
     // Make request to Perplexity API with a server-side timeout below platform max
@@ -58,18 +71,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const SERVER_TIMEOUT_MS = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 50000)
     const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
 
+    const requestPayload = {
+      model: normalizePerplexityModel(model || PERPLEXITY_MODEL),
+      messages,
+      temperature,
+      max_tokens,
+    }
+    
+    // Log request details for debugging
+    console.log('Perplexity API request:', {
+      url: `${PERPLEXITY_BASE_URL}/chat/completions`,
+      model: requestPayload.model,
+      messageCount: messages.length,
+      temperature,
+      max_tokens
+    })
+    
     const response = await fetch(`${PERPLEXITY_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        model: normalizePerplexityModel(model || PERPLEXITY_MODEL),
-        messages,
-        temperature,
-        max_tokens,
-      }),
+      body: JSON.stringify(requestPayload),
       signal: controller.signal,
     })
 

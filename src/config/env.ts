@@ -43,7 +43,7 @@ export const env = {
   anthropicMaxTokens: read('VITE_ANTHROPIC_MAX_TOKENS'),
   perplexityApiKey: read('VITE_PERPLEXITY_API_KEY') || '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',
   perplexityBaseUrl: read('VITE_PERPLEXITY_BASE_URL') || 'https://api.perplexity.ai',
-  perplexityModel: read('VITE_PERPLEXITY_MODEL') || 'llama-3.1-sonar-large-128k-online',
+  perplexityModel: read('VITE_PERPLEXITY_MODEL') || 'sonar-deep-research',
   mode: raw.MODE,
   isDev: raw.DEV,
   isProd: raw.PROD,

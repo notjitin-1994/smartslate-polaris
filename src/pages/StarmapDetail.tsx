@@ -27,7 +27,7 @@ export default function StarmapDetail() {
         else {
           setSummary(data)
           setTitleInput((data?.report_title as string) || '')
-          const displayContent = await getDisplayContent(data!)
+          const displayContent = getDisplayContent(data!)
           setEditedContent(displayContent)
         }
       } catch (e) {
@@ -97,7 +97,7 @@ export default function StarmapDetail() {
                 type="button"
                 className="btn-ghost text-xs"
                 onClick={() => {
-                  getDisplayContent(summary).then(setEditedContent)
+                  setEditedContent(getDisplayContent(summary))
                   setIsEditMode(false)
                 }}
               >

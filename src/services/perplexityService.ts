@@ -22,8 +22,9 @@ class PerplexityService {
   constructor() {
     this.client = new BaseApiClient({
       baseUrl: '/api',
-      timeout: 60000, // 60 seconds for research calls
-      retries: 2,
+      timeout: 90000, // 90 seconds for research calls (Perplexity can be slow)
+      retries: 3,
+      retryDelay: 1200,
     })
   }
   
@@ -34,7 +35,7 @@ class PerplexityService {
     prompt: string,
     config: PerplexityConfig = {}
   ): Promise<{ content: string; model?: string }> {
-    const model = config.model || env.perplexityModel || 'llama-3.1-sonar-large-128k-online'
+    const model = config.model || env.perplexityModel || 'sonar-deep-research'
     const temperature = config.temperature ?? 0.2
     const maxTokens = config.maxTokens || 4096
     
@@ -55,7 +56,7 @@ class PerplexityService {
         temperature,
         messages,
         max_tokens: maxTokens,
-      })
+      }, { timeout: 90000, retries: 2 }) // extend timeout per request as well
       
       const content = response.data?.choices?.[0]?.message?.content
       

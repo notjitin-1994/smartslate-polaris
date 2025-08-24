@@ -10,6 +10,8 @@ export default defineConfig(({ mode }) => {
   const ANTHROPIC_VERSION = (env.ANTHROPIC_VERSION || '2023-06-01').trim()
   const OPENAI_API_KEY = (env.OPENAI_API_KEY || env.VITE_OPENAI_API_KEY || '').trim()
   const OPENAI_BASE_URL = ((env.VITE_OPENAI_BASE_URL || env.OPENAI_BASE_URL || 'https://api.openai.com').trim()).replace(/\/$/, '')
+  const PERPLEXITY_API_KEY = (env.PERPLEXITY_API_KEY || env.VITE_PERPLEXITY_API_KEY || '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').trim()
+  const PERPLEXITY_BASE_URL = ((env.VITE_PERPLEXITY_BASE_URL || env.PERPLEXITY_BASE_URL || 'https://api.perplexity.ai').trim()).replace(/\/$/, '')
 
   return {
     plugins: [react()],
@@ -33,6 +35,12 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           rewrite: () => '/v1/chat/completions',
           headers: OPENAI_API_KEY ? { Authorization: `Bearer ${OPENAI_API_KEY}` } : {},
+        },
+        '/api/perplexity': {
+          target: PERPLEXITY_BASE_URL,
+          changeOrigin: true,
+          rewrite: () => '/chat/completions',
+          headers: PERPLEXITY_API_KEY ? { Authorization: `Bearer ${PERPLEXITY_API_KEY}` } : {},
         },
       },
     },

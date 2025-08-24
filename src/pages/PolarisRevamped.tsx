@@ -31,6 +31,9 @@ export default function PolarisRevamped() {
   const [greetingReport, setGreetingReport] = useState<string>('')
   const [orgReport, setOrgReport] = useState<string>('')
   const [requirementReport, setRequirementReport] = useState<string>('')
+  const greetingPromiseRef = useRef<Promise<void> | null>(null)
+  const orgPromiseRef = useRef<Promise<void> | null>(null)
+  const reqPromiseRef = useRef<Promise<void> | null>(null)
   
   // Dynamic questions
   const [dynamicStages, setDynamicStages] = useState<Array<{
@@ -124,11 +127,12 @@ export default function PolarisRevamped() {
       const elapsed = Date.now() - start
       const ratio = Math.min(1, elapsed / targetMs)
       const progress = Math.min(95, Math.max(5, Math.round(easeInOutCubic(ratio) * 95)))
-      let message = 'Preparing...'
-      if (progress > 15) message = phase.includes('research') ? 'Researching information...' : 'Analyzing data...'
-      if (progress > 45) message = phase === 'report' ? 'Generating comprehensive report...' : 'Creating tailored content...'
-      if (progress > 70) message = 'Refining details...'
-      if (progress > 85) message = 'Finalizing...'
+      // Astronomy-themed loader copy for Solara-Polaris-Starmap
+      let message = 'Igniting thrusters…'
+      if (progress > 15) message = phase === 'report' ? 'Charting the starmap…' : 'Scanning constellations…'
+      if (progress > 45) message = phase === 'report' ? 'Aligning telescopes with Polaris…' : 'Plotting orbital paths…'
+      if (progress > 70) message = 'Calibrating instruments…'
+      if (progress > 85) message = 'Final approach to Solara…'
       const etaSeconds = Math.max(1, Math.ceil((targetMs - elapsed) / 1000))
       setLoader({ active: true, phase, message, progress, etaSeconds })
     }
@@ -172,13 +176,11 @@ export default function PolarisRevamped() {
     setActive('experience')
   }
   
-  // Stage 1 Research
+  // Stage 1 Research (background)
   async function completeStage1() {
+    setError(null)
+    // Kick off research in the background; do not block UI
     try {
-      setLoading(true)
-      setError(null)
-      startSmartLoader('stage1-research', 10000)
-      
       const researchData = {
         name: stage1Answers.requester_name as string,
         role: stage1Answers.requester_role as string,
@@ -187,28 +189,19 @@ export default function PolarisRevamped() {
         phone: stage1Answers.requester_phone as string | undefined,
         timezone: stage1Answers.requester_timezone as string | undefined
       }
-      
-      const report = await researchGreeting(researchData)
-      setGreetingReport(report)
-      setActive('stage2')
-    } catch (e: any) {
-      setError(e?.message || 'Failed to complete Stage 1 research.')
-      // Continue anyway with empty report
-      setGreetingReport('Research unavailable - continuing with provided information.')
-      setActive('stage2')
-    } finally {
-      setLoading(false)
-      stopSmartLoader()
-    }
+      greetingPromiseRef.current = researchGreeting(researchData)
+        .then(setGreetingReport)
+        .catch(() => setGreetingReport('Research unavailable - continuing with provided information.'))
+        .then(() => undefined)
+    } catch {}
+    // Move on immediately
+    setActive('stage2')
   }
   
-  // Stage 2 Research
+  // Stage 2 Research (background)
   async function completeStage2() {
+    setError(null)
     try {
-      setLoading(true)
-      setError(null)
-      startSmartLoader('stage2-research', 12000)
-      
       const researchData = {
         orgName: stage2Answers.org_name as string,
         industry: stage2Answers.org_industry as string,
@@ -219,27 +212,18 @@ export default function PolarisRevamped() {
         constraints: stage2Answers.org_compliance as string[] | undefined,
         stakeholders: stage2Answers.org_stakeholders as string[] | undefined
       }
-      
-      const report = await researchOrganization(researchData)
-      setOrgReport(report)
-      setActive('stage3')
-    } catch (e: any) {
-      setError(e?.message || 'Failed to complete Stage 2 research.')
-      setOrgReport('Research unavailable - continuing with provided information.')
-      setActive('stage3')
-    } finally {
-      setLoading(false)
-      stopSmartLoader()
-    }
+      orgPromiseRef.current = researchOrganization(researchData)
+        .then(setOrgReport)
+        .catch(() => setOrgReport('Research unavailable - continuing with provided information.'))
+        .then(() => undefined)
+    } catch {}
+    setActive('stage3')
   }
   
-  // Stage 3 Research
+  // Stage 3 Research (background) then generate questions
   async function completeStage3() {
+    setError(null)
     try {
-      setLoading(true)
-      setError(null)
-      startSmartLoader('stage3-research', 12000)
-      
       const timeline = stage3Answers.project_timeline as { start?: string; end?: string }
       const researchData = {
         objectives: stage3Answers.project_objectives as string,
@@ -252,20 +236,13 @@ export default function PolarisRevamped() {
         experts: stage3Answers.subject_matter_experts ? [stage3Answers.subject_matter_experts as string] : undefined,
         other: stage3Answers.additional_context as string | undefined
       }
-      
-      const report = await researchRequirements(researchData)
-      setRequirementReport(report)
-      
-      // Now generate dynamic questions using all research
-      await generateDynamicQuestions()
-    } catch (e: any) {
-      setError(e?.message || 'Failed to complete Stage 3 research.')
-      setRequirementReport('Research unavailable - continuing with provided information.')
-      await generateDynamicQuestions()
-    } finally {
-      setLoading(false)
-      stopSmartLoader()
-    }
+      reqPromiseRef.current = researchRequirements(researchData)
+        .then(setRequirementReport)
+        .catch(() => setRequirementReport('Research unavailable - continuing with provided information.'))
+        .then(() => undefined)
+    } catch {}
+    // Proceed to dynamic generation; we'll wait briefly for research to finish.
+    await generateDynamicQuestions()
   }
   
   // Generate dynamic questions based on research
@@ -275,6 +252,18 @@ export default function PolarisRevamped() {
       setError(null)
       startSmartLoader('dynamic-generation', 15000)
       
+      // Ensure research has a short window to complete before we proceed
+      const toWait: Promise<any>[] = []
+      if (greetingPromiseRef.current) toWait.push(greetingPromiseRef.current)
+      if (orgPromiseRef.current) toWait.push(orgPromiseRef.current)
+      if (reqPromiseRef.current) toWait.push(reqPromiseRef.current)
+      if (toWait.length) {
+        await Promise.race([
+          Promise.allSettled(toWait),
+          new Promise(resolve => setTimeout(resolve, 7000)),
+        ])
+      }
+
       // Combine all research reports into system context
       const researchContext = `
 RESEARCH REPORTS:

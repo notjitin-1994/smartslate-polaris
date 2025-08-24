@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, type ReactNode } from 'react'
+import { useState, useRef, useCallback, useEffect, memo, type ReactNode } from 'react'
 
 interface RichTextEditorProps {
   value: string
@@ -31,16 +31,17 @@ const listButtons: FormatButton[] = [
   { id: 'numberList', label: 'Numbered list', command: 'insertOrderedList' },
 ]
 
-function ToolbarGroup({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 mr-3 px-2 py-1 rounded-xl border border-white/10 bg-white/5">
-      <div className="hidden md:block text-[10px] uppercase tracking-wide text-white/50 mr-2 select-none">
-        {label}
-      </div>
-      <div className="flex items-center gap-1">{children}</div>
+// Memoized ToolbarGroup component for better performance
+const ToolbarGroup = memo(({ label, children }: { label: string; children: ReactNode }) => (
+  <div className="flex items-center gap-2 mr-3 px-2 py-1 rounded-xl border border-white/10 bg-white/5">
+    <div className="hidden md:block text-[10px] uppercase tracking-wide text-white/50 mr-2 select-none">
+      {label}
     </div>
-  )
-}
+    <div className="flex items-center gap-1">{children}</div>
+  </div>
+))
+
+ToolbarGroup.displayName = 'ToolbarGroup'
 
 export function RichTextEditor({ 
   value, 

@@ -249,5 +249,149 @@ export function createPerformanceThrottle<T extends (...args: any[]) => any>(
   } as T
 }
 
+/**
+ * Debounce function calls for better performance
+ */
+export function createDebounce<T extends (...args: any[]) => any>(
+  func: T,
+  delay: number
+): T {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null
+  
+  return function (this: any, ...args: Parameters<T>) {
+    const context = this
+    
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+    }
+    
+    timeoutId = setTimeout(() => {
+      func.apply(context, args)
+      timeoutId = null
+    }, delay)
+  } as T
+}
+
+/**
+ * Intersection Observer utility for lazy loading
+ */
+export function createIntersectionObserver(
+  callback: IntersectionObserverCallback,
+  options: IntersectionObserverInit = {}
+): IntersectionObserver | null {
+  if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+    return null
+  }
+  
+  return new IntersectionObserver(callback, {
+    rootMargin: '50px',
+    threshold: 0.1,
+    ...options
+  })
+}
+
+/**
+ * Virtual scrolling utility for large lists
+ */
+export function createVirtualScroller<T>(
+  items: T[],
+  itemHeight: number,
+  containerHeight: number,
+  overscan: number = 5
+) {
+  const totalHeight = items.length * itemHeight
+  
+  return {
+    getVisibleRange(scrollTop: number) {
+      const startIndex = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan)
+      const endIndex = Math.min(
+        items.length - 1,
+        Math.ceil((scrollTop + containerHeight) / itemHeight) + overscan
+      )
+      
+      return {
+        startIndex,
+        endIndex,
+        visibleItems: items.slice(startIndex, endIndex + 1),
+        offsetY: startIndex * itemHeight
+      }
+    },
+    
+    getTotalHeight() {
+      return totalHeight
+    },
+    
+    getItemHeight() {
+      return itemHeight
+    }
+  }
+}
+
+/**
+ * Memory usage monitoring
+ */
+export function getMemoryUsage() {
+  if ('memory' in performance) {
+    const memory = (performance as any).memory
+    return {
+      usedJSHeapSize: memory.usedJSHeapSize,
+      totalJSHeapSize: memory.totalJSHeapSize,
+      jsHeapSizeLimit: memory.jsHeapSizeLimit
+    }
+  }
+  return null
+}
+
+/**
+ * Bundle size analyzer
+ */
+export function analyzeBundleSize() {
+  if (typeof window !== 'undefined' && 'performance' in window) {
+    const entries = performance.getEntriesByType('resource')
+    const jsFiles = entries.filter(entry => 
+      entry.name.endsWith('.js') || entry.name.endsWith('.mjs')
+    )
+    
+    const totalSize = jsFiles.reduce((sum, entry) => {
+      if ('transferSize' in entry) {
+        return sum + (entry as any).transferSize
+      }
+      return sum
+    }, 0)
+    
+    return {
+      jsFiles: jsFiles.length,
+      totalSize,
+      averageSize: totalSize / jsFiles.length
+    }
+  }
+  return null
+}
+
+/**
+ * Component render optimization utilities
+ */
+export const renderOptimizations = {
+  /**
+   * Memoize expensive calculations
+   */
+  memoize<T>(factory: () => T, deps: any[]): T {
+    const key = JSON.stringify(deps)
+    if (!renderOptimizations._cache.has(key)) {
+      renderOptimizations._cache.set(key, factory())
+    }
+    return renderOptimizations._cache.get(key) as T
+  },
+  
+  /**
+   * Clear memoization cache
+   */
+  clearCache() {
+    renderOptimizations._cache.clear()
+  },
+  
+  _cache: new Map<string, any>()
+}
+
 // Export singleton instance
 export const performanceMonitor = PerformanceMonitor.getInstance()

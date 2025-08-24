@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { callLLM } from '@/services/llmClient'
-import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle, updateSummaryEditedContent } from '@/services/polarisSummaryService'
+import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle, updateSummaryEditedContent, updateSummaryPrelimReport, updateSummaryFinalContent } from '@/services/polarisSummaryService'
 import { researchGreeting, researchOrganization, researchRequirements } from '@/services/perplexityService'
 import RenderField from '@/polaris/needs-analysis/RenderField'
 import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
@@ -19,7 +19,7 @@ import { env } from '@/config/env'
 
 export default function PolarisRevamped() {
   const { user } = useAuth()
-  const [active, setActive] = useState<'experience' | 'stage1' | 'stage2' | 'stage3' | 'dynamic' | 'report'>('experience')
+  const [active, setActive] = useState<'experience' | 'stage1' | 'stage2' | 'stage3' | 'prelim' | 'dynamic' | 'report'>('experience')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [summaryCount, setSummaryCount] = useState<number>(0)
@@ -55,6 +55,10 @@ export default function PolarisRevamped() {
   const [reportTitle, setReportTitle] = useState<string>('')
   const [savingTitle, setSavingTitle] = useState<boolean>(false)
   const [savingEdit, setSavingEdit] = useState<boolean>(false)
+  // Preliminary report
+  const [prelimMarkdown, setPrelimMarkdown] = useState<string>('')
+  const [editedPrelim, setEditedPrelim] = useState<string>('')
+  const [savingPrelim, setSavingPrelim] = useState<boolean>(false)
   
   // UI state
   const summaryRef = useRef<HTMLDivElement | null>(null)
@@ -296,10 +300,65 @@ export default function PolarisRevamped() {
         .catch(() => setRequirementReport('Research unavailable - continuing with provided information.'))
         .then(() => undefined)
     } catch {}
-    // Proceed to dynamic generation; we'll wait briefly for research to finish.
-    await generateDynamicQuestions()
+    // Proceed to preliminary master report; we'll wait briefly for research to finish.
+    await generatePrelimReport()
   }
   
+  // Generate preliminary master report from research inputs
+  async function generatePrelimReport() {
+    try {
+      setLoading(true)
+      setError(null)
+      startSmartLoader('prelim', 12000)
+
+      // Ensure research has a short window to complete before we proceed
+      const toWait: Promise<any>[] = []
+      if (greetingPromiseRef.current) toWait.push(greetingPromiseRef.current)
+      if (orgPromiseRef.current) toWait.push(orgPromiseRef.current)
+      if (reqPromiseRef.current) toWait.push(reqPromiseRef.current)
+      if (toWait.length) {
+        await Promise.race([
+          Promise.allSettled(toWait),
+          new Promise(resolve => setTimeout(resolve, 7000)),
+        ])
+      }
+
+      const prelimPrompt = `You are an expert L&D consultant. Synthesize a concise, editable Preliminary Master Report using the three research inputs below. Use clear markdown with these sections only:
+
+1. Executive Summary
+2. Organization Context
+3. Requirements Overview
+4. Risks & Constraints
+5. Open Questions for Clarification
+
+Keep it factual, specific, and succinct. Avoid over-speculation. Do not include any other sections.
+
+---
+GREETING REPORT:
+${greetingReport}
+
+ORGANIZATION REPORT:
+${orgReport}
+
+REQUIREMENTS REPORT:
+${requirementReport}
+`
+
+      const prelimRes = await callLLM([{ role: 'user', content: prelimPrompt }])
+      const prelim = (prelimRes.content || '').trim() || '# Preliminary Master Report\n\nContent pending.'
+      setPrelimMarkdown(prelim)
+      setEditedPrelim(prelim)
+      setActive('prelim')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to generate preliminary report.')
+      // If prelim fails, continue to dynamic generation anyway
+      await generateDynamicQuestions()
+    } finally {
+      setLoading(false)
+      stopSmartLoader()
+    }
+  }
+
   // Generate dynamic questions based on research
   async function generateDynamicQuestions() {
     try {
@@ -319,19 +378,10 @@ export default function PolarisRevamped() {
         ])
       }
 
-      // Combine all research reports into system context
-      const researchContext = `
-RESEARCH REPORTS:
-
-GREETING REPORT:
-${greetingReport}
-
-ORGANIZATION REPORT:
-${orgReport}
-
-REQUIREMENTS REPORT:
-${requirementReport}
-`
+      // Build context for dynamic questions
+      const researchContext = editedPrelim
+        ? `PRELIMINARY MASTER REPORT (user-reviewed):\n${editedPrelim}\n\n(Original research inputs below for reference)\n\nGREETING REPORT:\n${greetingReport}\n\nORGANIZATION REPORT:\n${orgReport}\n\nREQUIREMENTS REPORT:\n${requirementReport}\n`
+        : `RESEARCH REPORTS:\n\nGREETING REPORT:\n${greetingReport}\n\nORGANIZATION REPORT:\n${orgReport}\n\nREQUIREMENTS REPORT:\n${requirementReport}\n`
       
       // Generate 2-4 dynamic stages based on complexity
       const numStages = Math.min(4, Math.max(2, Math.ceil(Object.keys({...stage1Answers, ...stage2Answers, ...stage3Answers}).length / 10)))
@@ -388,6 +438,47 @@ Create questions that leverage the research insights to ask more targeted, relev
       stopSmartLoader()
     }
   }
+
+  // Confirm preliminary report: save and proceed to dynamic stages
+  async function confirmPrelimAndProceed() {
+    try {
+      setSavingPrelim(true)
+      // Save prelim to DB (create or update)
+      if (!lastSavedSummaryId) {
+        const { data: saved, error: saveError } = await saveSummary({
+          company_name: stage2Answers.org_name as string || null,
+          report_title: null,
+          summary_content: editedPrelim,
+          prelim_report: editedPrelim,
+          stage1_answers: { ...experienceAnswer, ...stage1Answers },
+          stage2_answers: stage2Answers,
+          stage3_answers: stage3Answers,
+          stage2_questions: [],
+          stage3_questions: [],
+          greeting_report: greetingReport,
+          org_report: orgReport,
+          requirement_report: requirementReport
+        })
+        if (saveError) {
+          setError('Failed to save preliminary report.')
+          return
+        }
+        setLastSavedSummaryId(saved?.id || null)
+        setReportTitle((stage2Answers.org_name as string) || '')
+      } else {
+        const { error } = await updateSummaryPrelimReport(lastSavedSummaryId, editedPrelim)
+        if (error) {
+          setError('Failed to update preliminary report.')
+          return
+        }
+      }
+
+      // Proceed to dynamic stages (which will leverage editedPrelim)
+      await generateDynamicQuestions()
+    } finally {
+      setSavingPrelim(false)
+    }
+  }
   
   // Handle dynamic stage progression
   async function nextDynamicStage() {
@@ -416,10 +507,13 @@ Create questions that leverage the research insights to ask more targeted, relev
         }), {})
       }
       
-      // Include research context in report generation
+      // Include prelim and research context in report generation
       const enhancedPrompt = `${NA_REPORT_PROMPT(experienceLevel!, allAnswers)}
 
-RESEARCH INSIGHTS TO INCORPORATE:
+PRELIMINARY MASTER REPORT (user-confirmed):
+${editedPrelim || prelimMarkdown}
+
+ADDITIONAL RESEARCH INSIGHTS:
 
 GREETING/CONTEXT:
 ${greetingReport}
@@ -430,7 +524,7 @@ ${orgReport}
 REQUIREMENTS RESEARCH:
 ${requirementReport}
 
-Use these research insights to make the report more specific, actionable, and aligned with industry best practices.`
+Use these to produce the final Starmap. Ensure it resolves open questions using dynamic-stage answers above where possible.`
       
       const res = await callLLM([{ role: 'user', content: enhancedPrompt }])
       
@@ -453,36 +547,50 @@ Use these research insights to make the report more specific, actionable, and al
       setReportMarkdown(markdown)
       setEditedContent(markdown)
       
-      // Save summary to database
+      // Save final report: update existing summary if present; otherwise create
       try {
-        const { data: saved, error: saveError } = await saveSummary({
-          company_name: stage2Answers.org_name as string || null,
-          report_title: null,
-          summary_content: markdown,
-          stage1_answers: { ...experienceAnswer, ...stage1Answers },
-          stage2_answers: stage2Answers,
-          stage3_answers: { 
-            ...stage3Answers, 
-            ...dynamicStages.reduce((acc, s) => ({ ...acc, ...s.answers }), {})
-          },
-          stage2_questions: dynamicStages.slice(0, Math.ceil(dynamicStages.length / 2))
-            .flatMap(s => s.questions),
-          stage3_questions: dynamicStages.slice(Math.ceil(dynamicStages.length / 2))
-            .flatMap(s => s.questions),
-          greeting_report: greetingReport,
-          org_report: orgReport,
-          requirement_report: requirementReport
-        })
-        
-        if (saveError) {
-          console.error('Failed to save summary:', saveError)
-          if (saveError.message?.includes('reached the limit')) {
-            setShowUpgradeModal(true)
+        if (lastSavedSummaryId) {
+          const { error } = await updateSummaryFinalContent(
+            lastSavedSummaryId,
+            markdown,
+            {
+              stage2_questions: dynamicStages.slice(0, Math.ceil(dynamicStages.length / 2)).flatMap(s => s.questions),
+              stage3_questions: dynamicStages.slice(Math.ceil(dynamicStages.length / 2)).flatMap(s => s.questions),
+            }
+          )
+          if (error) {
+            console.error('Failed to update final content:', error)
           }
         } else {
-          setSummaryCount(prev => prev + 1)
-          setLastSavedSummaryId(saved?.id || null)
-          setReportTitle((stage2Answers.org_name as string) || '')
+          const { data: saved, error: saveError } = await saveSummary({
+            company_name: stage2Answers.org_name as string || null,
+            report_title: null,
+            summary_content: markdown,
+            prelim_report: editedPrelim || prelimMarkdown || null,
+            stage1_answers: { ...experienceAnswer, ...stage1Answers },
+            stage2_answers: stage2Answers,
+            stage3_answers: { 
+              ...stage3Answers, 
+              ...dynamicStages.reduce((acc, s) => ({ ...acc, ...s.answers }), {})
+            },
+            stage2_questions: dynamicStages.slice(0, Math.ceil(dynamicStages.length / 2))
+              .flatMap(s => s.questions),
+            stage3_questions: dynamicStages.slice(Math.ceil(dynamicStages.length / 2))
+              .flatMap(s => s.questions),
+            greeting_report: greetingReport,
+            org_report: orgReport,
+            requirement_report: requirementReport
+          })
+          if (saveError) {
+            console.error('Failed to save summary:', saveError)
+            if (saveError.message?.includes('reached the limit')) {
+              setShowUpgradeModal(true)
+            }
+          } else {
+            setSummaryCount(prev => prev + 1)
+            setLastSavedSummaryId(saved?.id || null)
+            setReportTitle((stage2Answers.org_name as string) || '')
+          }
         }
       } catch (saveErr) {
         console.error('Error saving summary:', saveErr)
@@ -846,6 +954,7 @@ Use these research insights to make the report more specific, actionable, and al
       { key: 'stage1', label: 'Your Details', enabled: hasExperience },
       { key: 'stage2', label: 'Organization', enabled: stage1Complete },
       { key: 'stage3', label: 'Project Scope', enabled: stage2Complete },
+      { key: 'prelim', label: 'Preliminary', enabled: stage3Complete },
       { key: 'dynamic', label: 'Deep Dive', enabled: stage3Complete },
       { key: 'report', label: 'Starmap Report', enabled: true }
     ]
@@ -928,7 +1037,9 @@ Use these research insights to make the report more specific, actionable, and al
   return (
     <div className="px-4 py-6 page-enter">
       {/* Lodestar only when editing the report */}
-      {active === 'report' && isEditMode && <SolaraLodestar />}
+      {active === 'report' && isEditMode && (
+        <SolaraLodestar summaryId={lastSavedSummaryId || undefined} />
+      )}
       {/* Upgrade Modal */}
       {showUpgradeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
@@ -1174,6 +1285,51 @@ Use these research insights to make the report more specific, actionable, and al
               >
                 {currentDynamicStage < dynamicStages.length - 1 ? 'Continue' : loading ? 'Generating Report...' : 'Generate Report'}
               </button>
+            </div>
+          </div>
+        </section>
+      )}
+      
+      {/* Preliminary Report */}
+      {active === 'prelim' && (
+        <section className="space-y-4">
+          <div className="glass-card p-4 md:p-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-xl font-semibold text-white">Preliminary Master Report</h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="btn-ghost"
+                  onClick={() => setActive('stage3')}
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  className="btn-primary"
+                  onClick={confirmPrelimAndProceed}
+                  disabled={savingPrelim}
+                  title="Save prelim and continue to dynamic questions"
+                >
+                  {savingPrelim ? 'Saving…' : 'Confirm & Continue'}
+                </button>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <AIReportEditorEnhanced
+                reportContent={editedPrelim}
+                greetingReport={greetingReport}
+                orgReport={orgReport}
+                requirementReport={requirementReport}
+                maxEdits={3}
+                onContentChange={setEditedPrelim}
+                className="min-h-[480px]"
+              />
+              {!lastSavedSummaryId && (
+                <p className="text-xs text-white/60">
+                  A new Starmap record will be created when you confirm.
+                </p>
+              )}
             </div>
           </div>
         </section>

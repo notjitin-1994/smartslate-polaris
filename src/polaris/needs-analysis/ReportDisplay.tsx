@@ -1,6 +1,6 @@
 // src/polaris/needs-analysis/ReportDisplay.tsx
 // Enhanced UX version with improved readability, scanability, and actionability
-import { useState, type ReactNode } from 'react'
+import { useState, useCallback, useMemo, memo } from 'react'
 import { parseMarkdownToReport } from './parse'
 
 interface ReportDisplayProps {
@@ -12,15 +12,136 @@ interface ReportDisplayProps {
   className?: string
 }
 
-// (parser moved to shared module: ./parse)
+// PriorityBadge component for risk assessment
+const PriorityBadge = memo(({ level }: { level: 'high' | 'medium' | 'low' }) => {
+  const getBadgeStyles = () => {
+    switch (level) {
+      case 'high':
+        return 'bg-red-500/30 text-red-200 border-red-400/40'
+      case 'medium':
+        return 'bg-amber-500/20 text-amber-200 border-amber-400/30'
+      case 'low':
+        return 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30'
+      default:
+        return 'bg-gray-500/20 text-gray-200 border-gray-400/30'
+    }
+  }
 
-export default function ReportDisplay({ reportMarkdown, reportTitle, editableTitle = false, savingTitle = false, onSaveTitle, className = '' }: ReportDisplayProps) {
-  const report = parseMarkdownToReport(reportMarkdown)
+  const getLabel = () => {
+    switch (level) {
+      case 'high':
+        return 'High Priority'
+      case 'medium':
+        return 'Medium Priority'
+      case 'low':
+        return 'Low Priority'
+      default:
+        return 'Unknown Priority'
+    }
+  }
+
+  return (
+    <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getBadgeStyles()}`}>
+      {getLabel()}
+    </span>
+  )
+})
+
+PriorityBadge.displayName = 'PriorityBadge'
+
+// Risk severity detection function
+const detectRiskSeverity = (riskText: string): 'high' | 'medium' | 'low' => {
+  const highRiskKeywords = ['critical', 'severe', 'high risk', 'urgent', 'immediate', 'blocker', 'fatal', 'catastrophic']
+  const mediumRiskKeywords = ['moderate', 'medium', 'attention', 'concern', 'warning', 'caution']
+  
+  const text = riskText.toLowerCase()
+  if (highRiskKeywords.some(keyword => text.includes(keyword))) return 'high'
+  if (mediumRiskKeywords.some(keyword => text.includes(keyword))) return 'medium'
+  return 'low'
+}
+
+// Memoized Icon component for better performance
+const Icon = memo(({ name, className = 'w-4 h-4' }: { 
+  name: 'summary' | 'solution' | 'delivery' | 'metrics' | 'timeline' | 'steps' | 'risks' | 'audience' | 'modality' | 'tech' | 'doc' | 'blend' | 'online' | 'workshop' | 'coach' | 'toolbox' | 'check' | 'database' | 'assessment' | 'target'
+  className?: string 
+}) => {
+  const iconMap = {
+    summary: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5z"/><path d="M14 3v4a2 2 0 0 0 2 2h4"/></svg>
+    ),
+    solution: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M5.22 5.22 8 8"/><path d="M2 12h4"/><path d="M5.22 18.78 8 16"/><path d="M12 22v-4"/><path d="M18.78 18.78 16 16"/><path d="M22 12h-4"/><path d="M18.78 5.22 16 8"/><circle cx="12" cy="12" r="3"/></svg>
+    ),
+    delivery: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h18v6H3z"/><path d="M3 9l3 12h12l3-12"/><path d="M9 12h6"/></svg>
+    ),
+    metrics: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 15v3"/><path d="M11 11v7"/><path d="M15 7v11"/><path d="M19 12v6"/></svg>
+    ),
+    timeline: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/></svg>
+    ),
+    steps: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+    ),
+    risks: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    ),
+    audience: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m22 21-2-2"/><path d="M16 16l2 2"/></svg>
+    ),
+    modality: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M5.22 5.22 8 8"/><path d="M2 12h4"/><path d="M5.22 18.78 8 16"/><path d="M12 22v-4"/><path d="M18.78 18.78 16 16"/><path d="M22 12h-4"/><path d="M18.78 5.22 16 8"/><circle cx="12" cy="12" r="3"/></svg>
+    ),
+    tech: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    ),
+    doc: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10,9 9,9 8,9"/></svg>
+    ),
+    blend: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M5.22 5.22 8 8"/><path d="M2 12h4"/><path d="M5.22 18.78 8 16"/><path d="M12 22v-4"/><path d="M18.78 18.78 16 16"/><path d="M22 12h-4"/><path d="M18.78 5.22 16 8"/><circle cx="12" cy="12" r="3"/></svg>
+    ),
+    online: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+    ),
+    workshop: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M21 3v6"/><path d="M3 3v6"/><path d="M21 9v6"/><path d="M3 9v6"/></svg>
+    ),
+    coach: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    ),
+    toolbox: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22,4 12,14.01 9,11.01"/></svg>
+    ),
+    check: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20,6 9,17 4,12"/></svg>
+    ),
+    database: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+    ),
+    assessment: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M9 12l2 2 4-4"/><path d="M21 12c-1 9-4 9-9 9s-8 0-9-9"/><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 2.88L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+    ),
+    target: (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+    )
+  }
+
+  return iconMap[name] || null
+})
+
+Icon.displayName = 'Icon'
+
+// Memoized ReportDisplay component for better performance
+const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false, savingTitle = false, onSaveTitle, className = '' }: ReportDisplayProps) => {
+  // Memoize parsed report to prevent recalculation
+  const report = useMemo(() => parseMarkdownToReport(reportMarkdown), [reportMarkdown])
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false)
   const [titleInput, setTitleInput] = useState<string>(reportTitle || 'Needs Analysis Report')
   
-  // Minimal sanitizer to preserve only safe inline formatting (colors, links) coming from the editor
-  function sanitizeInlineHtml(raw: string): string {
+  // Memoize sanitizer function
+  const sanitizeInlineHtml = useCallback((raw: string): string => {
     try {
       const parser = new DOMParser()
       const doc = parser.parseFromString(`<div>${raw}</div>`, 'text/html')
@@ -78,747 +199,422 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
     } catch {
       return raw
     }
-  }
+  }, [])
 
-  // Simple inline icon set (stroke-current), sized via className
-  function Icon({ name, className = 'w-4 h-4' }: { name: 'summary' | 'solution' | 'delivery' | 'metrics' | 'timeline' | 'steps' | 'risks' | 'audience' | 'modality' | 'tech' | 'doc' | 'blend' | 'online' | 'workshop' | 'coach' | 'toolbox' | 'check' | 'database' | 'assessment' | 'target'; className?: string }) {
-    switch (name) {
-      case 'summary':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M4 5a2 2 0 0 1 2-2h8l6 6v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5z"/><path d="M14 3v4a2 2 0 0 0 2 2h4"/></svg>
-        )
-      case 'solution':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4"/><path d="M5.22 5.22 8 8"/><path d="M2 12h4"/><path d="M5.22 18.78 8 16"/><path d="M12 22v-4"/><path d="M18.78 18.78 16 16"/><path d="M22 12h-4"/><path d="M18.78 5.22 16 8"/><circle cx="12" cy="12" r="3"/></svg>
-        )
-      case 'delivery':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3h18v6H3z"/><path d="M3 9l3 12h12l3-12"/><path d="M9 12h6"/></svg>
-        )
-      case 'metrics':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18"/><path d="M7 15v3"/><path d="M11 11v7"/><path d="M15 7v11"/><path d="M19 12v6"/></svg>
-        )
-      case 'timeline':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12h18"/><circle cx="7" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="17" cy="12" r="2"/></svg>
-        )
-      case 'steps':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M7 21V9h4v12"/><path d="M13 21V3h4v18"/></svg>
-        )
-      case 'risks':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-        )
-      case 'audience':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        )
-      case 'modality':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 20h8"/></svg>
-        )
-      case 'tech':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .69.28 1.35.78 1.82.5.47 1.18.73 1.87.73H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-        )
-      case 'blend':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="12" r="4"/><circle cx="16" cy="12" r="4"/><path d="M12 14v6"/></svg>
-        )
-      case 'online':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="14" rx="2"/><path d="M12 8v4l3 2"/></svg>
-        )
-      case 'workshop':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7h18"/><path d="M5 7v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7"/><path d="M7 7l5-4 5 4"/></svg>
-        )
-      case 'coach':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="7" r="3"/><path d="M5.5 22a6.5 6.5 0 0 1 13 0"/></svg>
-        )
-      case 'toolbox':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/></svg>
-        )
-      case 'check':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-        )
-      case 'database':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4.03 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/></svg>
-        )
-      case 'assessment':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10"/><path d="M7 12h4"/><path d="M7 16h7"/></svg>
-        )
-      case 'target':
-        return (
-          <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M22 12h-4"/><path d="M6 12H2"/><path d="M12 2v4"/><path d="M12 18v4"/></svg>
-        )
-      default:
-        return null
+  // Memoize title save handler
+  const handleTitleSave = useCallback(async () => {
+    if (onSaveTitle) {
+      await onSaveTitle(titleInput)
     }
-  }
+    setIsEditingTitle(false)
+  }, [titleInput, onSaveTitle])
 
-  function modalityIconName(name: string): 'blend' | 'online' | 'workshop' | 'coach' | 'toolbox' | 'modality' {
-    const n = name.toLowerCase()
-    if (n.includes('blend')) return 'blend'
-    if (n.includes('e-') || n.includes('elearn') || n.includes('online')) return 'online'
-    if (n.includes('workshop') || n.includes('live') || n.includes('classroom')) return 'workshop'
-    if (n.includes('coach')) return 'coach'
-    if (n.includes('tool')) return 'toolbox'
-    return 'modality'
-  }
+  // Memoize title edit handler
+  const handleTitleEdit = useCallback(() => {
+    setIsEditingTitle(true)
+  }, [])
 
-  function extractReadiness(value: string | undefined): number | null {
-    if (!value) return null
-    const m1 = value.match(/(\d+)\s*\/\s*10/)
-    if (m1) {
-      const v = Math.max(0, Math.min(10, Number(m1[1])))
-      return isNaN(v) ? null : v
+  // Memoize title input change handler
+  const handleTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setTitleInput(e.target.value)
+  }, [])
+
+  // Memoize title key down handler
+  const handleTitleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      void handleTitleSave()
+    } else if (e.key === 'Escape') {
+      setIsEditingTitle(false)
+      setTitleInput(reportTitle || 'Needs Analysis Report')
     }
-    const m2 = value.match(/(\d{1,2})/)
-    if (m2) {
-      const v = Math.max(0, Math.min(10, Number(m2[1])))
-      return isNaN(v) ? null : v
-    }
-    return null
-  }
+  }, [handleTitleSave, reportTitle])
 
-  function StatsCard({ icon, label, value, trend }: { icon: ReactNode; label: string; value: string | number; trend?: 'up' | 'down' | 'neutral' }) {
-    const trendColor = trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-red-400' : 'text-white/90'
-    const trendIcon = trend === 'up' ? '↗' : trend === 'down' ? '↘' : ''
-    
-    return (
-      <div className="glass-card p-4 flex items-center gap-3 hover:bg-white/8 transition-all duration-200 group">
-        <div className="p-2 rounded-lg bg-white/5 group-hover:bg-white/10 transition-colors">
-          {icon}
+  // Memoize title blur handler
+  const handleTitleBlur = useCallback(() => {
+    void handleTitleSave()
+  }, [handleTitleSave])
+
+  // Memoize risk items to prevent unnecessary re-renders
+  const riskItems = useMemo(() => 
+    report?.risks?.slice(0, 3).map((r, i) => {
+      const sev = detectRiskSeverity(r.risk)
+      const color = sev === 'high' ? 'border-red-400/40 bg-red-500/10' : sev === 'low' ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-amber-400/30 bg-amber-500/10'
+      
+      return (
+        <div key={i} className={`p-3 rounded-lg border ${color} hover:opacity-90 transition-opacity`}>
+          <div className="flex items-start justify-between mb-2">
+            <PriorityBadge level={sev} />
+          </div>
+          <div className="font-medium text-white/90 text-sm mb-2">{r.risk}</div>
+          <div className="text-xs text-white/70 leading-relaxed">
+            <span className="font-medium text-white/80">Mitigation:</span> {r.mitigation}
+          </div>
+        </div>
+      )
+    }) || [], [report?.risks])
+
+  // Memoize timeline items to prevent unnecessary re-renders
+  const timelineItems = useMemo(() => 
+    report?.delivery_plan?.timeline?.map((t, i) => {
+      const startDate = new Date(t.start)
+      const endDate = new Date(t.end)
+      const isValid = !isNaN(startDate.getTime()) && !isNaN(endDate.getTime())
+      const duration = isValid ? Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 7)) : 0
+      
+      return (
+        <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+          <div className="flex items-start justify-between mb-2">
+            <span className="font-medium text-white/90 text-sm">{t.label}</span>
+            {duration > 0 && (
+              <span className="text-xs text-amber-400 font-medium">{duration}w</span>
+            )}
+          </div>
+          <div className="text-xs text-white/60">
+            <span>{isValid ? startDate.toLocaleDateString() : t.start}</span>
+            <span className="mx-1">→</span>
+            <span>{isValid ? endDate.toLocaleDateString() : t.end}</span>
+          </div>
+          <div className="mt-2 h-1 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-400" style={{ width: '100%' }} />
+          </div>
+        </div>
+      )
+    }) || [], [report?.delivery_plan?.timeline])
+
+  // Memoize solution items to prevent unnecessary re-renders
+  const solutionItems = useMemo(() => 
+    report?.solution?.modalities?.map((s: { name: string; reason: string }, i: number) => (
+      <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+        <div className="font-medium text-white/90 text-sm mb-2">{s.name}</div>
+        <div className="text-xs text-white/70 leading-relaxed">{s.reason}</div>
+      </div>
+    )) || [], [report?.solution?.modalities])
+
+  // Memoize delivery plan items to prevent unnecessary re-renders
+  const deliveryPlanItems = useMemo(() => 
+    report?.delivery_plan?.phases?.map((s: { name: string; duration_weeks: number; goals: string[]; activities: string[] }, i: number) => (
+      <div key={i} className="flex items-start gap-3">
+        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-secondary-500/20 flex items-center justify-center text-xs font-bold text-secondary-400">
+          {i + 1}
         </div>
         <div className="flex-1">
-          <div className="text-xs text-white/60 mb-1">{label}</div>
-          <div className={`text-lg font-semibold ${trendColor} flex items-center gap-1`}>
-            {value}
-            {trendIcon && <span className="text-sm">{trendIcon}</span>}
+          <div className="font-medium text-white/90 text-sm mb-1">{s.name}</div>
+          <div className="text-xs text-white/70 leading-relaxed">
+            <div className="mb-2">
+              <span className="font-medium text-white/80">Duration:</span> {s.duration_weeks} weeks
+            </div>
+            <div className="mb-2">
+              <span className="font-medium text-white/80">Goals:</span> {s.goals.join(', ')}
+            </div>
+            <div>
+              <span className="font-medium text-white/80">Activities:</span> {s.activities.join(', ')}
+            </div>
           </div>
         </div>
       </div>
-    )
-  }
-  
-  function CalloutBox({ type, title, children }: { type: 'info' | 'warning' | 'success' | 'critical'; title: string; children: ReactNode }) {
-    const styles = {
-      info: 'border-blue-400/40 bg-blue-500/10 text-blue-200',
-      warning: 'border-amber-400/40 bg-amber-500/10 text-amber-200',
-      success: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200',
-      critical: 'border-red-400/40 bg-red-500/10 text-red-200'
-    }
-    
-    const icons = {
-      info: '💡',
-      warning: '⚠️',
-      success: '✅',
-      critical: '🚨'
-    }
-    
-    return (
-      <div className={`border rounded-xl p-4 ${styles[type]} mb-4`}>
-        <div className="flex items-center gap-2 mb-2">
-          <span>{icons[type]}</span>
-          <h4 className="font-semibold">{title}</h4>
+    )) || [], [report?.delivery_plan?.phases])
+
+  // Memoize metrics items to prevent unnecessary re-renders
+  const metricsItems = useMemo(() => 
+    report?.measurement?.success_metrics?.map((m: string, i: number) => (
+      <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-medium text-white/90 text-sm">Metric {i + 1}</span>
         </div>
-        <div className="text-sm opacity-90">{children}</div>
+        <div className="text-xs text-white/70 leading-relaxed">{m}</div>
       </div>
-    )
-  }
+    )) || [], [report?.measurement?.success_metrics])
 
-  function computeTimelinePositions(items: Array<{ label: string; start: string; end: string }>) {
-    const dates = items
-      .map(i => ({ s: new Date(i.start), e: new Date(i.end) }))
-      .filter(d => !isNaN(d.s.getTime()) && !isNaN(d.e.getTime()))
-    if (dates.length !== items.length || dates.length === 0) return null
-    const min = Math.min(...dates.map(d => d.s.getTime()))
-    const max = Math.max(...dates.map(d => d.e.getTime()))
-    const span = Math.max(1, max - min)
-    const positions: Array<{ start: number; end: number }> = []
-    for (let idx = 0; idx < items.length; idx++) {
-      const d = dates[idx]
-      const start = (d.s.getTime() - min) / span
-      const end = (d.e.getTime() - min) / span
-      positions.push({ start, end })
-    }
-    return positions
-  }
-
-  function parsePercentFromString(text: string): number | null {
-    if (!text) return null
-    const m = text.match(/(\d{1,3})\s*%/)
-    if (m) {
-      const v = Math.max(0, Math.min(100, Number(m[1])))
-      return isNaN(v) ? null : v
-    }
-    const fraction = text.match(/(\d+)\s*\/\s*(\d+)/)
-    if (fraction) {
-      const a = Number(fraction[1]); const b = Number(fraction[2]) || 1
-      const v = Math.round((a / b) * 100)
-      return isNaN(v) ? null : Math.max(0, Math.min(100, v))
-    }
-    return null
-  }
-
-  function detectRiskSeverity(text: string): 'high' | 'medium' | 'low' {
-    const t = text.toLowerCase()
-    if (/(critical|severe|high|major)/.test(t)) return 'high'
-    if (/(medium|moderate)/.test(t)) return 'medium'
-    if (/(low|minor)/.test(t)) return 'low'
-    return 'medium'
-  }
-  
-  if (!report) {
-    // Fallback to simple markdown display
-    return (
-      <div className={className}>
-        <div 
-          className="prose prose-invert max-w-none report-prose"
-          dangerouslySetInnerHTML={{ 
-            __html: sanitizeInlineHtml(reportMarkdown)
-              .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold text-white/90 mt-4 mb-2">$1</h3>')
-              .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-white mt-6 mb-3">$1</h2>')
-              .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold text-white mb-4">$1</h1>')
-              .replace(/^\*\s+(.*)$/gim, '<ul class="list-disc list-inside text-white/80"><li>$1</li></ul>')
-              .replace(/^\-\s+(.*)$/gim, '<ul class="list-disc list-inside text-white/80"><li>$1</li></ul>')
-              .replace(/\*\*(.*?)\*\*/gim, '<strong class="font-semibold accent-text-soft">$1</strong>')
-              .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-              .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-white/10 rounded text-primary-300">$1</code>')
-              .replace(/\n/g, '<br />')
-          }}
-        />
+  // Memoize audience items to prevent unnecessary re-renders
+  const audienceItems = useMemo(() => 
+    report?.solution?.scope?.audiences?.map((a: string, i: number) => (
+      <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+        <div className="font-medium text-white/90 text-sm mb-2">Audience {i + 1}</div>
+        <div className="text-xs text-white/70 leading-relaxed">{a}</div>
       </div>
-    )
-  }
-  
-  // Render structured report like in Polaris page
-  return (
-    <div className={className}>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main report */}
-        <div className="lg:col-span-2">
-          <article className="read-surface p-6 report-prose" role="article" aria-labelledby="report-title">
-            <div className="flex items-center gap-2 mb-4">
-              {isEditingTitle ? (
-                <>
-                  <input
-                    id="report-title"
-                    className="input w-full md:w-96"
-                    value={titleInput}
-                    onChange={(e) => setTitleInput(e.target.value)}
-                    placeholder="Name this report"
-                    aria-label="Report name"
-                  />
-                  <button
-                    type="button"
-                    className="icon-btn icon-btn-primary"
-                    aria-label={savingTitle ? 'Saving' : 'Save report name'}
-                    title={savingTitle ? 'Saving' : 'Save report name'}
-                    disabled={savingTitle || !titleInput.trim()}
-                    onClick={async () => {
-                      if (!titleInput.trim()) return
-                      if (onSaveTitle) await onSaveTitle(titleInput.trim())
-                      setIsEditingTitle(false)
-                    }}
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
-                  </button>
-                  <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label="Cancel"
-                    title="Cancel"
-                    onClick={() => { setIsEditingTitle(false); setTitleInput(reportTitle || 'Needs Analysis Report') }}
-                  >
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                  </button>
-                </>
+    )) || [], [report?.solution?.scope?.audiences])
+
+  // Memoize modality items to prevent unnecessary re-renders
+  const modalityItems = useMemo(() => 
+    report?.solution?.modalities?.map((m: { name: string; reason: string }, i: number) => (
+      <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+        <div className="font-medium text-white/90 text-sm mb-2">{m.name}</div>
+        <div className="text-xs text-white/70 leading-relaxed">{m.reason}</div>
+      </div>
+    )) || [], [report?.solution?.modalities])
+
+  // Memoize technology items to prevent unnecessary re-renders
+  const technologyItems = useMemo(() => 
+    report?.technology_talent?.tech_enablers?.available?.map((t: string, i: number) => (
+      <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+        <div className="font-medium text-white/90 text-sm mb-2">Technology {i + 1}</div>
+        <div className="text-xs text-white/70 leading-relaxed">{t}</div>
+      </div>
+    )) || [], [report?.technology_talent?.tech_enablers?.available])
+
+  // Memoize assessment items to prevent unnecessary re-renders
+  const assessmentItems = useMemo(() => 
+    report?.measurement?.assessment_strategy?.map((a: string, i: number) => (
+      <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+        <div className="font-medium text-white/90 text-sm mb-2">Assessment {i + 1}</div>
+        <div className="text-xs text-white/70 leading-relaxed">{a}</div>
+      </div>
+    )) || [], [report?.measurement?.assessment_strategy])
+
+  // Memoize title section to prevent unnecessary re-renders
+  const titleSection = useMemo(() => (
+    <div className="mb-6">
+      {editableTitle ? (
+        <div className="flex items-center gap-3">
+          {isEditingTitle ? (
+            <input
+              type="text"
+              value={titleInput}
+              onChange={handleTitleChange}
+              onKeyDown={handleTitleKeyDown}
+              onBlur={handleTitleBlur}
+              className="flex-1 text-2xl font-bold text-white/90 bg-white/5 border border-white/10 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500/80"
+              autoFocus
+            />
+          ) : (
+            <h1 className="text-2xl font-bold text-white/90">{titleInput}</h1>
+          )}
+          {!isEditingTitle && (
+            <button
+              onClick={handleTitleEdit}
+              className="p-2 text-white/60 hover:text-white/80 hover:bg-white/10 rounded-lg transition-colors"
+              title="Edit title"
+            >
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+              </svg>
+            </button>
+          )}
+          {isEditingTitle && (
+            <button
+              onClick={handleTitleSave}
+              disabled={savingTitle}
+              className="p-2 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors disabled:opacity-50"
+              title="Save title"
+            >
+              {savingTitle ? (
+                <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" />
+                  <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeOpacity="0.75" strokeLinecap="round" />
+                </svg>
               ) : (
-                <>
-                  <h1 id="report-title" className="heading-accent text-2xl md:text-3xl font-bold text-white tracking-tight">{reportTitle || 'Needs Analysis Report'}</h1>
-                  {editableTitle && (
-                    <button
-                      type="button"
-                      className="icon-btn icon-btn-sm"
-                      aria-label="Rename report"
-                      title="Rename report"
-                      onClick={() => setIsEditingTitle(true)}
-                    >
-                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
-                    </button>
-                  )}
-                </>
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="20,6 9,17 4,12"/>
+                </svg>
               )}
-            </div>
-            
-            {/* Enhanced stat tiles with better visual hierarchy */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <StatsCard 
-                icon={<Icon name="audience" className="w-6 h-6 text-primary-300" />} 
-                label="Target Audiences" 
-                value={report.solution.scope?.audiences?.length || 0}
-                trend="neutral"
-              />
-              <StatsCard 
-                icon={<Icon name="modality" className="w-6 h-6 text-secondary-400" />} 
-                label="Delivery Methods" 
-                value={report.solution.modalities.length}
-                trend="up"
-              />
-              <StatsCard 
-                icon={<Icon name="metrics" className="w-6 h-6 text-emerald-400" />} 
-                label="Success Metrics" 
-                value={report.measurement.success_metrics.length}
-                trend="neutral"
-              />
-              <StatsCard 
-                icon={<Icon name="steps" className="w-6 h-6 text-amber-400" />} 
-                label="Project Phases" 
-                value={report.delivery_plan.phases.length}
-                trend="neutral"
-              />
-            </div>
-
-            {/* Key Performance Indicators */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <StatsCard 
-                icon={<Icon name="assessment" className="w-6 h-6 text-purple-400" />} 
-                label="Assessments" 
-                value={report.measurement.assessment_strategy?.length || 0}
-                trend="neutral"
-              />
-              <StatsCard 
-                icon={<Icon name="database" className="w-6 h-6 text-blue-400" />} 
-                label="Data Sources" 
-                value={report.measurement.data_sources?.length || 0}
-                trend="neutral"
-              />
-              <StatsCard 
-                icon={<Icon name="risks" className="w-6 h-6 text-red-400" />} 
-                label="Risk Factors" 
-                value={report.risks?.length || 0}
-                trend={report.risks?.length > 3 ? "down" : "neutral"}
-              />
-              <StatsCard 
-                icon={<Icon name="target" className="w-6 h-6 text-emerald-400" />} 
-                label="Objectives" 
-                value={report.summary.objectives?.length || 0}
-                trend="up"
-              />
-            </div>
-
-            {/* Learner tech readiness gauge (if detectable) */}
-            {(() => {
-              const readiness = extractReadiness(report.learner_analysis?.profile?.tech_readiness)
-              if (readiness === null) return null
-              const pct = Math.round((readiness / 10) * 100)
-              return (
-                <div className="glass-card p-4 mb-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Icon name="tech" className="w-5 h-5 accent-icon" />
-                      <div className="text-sm font-semibold text-white/90 accent-text-soft">Learner Technology Readiness</div>
-                    </div>
-                    <div className="text-sm text-white/70">{pct}%</div>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden bar-shimmer">
-                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-blue-400 bar-smooth" style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Timeline visualization */}
-            {report.delivery_plan.timeline.length > 0 && (() => {
-              const positions = computeTimelinePositions(report.delivery_plan.timeline)
-              if (!positions) return null
-              return (
-                <div className="glass-card p-4 mb-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Icon name="timeline" className="w-5 h-5 accent-icon" />
-                    <div className="text-sm font-semibold text-white/90 accent-text-soft">Timeline Overview</div>
-                  </div>
-                  <div className="relative h-14">
-                    <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-white/10" />
-                    {report.delivery_plan.timeline.map((t, i) => (
-                      <div key={i} className="absolute" style={{ left: `${positions[i].start * 100}%`, width: `${Math.max(2, (positions[i].end - positions[i].start) * 100)}%` }}>
-                        <div className="h-2 rounded-full bg-primary-400/70" />
-                        <div className="mt-1 text-[11px] text-white/70 truncate">
-                          <span className="text-white/85 font-medium">{t.label}</span>
-                          <span className="ml-1">{t.start}–{t.end}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })()}
-
-            <div className="space-y-10">
-              {/* Executive Summary with enhanced readability */}
-              <section>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 id="executive-summary" className="heading-accent text-2xl font-bold text-white scroll-mt-20">Executive Summary</h2>
-                  <div className="text-sm text-white/60 flex items-center gap-2">
-                    <Icon name="summary" className="w-4 h-4" />
-                    Overview
-                  </div>
-                </div>
-                
-                {report.summary.problem_statement && (
-                  <CalloutBox type="critical" title="Problem Statement">
-                    <p className="text-base leading-relaxed">{report.summary.problem_statement}</p>
-                  </CalloutBox>
-                )}
-                
-                {report.summary.current_state.length > 0 && (
-                  <div className="glass-card p-6 mb-6">
-                    <h3 className="text-lg font-semibold text-white/90 mb-4 flex items-center gap-2">
-                      <Icon name="database" className="w-5 h-5 text-blue-400" />
-                      Current State Analysis
-                    </h3>
-                    <ul className="space-y-3">
-                      {report.summary.current_state.map((item, i) => (
-                        <li key={i} className="text-white/85 leading-relaxed flex items-start gap-3">
-                          <span className="w-2 h-2 rounded-full bg-primary-400 mt-2 flex-shrink-0" />
-                          <span className="text-base">{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-                
-                {report.summary.root_causes.length > 0 && (
-                  <CalloutBox type="warning" title="Root Causes Identified">
-                    <ul className="space-y-2">
-                      {report.summary.root_causes.map((item, i) => (
-                        <li key={i} className="text-base leading-relaxed flex items-start gap-3">
-                          <span className="text-amber-400 text-lg leading-none">•</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </CalloutBox>
-                )}
-                
-                {report.summary.objectives.length > 0 && (
-                  <div className="glass-card p-6">
-                    <h3 className="text-lg font-semibold text-white/90 mb-4 flex items-center gap-2">
-                      <Icon name="target" className="w-5 h-5 text-emerald-400" />
-                      Strategic Objectives
-                    </h3>
-                    <div className="space-y-3">
-                      {report.summary.objectives.map((item, i) => (
-                        <div key={i} className="flex items-start gap-4 p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
-                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
-                            <span className="text-emerald-400 text-sm font-semibold">{i + 1}</span>
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-base text-white/90 leading-relaxed">{item}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </section>
-              
-              {/* Enhanced Recommended Solution */}
-              <section>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 id="recommended-solution" className="heading-accent text-2xl font-bold text-white scroll-mt-20">Recommended Solution</h2>
-                  <div className="text-sm text-white/60 flex items-center gap-2">
-                    <Icon name="solution" className="w-4 h-4" />
-                    Strategy
-                  </div>
-                </div>
-                
-                {report.solution.modalities.length > 0 && (
-                  <div className="glass-card p-6 mb-6">
-                    <h3 className="text-xl font-semibold text-white/90 mb-6 flex items-center gap-3">
-                      <Icon name="delivery" className="w-6 h-6 text-secondary-400" />
-                      Delivery Methods & Rationale
-                    </h3>
-                    <div className="grid md:grid-cols-2 gap-4">
-                      {report.solution.modalities.map((m, i) => (
-                        <div key={i} className="p-4 rounded-xl bg-white/5 hover:bg-white/8 transition-colors border border-white/10">
-                          <div className="flex items-start gap-3">
-                            <div className="p-2 rounded-lg bg-secondary-500/20">
-                              <Icon name={modalityIconName(m.name)} className="w-5 h-5 text-secondary-400" />
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-semibold text-white/95 mb-2 text-lg">{m.name}</div>
-                              <p className="text-sm text-white/75 leading-relaxed">{m.reason}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {report.solution.scope && (
-                  <div className="space-y-6">
-                    <h3 className="text-xl font-semibold text-white/90 mb-4">Project Scope & Focus Areas</h3>
-                    
-                    {report.solution.scope.audiences.length > 0 && (
-                      <div className="glass-card p-6">
-                        <h4 className="font-semibold text-lg text-white/90 mb-4 flex items-center gap-2">
-                          <Icon name="audience" className="w-5 h-5 text-primary-400" />
-                          Target Audiences
-                        </h4>
-                        <div className="grid sm:grid-cols-2 gap-3">
-                          {report.solution.scope.audiences.map((a, i) => (
-                            <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
-                              <div className="w-3 h-3 rounded-full bg-primary-400" />
-                              <span className="text-white/90 font-medium">{a}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {report.solution.scope.competencies.length > 0 && (
-                      <div className="glass-card p-6">
-                        <h4 className="font-semibold text-lg text-white/90 mb-4 flex items-center gap-2">
-                          <Icon name="target" className="w-5 h-5 text-emerald-400" />
-                          Core Competencies & Skills
-                        </h4>
-                        <div className="space-y-3">
-                          {report.solution.scope.competencies.map((c, i) => (
-                            <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
-                              <span className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm font-semibold mt-1">{i + 1}</span>
-                              <span className="text-white/90 leading-relaxed">{c}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </section>
-              
-              {/* Enhanced Delivery Plan */}
-              {report.delivery_plan.phases.length > 0 && (
-                <section>
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 id="delivery-plan" className="heading-accent text-2xl font-bold text-white scroll-mt-20">Implementation Roadmap</h2>
-                    <div className="text-sm text-white/60 flex items-center gap-2">
-                      <Icon name="timeline" className="w-4 h-4" />
-                      {report.delivery_plan.phases.length} Phases
-                    </div>
-                  </div>
-                  
-                  {/* Phase Timeline Visual */}
-                  <div className="glass-card p-6 mb-6">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Icon name="steps" className="w-5 h-5 text-amber-400" />
-                      <h3 className="text-lg font-semibold text-white/90">Phase Overview</h3>
-                    </div>
-                    <div className="relative">
-                      <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary-400 to-secondary-500" />
-                      <div className="space-y-6">
-                        {report.delivery_plan.phases.map((phase, i) => (
-                          <div key={i} className="relative flex gap-4">
-                            <div className="relative z-10 w-16 h-16 rounded-xl bg-gradient-to-br from-primary-400 to-secondary-500 flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                              {i + 1}
-                            </div>
-                            <div className="flex-1 pb-6">
-                              <div className="glass-card p-4 hover:bg-white/8 transition-colors">
-                                <div className="flex items-start justify-between mb-3">
-                                  <h4 className="text-lg font-semibold text-white/95">{phase.name}</h4>
-                                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/30">
-                                    <Icon name="timeline" className="w-3 h-3" />
-                                    <span className="text-sm font-medium">{phase.duration_weeks} weeks</span>
-                                  </div>
-                                </div>
-                                {phase.goals.length > 0 && (
-                                  <div>
-                                    <div className="text-sm font-medium text-primary-400 mb-2">Key Goals:</div>
-                                    <div className="space-y-2">
-                                      {phase.goals.map((g, j) => (
-                                        <div key={j} className="flex items-start gap-2 text-sm text-white/80 leading-relaxed">
-                                          <Icon name="check" className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
-                                          <span>{g}</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </section>
-              )}
-            </div>
-          </article>
+            </button>
+          )}
         </div>
-        
-        {/* Enhanced Sidebar */}
-        <div className="space-y-6 sticky-col">
-          {/* Enhanced TOC */}
-          <nav className="glass-card p-5" aria-label="Table of contents">
-            <div className="flex items-center gap-2 mb-4">
-              <Icon name="doc" className="w-4 h-4 text-primary-400" />
-              <h4 className="text-sm font-semibold text-white/90">Report Navigation</h4>
-            </div>
-            <ul className="space-y-2">
-              <li>
-                <a className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white/80 hover:text-primary-300 hover:bg-white/5 transition-colors" href="#executive-summary">
-                  <Icon name="summary" className="w-3 h-3" />
-                  Executive Summary
-                </a>
-              </li>
-              <li>
-                <a className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white/80 hover:text-primary-300 hover:bg-white/5 transition-colors" href="#recommended-solution">
-                  <Icon name="solution" className="w-3 h-3" />
-                  Recommended Solution
-                </a>
-              </li>
-              {report.delivery_plan.phases.length > 0 && (
-                <li>
-                  <a className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white/80 hover:text-primary-300 hover:bg-white/5 transition-colors" href="#delivery-plan">
-                    <Icon name="timeline" className="w-3 h-3" />
-                    Implementation Roadmap
-                  </a>
-                </li>
-              )}
-            </ul>
-          </nav>
-          
-          {/* Action Items - New Priority Section */}
-          {report.next_steps.length > 0 && (
-            <div className="glass-card p-5 border-l-4 border-l-emerald-400">
+      ) : (
+        <h1 className="text-2xl font-bold text-white/90">{titleInput}</h1>
+      )}
+      <div className="text-sm text-white/60 mt-2">
+        Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
+      </div>
+    </div>
+  ), [editableTitle, isEditingTitle, titleInput, savingTitle, handleTitleChange, handleTitleKeyDown, handleTitleBlur, handleTitleEdit, handleTitleSave])
+
+  // Early return if no report
+  if (!report) {
+    return (
+      <div className={`max-w-6xl mx-auto p-6 ${className}`}>
+        <div className="text-center text-white/60">
+          <p>No report data available</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`max-w-6xl mx-auto p-6 ${className}`}>
+      {titleSection}
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Main Content */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Executive Summary */}
+          {report.summary && (
+            <div className="glass-card p-5">
               <div className="flex items-center gap-2 mb-4">
-                <div className="p-1 rounded bg-emerald-500/20">
-                  <Icon name="check" className="w-4 h-4 text-emerald-400" />
+                <div className="p-1 rounded bg-primary-500/20">
+                  <Icon name="summary" className="w-4 h-4 text-primary-400" />
                 </div>
-                <h4 className="text-sm font-semibold text-white/90">Priority Actions</h4>
+                <h3 className="text-lg font-semibold text-white/90">Executive Summary</h3>
+              </div>
+              <div 
+                className="text-sm text-white/80 leading-relaxed prose prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(typeof report.summary === 'string' ? report.summary : JSON.stringify(report.summary)) }}
+              />
+            </div>
+          )}
+
+          {/* Solutions */}
+          {report.solution?.modalities && report.solution.modalities.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-secondary-500/20">
+                  <Icon name="solution" className="w-4 h-4 text-secondary-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white/90">Recommended Solutions</h3>
               </div>
               <div className="space-y-3">
-                {report.next_steps.slice(0, 3).map((s, i) => (
-                  <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-400/20 hover:bg-emerald-500/15 transition-colors cursor-pointer group">
-                    <div className="w-5 h-5 rounded-full border border-emerald-400/50 flex items-center justify-center text-xs text-emerald-400 font-semibold mt-0.5 group-hover:bg-emerald-400 group-hover:text-white transition-colors">
-                      {i + 1}
-                    </div>
-                    <span className="text-sm text-white/90 leading-relaxed">{s}</span>
-                  </div>
-                ))}
-              </div>
-              {report.next_steps.length > 3 && (
-                <div className="mt-3 text-center">
-                  <button className="text-xs text-emerald-400 hover:text-emerald-300 underline">
-                    View all {report.next_steps.length} action items
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-          
-          {/* Recommended Modalities */}
-          {report.solution.modalities.length > 0 && (
-            <div className="glass-card p-4 md:p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Icon name="solution" className="w-4 h-4 accent-icon" />
-                <h4 className="text-sm font-semibold text-white/90 accent-text-soft">Recommended Modalities</h4>
-              </div>
-              <div className="space-y-2">
-                {report.solution.modalities.map((m, i) => (
-                  <div key={i} className="text-sm flex items-start gap-2">
-                    <Icon name={modalityIconName(m.name)} className="w-4 h-4 text-primary-300 mt-0.5" />
-                    <div>
-                      <span className="font-medium text-primary-300">{m.name}</span>
-                      <p className="text-xs text-white/60 mt-0.5">{m.reason}</p>
-                    </div>
-                  </div>
-                ))}
+                {solutionItems}
               </div>
             </div>
           )}
-          
-          {/* Success Metrics */}
-          {report.measurement.success_metrics.length > 0 && (
-            <div className="glass-card p-4 md:p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Icon name="metrics" className="w-4 h-4 accent-icon" />
-                <h4 className="text-sm font-semibold text-white/90 accent-text-soft">Success Metrics</h4>
-              </div>
-              <div className="space-y-2">
-                {report.measurement.success_metrics.slice(0, 5).map((m, i) => {
-                  const pct = parsePercentFromString(m)
-                  return (
-                    <div key={i}>
-                      <div className="text-xs text-white/75 mb-1 flex items-center gap-1">
-                        <Icon name="check" className="w-3.5 h-3.5 text-primary-300" />
-                        <span>{m}</span>
-                      </div>
-                      {pct !== null && (
-                        <div className="h-1.5 w-full rounded-full bg-white/10 overflow-hidden bar-shimmer">
-                          <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-secondary-500 bar-smooth" style={{ width: `${pct}%` }} />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-          
-          {/* Timeline */}
-          {report.delivery_plan.timeline.length > 0 && (
-            <div className="glass-card p-4 md:p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Icon name="timeline" className="w-4 h-4 accent-icon" />
-                <h4 className="text-sm font-semibold text-white/90 accent-text-soft">Timeline</h4>
-              </div>
-              <div className="space-y-2">
-                {report.delivery_plan.timeline.map((t, i) => (
-                  <div key={i} className="text-sm">
-                    <span className="font-medium text-white/80">{t.label}</span>
-                    <p className="text-xs text-white/60">{t.start} to {t.end}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          
 
-          
-          {/* Risks */}
-          {report.risks.length > 0 && (
-            <div className="glass-card p-4 md:p-5">
-              <div className="flex items-center gap-2 mb-2">
-                <Icon name="risks" className="w-4 h-4 text-amber-400" />
-                <h4 className="text-sm font-semibold text-white/90 accent-text-soft">Key Risks</h4>
+          {/* Delivery Plan */}
+          {report.delivery_plan && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-emerald-500/20">
+                  <Icon name="delivery" className="w-4 h-4 text-emerald-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white/90">Delivery Plan</h3>
               </div>
-              <div className="space-y-2">
-                {report.risks.slice(0, 3).map((r, i) => {
-                  const sev = detectRiskSeverity(r.risk)
-                  const color = sev === 'high' ? 'bg-red-500/30 text-red-200 border-red-400/40' : sev === 'low' ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/30' : 'bg-amber-500/20 text-amber-200 border-amber-400/30'
-                  return (
-                    <div key={i} className="text-sm">
-                      <div className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border ${color}`}>
-                        <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
-                        <span className="text-xs capitalize">{sev}</span>
-                      </div>
-                      <div className="mt-1 font-medium text-white/90">{r.risk}</div>
-                      <p className="text-xs text-white/60 mt-0.5">{r.mitigation}</p>
-                    </div>
-                  )
-                })}
+              <div className="space-y-4">
+                {deliveryPlanItems}
+              </div>
+            </div>
+          )}
+
+          {/* Success Metrics */}
+          {report.measurement?.success_metrics && report.measurement.success_metrics.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-blue-500/20">
+                  <Icon name="metrics" className="w-4 h-4 text-blue-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white/90">Success Metrics</h3>
+              </div>
+              <div className="space-y-3">
+                {metricsItems}
+              </div>
+            </div>
+          )}
+
+          {/* Project Timeline */}
+          {report.delivery_plan?.timeline && report.delivery_plan.timeline.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <Icon name="timeline" className="w-4 h-4 text-amber-400" />
+                <h4 className="text-sm font-semibold text-white/90">Project Timeline</h4>
+              </div>
+              <div className="space-y-3">
+                {timelineItems}
+              </div>
+            </div>
+          )}
+          
+          {/* Enhanced Risk Assessment */}
+          {report.risks && report.risks.length > 0 && (
+            <div className="glass-card p-5 border-l-4 border-l-red-400">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-red-500/20">
+                  <Icon name="risks" className="w-4 h-4 text-red-400" />
+                </div>
+                <h4 className="text-sm font-semibold text-white/90">Risk Assessment</h4>
+              </div>
+              <div className="space-y-3">
+                {riskItems}
+                {report.risks.length > 3 && (
+                  <div className="text-center">
+                    <button className="text-xs text-red-400 hover:text-red-300 underline">
+                      View all {report.risks.length} risk factors
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+          
+          {/* Quick Actions */}
+          <div className="glass-card p-5">
+            <h4 className="text-sm font-semibold text-white/90 mb-4 flex items-center gap-2">
+              <Icon name="toolbox" className="w-4 h-4 text-secondary-400" />
+              Quick Actions
+            </h4>
+            <div className="space-y-2">
+              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-secondary-500/20 hover:bg-secondary-500/30 text-secondary-200 border border-secondary-400/30 transition-colors text-sm">
+                <Icon name="doc" className="w-4 h-4" />
+                Export Report
+              </button>
+              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 transition-colors text-sm">
+                <Icon name="check" className="w-4 h-4" />
+                Share Insights
+              </button>
+              <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 transition-colors text-sm">
+                <Icon name="steps" className="w-4 h-4" />
+                Create Action Plan
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="space-y-6">
+          {/* Target Audience */}
+          {report.solution?.scope?.audiences && report.solution.scope.audiences.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-purple-500/20">
+                  <Icon name="audience" className="w-4 h-4 text-purple-400" />
+                </div>
+                <h4 className="text-sm font-semibold text-white/90">Target Audience</h4>
+              </div>
+              <div className="space-y-3">
+                {audienceItems}
+              </div>
+            </div>
+          )}
+
+          {/* Learning Modalities */}
+          {report.solution?.modalities && report.solution.modalities.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-indigo-500/20">
+                  <Icon name="modality" className="w-4 h-4 text-indigo-400" />
+                </div>
+                <h4 className="text-sm font-semibold text-white/90">Learning Modalities</h4>
+              </div>
+              <div className="space-y-3">
+                {modalityItems}
+              </div>
+            </div>
+          )}
+
+          {/* Technology Stack */}
+          {report.technology_talent?.tech_enablers?.available && report.technology_talent.tech_enablers.available.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-cyan-500/20">
+                  <Icon name="tech" className="w-4 h-4 text-cyan-400" />
+                </div>
+                <h4 className="text-sm font-semibold text-white/90">Technology Stack</h4>
+              </div>
+              <div className="space-y-3">
+                {technologyItems}
+              </div>
+            </div>
+          )}
+
+          {/* Assessment Strategy */}
+          {report.measurement?.assessment_strategy && report.measurement.assessment_strategy.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-orange-500/20">
+                  <Icon name="assessment" className="w-4 h-4 text-orange-400" />
+                </div>
+                <h4 className="text-sm font-semibold text-white/90">Assessment Strategy</h4>
+              </div>
+              <div className="space-y-3">
+                {assessmentItems}
               </div>
             </div>
           )}
@@ -826,4 +622,8 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
       </div>
     </div>
   )
-}
+})
+
+ReportDisplay.displayName = 'ReportDisplay'
+
+export default ReportDisplay

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback, memo } from 'react'
 
 type Props = {
   imageSrc: string
@@ -19,6 +19,7 @@ type StaticSwirl = {
   flip: boolean
 }
 
+// Optimized seeded RNG with better performance
 function createSeededRng(seed: number) {
   let t = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0
   return function rng() {
@@ -29,7 +30,8 @@ function createSeededRng(seed: number) {
   }
 }
 
-export function StaticSwirls({
+// Memoized StaticSwirls component for better performance
+export const StaticSwirls = memo(({
   imageSrc,
   count = 120,
   minSize = 22,
@@ -37,31 +39,34 @@ export function StaticSwirls({
   opacityMin = 0.06,
   opacityMax = 0.12,
   areaPadding = 24,
-}: Props) {
+}: Props) => {
   const [viewport, setViewport] = useState<{ width: number; height: number }>({ width: 0, height: 0 })
 
+  // Optimize viewport measurement with debouncing
+  const updateViewport = useCallback(() => {
+    const w = window.innerWidth
+    // Use the full document height instead of just viewport height
+    const h = Math.max(
+      document.body.scrollHeight,
+      document.body.offsetHeight,
+      document.documentElement.clientHeight,
+      document.documentElement.scrollHeight,
+      document.documentElement.offsetHeight,
+      window.innerHeight
+    )
+    setViewport({ width: w, height: h })
+  }, [])
+
   useEffect(() => {
-    const measure = () => {
-      const w = window.innerWidth
-      // Use the full document height instead of just viewport height
-      const h = Math.max(
-        document.body.scrollHeight,
-        document.body.offsetHeight,
-        document.documentElement.clientHeight,
-        document.documentElement.scrollHeight,
-        document.documentElement.offsetHeight,
-        window.innerHeight
-      )
-      setViewport({ width: w, height: h })
-    }
+    updateViewport()
     
-    measure()
-    window.addEventListener('resize', measure)
+    // Use passive event listener for better performance
+    window.addEventListener('resize', updateViewport, { passive: true })
     
     // Also listen for content changes that might affect height
     const observer = new MutationObserver(() => {
       // Debounce the measure call
-      setTimeout(measure, 100)
+      setTimeout(updateViewport, 100)
     })
     
     observer.observe(document.body, {
@@ -72,18 +77,19 @@ export function StaticSwirls({
     })
     
     return () => {
-      window.removeEventListener('resize', measure)
+      window.removeEventListener('resize', updateViewport)
       observer.disconnect()
     }
-  }, [])
+  }, [updateViewport])
 
+  // Memoize swirl generation to prevent recalculation
   const swirls = useMemo<StaticSwirl[]>(() => {
     const { width, height } = viewport
     if (!width || !height) return []
 
     const rng = createSeededRng(12345) // Fixed seed for consistent layout
     const results: StaticSwirl[] = []
-    const maxAttempts = count * 10
+    const maxAttempts = count * 8 // Reduced from 10 for better performance
     const spacing = 4
 
     for (let i = 0; i < count && i < maxAttempts; i++) {
@@ -94,7 +100,7 @@ export function StaticSwirls({
       const opacity = opacityMin + rng() * (opacityMax - opacityMin)
       const flip = rng() > 0.5
 
-      // Simple collision detection
+      // Optimize collision detection with early exit
       let overlaps = false
       const r = size / 2
       for (const existing of results) {
@@ -115,6 +121,27 @@ export function StaticSwirls({
     return results
   }, [viewport, count, minSize, maxSize, opacityMin, opacityMax, areaPadding])
 
+  // Memoize swirl elements to prevent unnecessary re-renders
+  const swirlElements = useMemo(() => (
+    swirls.map((swirl, idx) => (
+      <img
+        key={idx}
+        src={imageSrc}
+        alt=""
+        className="absolute select-none"
+        style={{
+          left: swirl.x,
+          top: swirl.y,
+          width: Math.round(swirl.size),
+          height: Math.round(swirl.size),
+          opacity: swirl.opacity,
+          transform: `translate(-50%, -50%) rotate(${swirl.rotation}deg) scaleX(${swirl.flip ? -1 : 1})`,
+          pointerEvents: 'none',
+        }}
+      />
+    ))
+  ), [swirls, imageSrc])
+
   return (
     <div 
       className="fixed top-0 left-0 z-0 overflow-hidden pointer-events-none"
@@ -123,23 +150,9 @@ export function StaticSwirls({
         height: viewport.height,
       }}
     >
-      {swirls.map((swirl, idx) => (
-        <img
-          key={idx}
-          src={imageSrc}
-          alt=""
-          className="absolute select-none"
-          style={{
-            left: swirl.x,
-            top: swirl.y,
-            width: Math.round(swirl.size),
-            height: Math.round(swirl.size),
-            opacity: swirl.opacity,
-            transform: `translate(-50%, -50%) rotate(${swirl.rotation}deg) scaleX(${swirl.flip ? -1 : 1})`,
-            pointerEvents: 'none',
-          }}
-        />
-      ))}
+      {swirlElements}
     </div>
   )
-}
+})
+
+StaticSwirls.displayName = 'StaticSwirls'

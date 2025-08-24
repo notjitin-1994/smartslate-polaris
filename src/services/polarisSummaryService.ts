@@ -11,6 +11,7 @@ export async function saveSummary(data: {
   company_name: string | null
   report_title?: string | null
   summary_content: string
+  prelim_report?: string | null
   stage1_answers: Record<string, any>
   stage2_answers: Record<string, any>
   stage3_answers: Record<string, any>
@@ -45,6 +46,7 @@ export async function saveSummary(data: {
     company_name: data.company_name,
     report_title: data.report_title ?? data.company_name ?? 'Discovery Starmap',
     summary_content: data.summary_content,
+    prelim_report: data.prelim_report ?? null,
     stage1_answers: data.stage1_answers,
     stage2_answers: data.stage2_answers,
     stage3_answers: data.stage3_answers,
@@ -184,6 +186,59 @@ export async function updateSummaryEditedContent(
       edited_content: editedContent,
       is_edited: true,
       last_edited_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .eq('user_id', user.id)
+
+  return { error }
+}
+
+export async function updateSummaryPrelimReport(
+  id: string,
+  prelimReport: string
+): Promise<{ error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: new Error('User not authenticated') }
+  }
+
+  const { error } = await supabase
+    .from('polaris_summaries')
+    .update({ 
+      prelim_report: prelimReport,
+      last_edited_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .eq('user_id', user.id)
+
+  return { error }
+}
+
+export async function updateSummaryFinalContent(
+  id: string,
+  finalContent: string,
+  options: { stage2_questions?: any[]; stage3_questions?: any[] } = {}
+): Promise<{ error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: new Error('User not authenticated') }
+  }
+
+  const updatePayload: Partial<CreatePolarisSummary> = {
+    summary_content: finalContent,
+  }
+  if (options.stage2_questions) (updatePayload as any).stage2_questions = options.stage2_questions
+  if (options.stage3_questions) (updatePayload as any).stage3_questions = options.stage3_questions
+
+  const { error } = await supabase
+    .from('polaris_summaries')
+    .update({
+      ...updatePayload,
+      last_edited_at: new Date().toISOString(),
     })
     .eq('id', id)
     .eq('user_id', user.id)

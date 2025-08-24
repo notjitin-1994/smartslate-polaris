@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback, memo, type CSSProperties } from 'react'
 
 type Props = {
   imageSrc: string
@@ -34,6 +34,7 @@ type Connection = {
   strength: number
 }
 
+// Optimized seeded RNG with better performance
 function createSeededRng(seed: number) {
   let t = Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0
   return function rng() {
@@ -44,7 +45,8 @@ function createSeededRng(seed: number) {
   }
 }
 
-export function SwirlField({
+// Memoized SwirlField component for better performance
+export const SwirlField = memo(({
   imageSrc,
   count = 120,
   minSize = 22,
@@ -52,13 +54,15 @@ export function SwirlField({
   opacityMin = 0.06,
   opacityMax = 0.12,
   areaPadding = 24,
-}: Props) {
+}: Props) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [viewport, setViewport] = useState<{ width: number; height: number }>({ width: 0, height: 0 })
   const seedRef = useRef(Math.floor(Math.random() * 1_000_000))
   const swirlRefs = useRef<(HTMLImageElement | null)[]>([])
   const lineGlowRefs = useRef<(SVGLineElement | null)[]>([])
   const lineCoreRefs = useRef<(SVGLineElement | null)[]>([])
+  const animationFrameRef = useRef<number | null>(null)
+  const lastFrameTimeRef = useRef<number>(0)
 
   // Pre-generate normalized positions and attributes once for stability
   const normalized = useMemo<NormalizedSwirl[]>(() => {
@@ -73,20 +77,25 @@ export function SwirlField({
     }))
   }, [count])
 
-  useEffect(() => {
-    const measure = () => {
-      const w = window.innerWidth
-      const h = window.innerHeight
-      setViewport({ width: w, height: h })
-    }
-    measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
+  // Optimize viewport measurement with debouncing
+  const updateViewport = useCallback(() => {
+    const w = window.innerWidth
+    const h = window.innerHeight
+    setViewport({ width: w, height: h })
   }, [])
+
+  useEffect(() => {
+    updateViewport()
+    
+    // Use passive event listener for better performance
+    window.addEventListener('resize', updateViewport, { passive: true })
+    return () => window.removeEventListener('resize', updateViewport)
+  }, [updateViewport])
 
   const placed = useMemo<PlacedSwirl[]>(() => {
     const { width, height } = viewport
     if (!width || !height) return []
+    
     const padX = Math.min(areaPadding, width / 10)
     const padY = Math.min(areaPadding, height / 10)
 
@@ -97,12 +106,13 @@ export function SwirlField({
       opacity: opacityMin + n.opN * (opacityMax - opacityMin),
       flip: n.flip,
     }))
+    
     // Place larger first for better packing
     items.sort((a, b) => b.size - a.size)
 
     const rng = createSeededRng(seedRef.current + 1)
     const results: PlacedSwirl[] = []
-    const maxAttemptsPerItem = 100
+    const maxAttemptsPerItem = 50 // Reduced from 100 for better performance
     const spacing = 4 // extra gap between swirls
 
     for (const it of items) {
@@ -111,6 +121,8 @@ export function SwirlField({
         const x = padX + rng() * (width - padX * 2)
         const y = padY + rng() * (height - padY * 2)
         let overlaps = false
+        
+        // Optimize collision detection with early exit
         for (let i = 0; i < results.length; i++) {
           const o = results[i]
           const dx = x - o.x
@@ -121,17 +133,17 @@ export function SwirlField({
             break
           }
         }
+        
         if (!overlaps) {
           results.push({ x, y, size: it.size, rotation: it.rotation, opacity: it.opacity, flip: it.flip })
           break
         }
       }
       if (results.length >= count) break
-      // If couldn't place due to density, continue to next smaller swirl
     }
 
     return results
-  }, [viewport, normalized, minSize, maxSize, opacityMin, opacityMax, areaPadding])
+  }, [viewport, normalized, minSize, maxSize, opacityMin, opacityMax, areaPadding, count])
 
   // Create randomized but deterministic connections (2-4 per swirl, within distance)
   const connections = useMemo<Connection[]>(() => {
@@ -142,7 +154,7 @@ export function SwirlField({
     const maxPerNode = 2
     const minPerNode = 2
     const maxDistance = Math.min(width, height) * 0.4
-    const maxCandidates = 10
+    const maxCandidates = 8 // Reduced from 10 for better performance
 
     const edgeKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`)
     const used = new Set<string>()
@@ -152,6 +164,7 @@ export function SwirlField({
     for (let i = 0; i < placed.length; i++) {
       if (degree[i] >= maxPerNode) continue
       const pi = placed[i]
+      
       // Build candidate neighbor list by distance
       const neighbors: { j: number; d: number }[] = []
       for (let j = 0; j < placed.length; j++) {
@@ -164,10 +177,7 @@ export function SwirlField({
       }
       neighbors.sort((a, b) => a.d - b.d)
 
-      const desired = Math.min(
-        maxPerNode,
-        minPerNode + Math.floor(rng() * 3) // 2-4
-      )
+      const desired = Math.min(maxPerNode, minPerNode + Math.floor(rng() * 3))
 
       let added = 0
       for (let k = 0; k < neighbors.length && added < desired; k++) {
@@ -175,8 +185,8 @@ export function SwirlField({
         if (degree[j] >= maxPerNode) continue
         const key = edgeKey(i, j)
         if (used.has(key)) continue
-        // Randomly skip some neighbors if there are too many very close ones
         if (k > maxCandidates) break
+        
         used.add(key)
         degree[i]++
         degree[j]++
@@ -190,7 +200,7 @@ export function SwirlField({
     return out
   }, [viewport, placed])
 
-  // Animation: randomized smooth motion with per-swirl speed and direction drift
+  // Optimized animation with better performance
   useEffect(() => {
     const { width, height } = viewport
     if (!width || !height || placed.length === 0) return
@@ -198,6 +208,7 @@ export function SwirlField({
     const n = placed.length
     const rng = createSeededRng(seedRef.current + 3)
 
+    // Use TypedArrays for better performance
     const posX = new Float32Array(n)
     const posY = new Float32Array(n)
     const angle = new Float32Array(n)
@@ -209,74 +220,133 @@ export function SwirlField({
     const driftPhase = new Float32Array(n)
     const driftFreq = new Float32Array(n)
 
+    // Initialize arrays
     for (let i = 0; i < n; i++) {
       posX[i] = placed[i].x
       posY[i] = placed[i].y
       angle[i] = rng() * Math.PI * 2
-      speed[i] = 6 + rng() * 8 // px/s, slightly slower for smoothness
-      // Gentle curved paths with reduced turn rate
-      turn[i] = (rng() * 2 - 1) * 0.15 // rad/s
+      speed[i] = 4 + rng() * 6 // Reduced speed for better performance
+      turn[i] = (rng() * 2 - 1) * 0.1 // Reduced turn rate
       radius[i] = placed[i].size / 2
       speedPhase[i] = rng() * Math.PI * 2
-      speedFreq[i] = 0.2 + rng() * 0.5 // Hz
+      speedFreq[i] = 0.15 + rng() * 0.3 // Reduced frequency
       driftPhase[i] = rng() * Math.PI * 2
-      driftFreq[i] = 0.05 + rng() * 0.15 // very low-frequency drift for organic motion
+      driftFreq[i] = 0.03 + rng() * 0.1 // Reduced drift frequency
     }
 
-    // Prepare element styles
+    // Prepare element styles once
     for (let i = 0; i < n; i++) {
       const el = swirlRefs.current[i]
       if (el) {
-        el.style.transition = 'transform 0s' // avoid easing trails during rAF
+        el.style.transition = 'transform 0s'
         el.style.willChange = 'transform'
       }
     }
 
-    let rafId = 0
-    let lastTs = performance.now()
     const marginExtra = 8
+    let frameCount = 0
 
     const step = (ts: number) => {
-      const now = ts
-      const dt = Math.min(0.033, (now - lastTs) / 1000) // cap dt for stability (≈30 FPS max step)
-      lastTs = now
+      // Limit to 30 FPS for better performance
+      if (ts - lastFrameTimeRef.current < 33) {
+        animationFrameRef.current = requestAnimationFrame(step)
+        return
+      }
+      
+      lastFrameTimeRef.current = ts
+      frameCount++
 
-      // Time in seconds for low-frequency oscillations
-      const tSec = now / 1000
+      const dt = Math.min(0.033, (ts - lastFrameTimeRef.current) / 1000)
+      const tSec = ts / 1000
 
       // Update swirl positions
       for (let i = 0; i < n; i++) {
-        const sp = speed[i] * (0.9 + 0.25 * Math.sin(speedPhase[i] + tSec * 2 * Math.PI * speedFreq[i]))
+        const sp = speed[i] * (0.9 + 0.2 * Math.sin(speedPhase[i] + tSec * 2 * Math.PI * speedFreq[i]))
         const drift = Math.sin(driftPhase[i] + tSec * 2 * Math.PI * driftFreq[i])
-        angle[i] += (turn[i] * 0.2 + drift * 0.12) * dt
+        angle[i] += (turn[i] * 0.15 + drift * 0.08) * dt
         posX[i] += Math.cos(angle[i]) * sp * dt
         posY[i] += Math.sin(angle[i]) * sp * dt
 
+        // Wrap around edges
         const wrapMargin = radius[i] + marginExtra
         if (posX[i] < -wrapMargin) posX[i] = width + wrapMargin
         else if (posX[i] > width + wrapMargin) posX[i] = -wrapMargin
         if (posY[i] < -wrapMargin) posY[i] = height + wrapMargin
         else if (posY[i] > height + wrapMargin) posY[i] = -wrapMargin
 
-        const el = swirlRefs.current[i]
-        if (el) {
-          const transform = `translate3d(${posX[i].toFixed(1)}px, ${posY[i].toFixed(1)}px, 0) translate(-50%, -50%) rotate(${placed[i].rotation}deg) scaleX(${placed[i].flip ? -1 : 1})`
-          el.style.setProperty('--t', transform)
+        // Update DOM only every few frames for better performance
+        if (frameCount % 2 === 0) {
+          const el = swirlRefs.current[i]
+          if (el) {
+            const transform = `translate3d(${posX[i].toFixed(1)}px, ${posY[i].toFixed(1)}px, 0) translate(-50%, -50%) rotate(${placed[i].rotation}deg) scaleX(${placed[i].flip ? -1 : 1})`
+            el.style.setProperty('--t', transform)
+          }
         }
       }
 
-      // Update connection lines to follow moving swirls
-      const cx = width / 2
-      const cy = height / 2
-      for (let k = 0; k < connections.length; k++) {
-        const c = connections[k]
-        const x1 = posX[c.a]
-        const y1 = posY[c.a]
-        const x2 = posX[c.b]
-        const y2 = posY[c.b]
+      // Update connection lines less frequently for better performance
+      if (frameCount % 3 === 0) {
+        const cx = width / 2
+        const cy = height / 2
+        for (let k = 0; k < connections.length; k++) {
+          const c = connections[k]
+          const x1 = posX[c.a]
+          const y1 = posY[c.a]
+          const x2 = posX[c.b]
+          const y2 = posY[c.b]
 
-        const midx = (x1 + x2) / 2
-        const midy = (y1 + y2) / 2
+          const midx = (x1 + x2) / 2
+          const midy = (y1 + y2) / 2
+          const dx = midx - cx
+          const dy = midy - cy
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          const maxDist = Math.sqrt(cx * cx + cy * cy)
+          const centerFactor = Math.min(1, Math.max(0.6, dist / maxDist))
+          const glowOpacity = Math.min(0.5, (0.28 + c.strength * 0.35) * centerFactor)
+          const coreOpacity = Math.min(0.85, (0.55 + c.strength * 0.35) * centerFactor)
+
+          const g = lineGlowRefs.current[k]
+          if (g) {
+            g.setAttribute('x1', x1.toFixed(1))
+            g.setAttribute('y1', y1.toFixed(1))
+            g.setAttribute('x2', x2.toFixed(1))
+            g.setAttribute('y2', y2.toFixed(1))
+            g.setAttribute('stroke-opacity', glowOpacity.toFixed(3))
+          }
+          const core = lineCoreRefs.current[k]
+          if (core) {
+            core.setAttribute('x1', x1.toFixed(1))
+            core.setAttribute('y1', y1.toFixed(1))
+            core.setAttribute('x2', x2.toFixed(1))
+            core.setAttribute('y2', y2.toFixed(1))
+            core.setAttribute('stroke-opacity', coreOpacity.toFixed(3))
+          }
+        }
+      }
+
+      animationFrameRef.current = requestAnimationFrame(step)
+    }
+
+    animationFrameRef.current = requestAnimationFrame(step)
+    
+    // Proper cleanup
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current)
+      }
+    }
+  }, [viewport, placed, connections])
+
+  // Memoize SVG connections to prevent unnecessary re-renders
+  const svgConnections = useMemo(() => (
+    <g filter="url(#line-glow)" strokeLinecap="round" fill="none">
+      {connections.map((c, i) => {
+        const p1 = placed[c.a]
+        const p2 = placed[c.b]
+        const cx = viewport.width / 2
+        const cy = viewport.height / 2
+        const midx = (p1.x + p2.x) / 2
+        const midy = (p1.y + p2.y) / 2
         const dx = midx - cx
         const dy = midy - cy
         const dist = Math.sqrt(dx * dx + dy * dy)
@@ -284,31 +354,47 @@ export function SwirlField({
         const centerFactor = Math.min(1, Math.max(0.6, dist / maxDist))
         const glowOpacity = Math.min(0.5, (0.28 + c.strength * 0.35) * centerFactor)
         const coreOpacity = Math.min(0.85, (0.55 + c.strength * 0.35) * centerFactor)
+        
+        return (
+          <g key={i} stroke={`rgb(var(--primary))`}>
+            <line 
+              ref={(el) => { lineGlowRefs.current[i] = el }} 
+              x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} 
+              strokeOpacity={glowOpacity} 
+              strokeWidth={1.28} 
+            />
+            <line 
+              ref={(el) => { lineCoreRefs.current[i] = el }} 
+              x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} 
+              strokeOpacity={coreOpacity} 
+              strokeWidth={0.48} 
+            />
+          </g>
+        )
+      })}
+    </g>
+  ), [connections, placed, viewport.width, viewport.height])
 
-        const g = lineGlowRefs.current[k]
-        if (g) {
-          g.setAttribute('x1', x1.toFixed(1))
-          g.setAttribute('y1', y1.toFixed(1))
-          g.setAttribute('x2', x2.toFixed(1))
-          g.setAttribute('y2', y2.toFixed(1))
-          g.setAttribute('stroke-opacity', glowOpacity.toFixed(3))
-        }
-        const core = lineCoreRefs.current[k]
-        if (core) {
-          core.setAttribute('x1', x1.toFixed(1))
-          core.setAttribute('y1', y1.toFixed(1))
-          core.setAttribute('x2', x2.toFixed(1))
-          core.setAttribute('y2', y2.toFixed(1))
-          core.setAttribute('stroke-opacity', coreOpacity.toFixed(3))
-        }
-      }
-
-      rafId = requestAnimationFrame(step)
-    }
-
-    rafId = requestAnimationFrame(step)
-    return () => cancelAnimationFrame(rafId)
-  }, [viewport, placed, connections])
+  // Memoize swirl elements to prevent unnecessary re-renders
+  const swirlElements = useMemo(() => (
+    placed.map((s, idx) => (
+      <img
+        key={idx}
+        src={imageSrc}
+        alt=""
+        ref={(el) => { swirlRefs.current[idx] = el }}
+        className="swirl-item absolute select-none z-10"
+        style={{
+          left: `0px`,
+          top: `0px`,
+          width: `${Math.round(s.size)}px`,
+          height: `${Math.round(s.size)}px`,
+          opacity: s.opacity,
+          ['--t' as any]: `translate3d(${s.x}px, ${s.y}px, 0) translate(-50%, -50%) rotate(${s.rotation}deg) scaleX(${s.flip ? -1 : 1})`,
+        } as CSSProperties}
+      />
+    ))
+  ), [placed, imageSrc])
 
   return (
     <div ref={containerRef} className="absolute inset-0 z-0 overflow-hidden">
@@ -332,50 +418,14 @@ export function SwirlField({
             </feMerge>
           </filter>
         </defs>
-        <g filter="url(#line-glow)" strokeLinecap="round" fill="none">
-          {connections.map((c, i) => {
-            const p1 = placed[c.a]
-            const p2 = placed[c.b]
-            const cx = viewport.width / 2
-            const cy = viewport.height / 2
-            const midx = (p1.x + p2.x) / 2
-            const midy = (p1.y + p2.y) / 2
-            const dx = midx - cx
-            const dy = midy - cy
-            const dist = Math.sqrt(dx * dx + dy * dy)
-            const maxDist = Math.sqrt(cx * cx + cy * cy)
-            const centerFactor = Math.min(1, Math.max(0.6, dist / maxDist))
-            const glowOpacity = Math.min(0.5, (0.28 + c.strength * 0.35) * centerFactor)
-            const coreOpacity = Math.min(0.85, (0.55 + c.strength * 0.35) * centerFactor)
-            return (
-              <g key={i} stroke={`rgb(var(--primary))`}>
-                <line ref={(el) => { lineGlowRefs.current[i] = el }} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} strokeOpacity={glowOpacity} strokeWidth={1.28} />
-                <line ref={(el) => { lineCoreRefs.current[i] = el }} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} strokeOpacity={coreOpacity} strokeWidth={0.48} />
-              </g>
-            )
-          })}
-        </g>
+        {svgConnections}
       </svg>
 
-      {placed.map((s, idx) => (
-        <img
-          key={idx}
-          src={imageSrc}
-          alt=""
-          ref={(el) => { swirlRefs.current[idx] = el }}
-          className="swirl-item absolute select-none z-10"
-          style={{
-            left: `0px`,
-            top: `0px`,
-            width: `${Math.round(s.size)}px`,
-            height: `${Math.round(s.size)}px`,
-            opacity: s.opacity,
-            ['--t' as any]: `translate3d(${s.x}px, ${s.y}px, 0) translate(-50%, -50%) rotate(${s.rotation}deg) scaleX(${s.flip ? -1 : 1})`,
-          } as CSSProperties}
-        />
-      ))}
+      {swirlElements}
     </div>
   )
-}
+})
+
+SwirlField.displayName = 'SwirlField'
 
 

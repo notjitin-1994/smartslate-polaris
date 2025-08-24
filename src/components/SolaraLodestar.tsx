@@ -1,25 +1,86 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback, memo } from 'react'
 import { createPortal } from 'react-dom'
 import { llmService, type ChatMessage } from '@/services'
+import { getSummaryById, type PolarisSummary } from '@/services/polarisSummaryService'
 import { getPolarisDataFromPage, type PolarisData } from '@/services/polarisDataService'
 
 type Message = ChatMessage & { id: string }
 
-function StarIcon({ className = '' }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M12 2.75l2.917 5.91 6.523.948-4.72 4.6 1.114 6.492L12 17.98 6.166 20.7l1.115-6.492-4.72-4.6 6.522-.948L12 2.75z" />
-    </svg>
-  )
-}
+// Memoize the StarIcon component to prevent unnecessary re-renders
+const StarIcon = memo(({ className = '' }: { className?: string }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M12 2.75l2.917 5.91 6.523.948-4.72 4.6 1.114 6.492L12 17.98 6.166 20.7l1.115-6.492-4.72-4.6 6.522-.948L12 2.75z" />
+  </svg>
+))
 
-export function SolaraLodestar() {
+StarIcon.displayName = 'StarIcon'
+
+// Memoize suggestions to prevent recreation on every render
+const SUGGESTIONS = [
+  'Analyze my organization & project context',
+  'Review my requirements & learner profiles',
+  'Provide personalized L&D recommendations',
+] as const
+
+// Optimized message component to prevent unnecessary re-renders
+const MessageBubble = memo(({ message }: { message: Message }) => (
+  <div className={`mb-2 flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+    <div className={`rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words max-w-[85%] ${
+      message.role === 'user' 
+        ? 'bg-secondary-400/20 border border-secondary-400/30 text-white/95' 
+        : 'bg-white/5 border border-white/10 text-white/90'
+    }`}>
+      {message.content}
+    </div>
+  </div>
+))
+
+MessageBubble.displayName = 'MessageBubble'
+
+// Optimized suggestion button component
+const SuggestionButton = memo(({ 
+  suggestion, 
+  index, 
+  onClick 
+}: { 
+  suggestion: string
+  index: number
+  onClick: (s: string) => void 
+}) => (
+  <button 
+    type="button" 
+    className="group flex items-center gap-2 text-left px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 text-white/85 hover:text-white hover:bg-white/10 hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all duration-200 transform hover:translate-x-1" 
+    onClick={() => onClick(suggestion)}
+    style={{ animationDelay: `${index * 50}ms` }}
+  >
+    <svg className="w-3.5 h-3.5 opacity-70 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M9 18l6-6-6-6"/>
+    </svg>
+    <span className="text-xs">{suggestion}</span>
+  </button>
+))
+
+SuggestionButton.displayName = 'SuggestionButton'
+
+// Optimized loading indicator
+const LoadingIndicator = memo(() => (
+  <div className="mb-2 flex justify-start">
+    <div className="rounded-2xl px-3 py-2 text-sm bg-white/5 border border-white/10 text-white/70">
+      <span className="inline-block w-2 h-2 rounded-full bg-white/50 animate-pulse mr-1" />
+      Thinking…
+    </div>
+  </div>
+))
+
+LoadingIndicator.displayName = 'LoadingIndicator'
+
+export const SolaraLodestar = memo(({ summaryId }: { summaryId?: string }) => {
   const [open, setOpen] = useState<boolean>(() => {
     try {
       return localStorage.getItem('lodestar:open') === '1'
@@ -46,27 +107,47 @@ export function SolaraLodestar() {
 
   const containerRef = useRef<HTMLDivElement | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
-
+  const [dbSummary, setDbSummary] = useState<PolarisSummary | null>(null)
+  // Load summary from DB for RAG if summaryId provided
   useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        if (!summaryId) {
+          setDbSummary(null)
+          return
+        }
+        const { data, error } = await getSummaryById(summaryId)
+        if (!cancelled) {
+          if (!error) setDbSummary(data)
+        }
+      } catch {}
+    }
+    void load()
+    return () => { cancelled = true }
+  }, [summaryId])
+
+  // Memoize localStorage operations to prevent unnecessary re-renders
+  const updateLocalStorage = useCallback((key: string, value: string) => {
     try {
-      localStorage.setItem('lodestar:open', open ? '1' : '0')
+      localStorage.setItem(key, value)
     } catch {}
-  }, [open])
+  }, [])
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('lodestar:messages', JSON.stringify(messages))
-    } catch {}
-  }, [messages])
+  // Optimize localStorage updates with useCallback
+  const updateOpenState = useCallback((newOpen: boolean) => {
+    setOpen(newOpen)
+    updateLocalStorage('lodestar:open', newOpen ? '1' : '0')
+  }, [updateLocalStorage])
 
-  useEffect(() => {
-    if (!open) return
-    const el = endRef.current
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'end' })
-  }, [open, messages.length])
+  const updateMessages = useCallback((newMessages: Message[] | ((prev: Message[]) => Message[])) => {
+    setMessages(newMessages)
+    const messagesToStore = typeof newMessages === 'function' ? newMessages(messages) : newMessages
+    updateLocalStorage('lodestar:messages', JSON.stringify(messagesToStore))
+  }, [updateLocalStorage, messages])
 
-  // Function to gather Polaris data from the current context
-  const gatherPolarisData = useMemo((): PolarisData => {
+  // Memoize Polaris data gathering to prevent recalculation
+  const gatherPolarisData = useMemo((): PolarisData & { db?: any } => {
     try {
       // Get basic data from localStorage
       const stage1Answers = JSON.parse(localStorage.getItem('polaris_stage1') || '{}')
@@ -83,7 +164,6 @@ export function SolaraLodestar() {
                          ''
       
       // Try to access Polaris data from the current page context
-      // This is a more sophisticated approach to get the actual reports
       let polarisData = getPolarisDataFromPage()
       
       // If we have basic data but no reports, try to construct useful context
@@ -107,14 +187,175 @@ export function SolaraLodestar() {
         }
       }
       
-      return polarisData
+      // Enrich with DB summary if available
+      const db = dbSummary ? {
+        id: dbSummary.id,
+        title: dbSummary.report_title,
+        companyName: dbSummary.company_name,
+        prelimReport: dbSummary.prelim_report,
+        finalReport: dbSummary.edited_content || dbSummary.summary_content,
+        greetingReport: dbSummary.greeting_report,
+        orgReport: dbSummary.org_report,
+        requirementReport: dbSummary.requirement_report,
+        stage1Answers: dbSummary.stage1_answers,
+        stage2Answers: dbSummary.stage2_answers,
+        stage3Answers: dbSummary.stage3_answers,
+      } : undefined
+
+      return { ...polarisData, db }
     } catch (error) {
       console.warn('Could not gather Polaris data:', error)
       return {}
     }
+  }, [dbSummary])
+
+  // Optimize system prompt generation with useMemo
+  const systemPrompt = useMemo(() => {
+    const hasData = gatherPolarisData.companyName || gatherPolarisData.stage1Answers || gatherPolarisData.stage2Answers || gatherPolarisData.stage3Answers
+    
+    let basePrompt = 'You are Solara Lodestar, a concise, warm, highly capable AI L&D consultant. ' +
+      'Adopt a Claude-like tone: thoughtful, structured, transparent about uncertainty, and collaborative. ' +
+      'Prefer short paragraphs, clear lists, and concrete next steps. Use plain language.'
+    
+    if (hasData) {
+      basePrompt += '\n\nIMPORTANT: You have access to Polaris needs analysis data. When users ask for analysis, reviews, or recommendations, ALWAYS use this data instead of asking them to provide information. Analyze what you have and provide specific, actionable insights.'
+      
+      if (gatherPolarisData.companyName) basePrompt += `\n- Organization: ${gatherPolarisData.companyName}`
+      if (gatherPolarisData.dataSummary) basePrompt += `\n- Available Data: ${gatherPolarisData.dataSummary}`
+      if (gatherPolarisData.greetingReport || gatherPolarisData.db?.greetingReport) basePrompt += '\n- Greeting/Research Report'
+      if (gatherPolarisData.orgReport || gatherPolarisData.db?.orgReport) basePrompt += '\n- Organization Analysis Report'
+      if (gatherPolarisData.requirementReport || gatherPolarisData.db?.requirementReport) basePrompt += '\n- Requirements Analysis Report'
+      if (gatherPolarisData.db?.prelimReport) basePrompt += '\n- Preliminary Master Report (user-reviewed)'
+      if (gatherPolarisData.db?.finalReport) basePrompt += '\n- Final Starmap Report'
+      if (gatherPolarisData.stage1Answers && Object.keys(gatherPolarisData.stage1Answers).length > 0) basePrompt += '\n- Stage 1: Requester & Organization Details'
+      if (gatherPolarisData.stage2Answers && Object.keys(gatherPolarisData.stage2Answers).length > 0) basePrompt += '\n- Stage 2: Project & Stakeholder Details'
+      if (gatherPolarisData.stage3Answers && Object.keys(gatherPolarisData.stage3Answers).length > 0) basePrompt += '\n- Stage 3: Technical & Implementation Details'
+      
+      basePrompt += '\n\nCRITICAL INSTRUCTION: When users ask for analysis or recommendations, DO NOT ask them to provide information you already have. Instead, analyze the available data and provide specific insights. If you need more information, ask specific follow-up questions about areas not covered in the data.'
+    }
+    
+    return basePrompt
+  }, [gatherPolarisData])
+
+  // Optimize ID generation with useCallback
+  const newId = useCallback(() => {
+    return Math.random().toString(36).slice(2, 10)
   }, [])
 
-  // Listen for editsRemaining changes across the app
+  // Optimize sendPrompt function with useCallback
+  const sendPrompt = useCallback(async (text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed || busy) return
+    setBusy(true)
+
+    const nextMessages: Message[] = [
+      ...messages,
+      { id: newId(), role: 'user', content: trimmed },
+    ]
+    updateMessages(nextMessages)
+    setInput('')
+
+    try {
+      const hasData = gatherPolarisData.companyName || gatherPolarisData.stage1Answers || gatherPolarisData.stage2Answers || gatherPolarisData.stage3Answers
+      
+      let contextMessage = ''
+      if (hasData) {
+        contextMessage = '\n\nCURRENT POLARIS DATA:\n'
+        const orgName = gatherPolarisData.companyName || gatherPolarisData.db?.companyName
+        if (orgName) contextMessage += `Organization: ${orgName}\n`
+        if (gatherPolarisData.dataSummary) contextMessage += `Available Data: ${gatherPolarisData.dataSummary}\n`
+        const greet = gatherPolarisData.greetingReport || gatherPolarisData.db?.greetingReport
+        const org = gatherPolarisData.orgReport || gatherPolarisData.db?.orgReport
+        const req = gatherPolarisData.requirementReport || gatherPolarisData.db?.requirementReport
+        if (greet) contextMessage += `\nGreeting Report:\n${greet}\n`
+        if (org) contextMessage += `\nOrganization Report:\n${org}\n`
+        if (req) contextMessage += `\nRequirements Report:\n${req}\n`
+        if (gatherPolarisData.db?.prelimReport) contextMessage += `\nPreliminary Master Report:\n${gatherPolarisData.db.prelimReport}\n`
+        if (gatherPolarisData.db?.finalReport) contextMessage += `\nFinal Starmap (current):\n${gatherPolarisData.db.finalReport}\n`
+        if (Object.keys((gatherPolarisData.stage1Answers || gatherPolarisData.db?.stage1Answers || {}) as any).length > 0) {
+          const s1 = gatherPolarisData.stage1Answers || gatherPolarisData.db?.stage1Answers
+          contextMessage += `\nStage 1 Answers (Requester & Organization):\n${JSON.stringify(s1, null, 2)}\n`
+        }
+        if (Object.keys((gatherPolarisData.stage2Answers || gatherPolarisData.db?.stage2Answers || {}) as any).length > 0) {
+          const s2 = gatherPolarisData.stage2Answers || gatherPolarisData.db?.stage2Answers
+          contextMessage += `\nStage 2 Answers (Project & Stakeholders):\n${JSON.stringify(s2, null, 2)}\n`
+        }
+        if (Object.keys((gatherPolarisData.stage3Answers || gatherPolarisData.db?.stage3Answers || {}) as any).length > 0) {
+          const s3 = gatherPolarisData.stage3Answers || gatherPolarisData.db?.stage3Answers
+          contextMessage += `\nStage 3 Answers (Technical & Implementation):\n${JSON.stringify(s3, null, 2)}\n`
+        }
+      }
+      
+      const finalPayload: ChatMessage[] = [
+        { role: 'system', content: systemPrompt + contextMessage },
+        ...nextMessages.map(({ role, content }) => ({ role, content })),
+      ]
+
+      const { content } = await llmService.callLLM(finalPayload)
+      updateMessages((prev) => [...prev, { id: newId(), role: 'assistant', content: content || '…' }])
+    } catch (err: any) {
+      const fallback = err?.message ? String(err.message) : 'Something went wrong. Please try again.'
+      updateMessages((prev) => [
+        ...prev,
+        { id: newId(), role: 'assistant', content: `I hit an error: ${fallback}` },
+      ])
+    } finally {
+      setBusy(false)
+      setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 50)
+    }
+  }, [busy, messages, updateMessages, newId, gatherPolarisData, systemPrompt])
+
+  // Optimize form submission with useCallback
+  const onSubmit = useCallback((e: React.FormEvent) => {
+    e.preventDefault()
+    void sendPrompt(input)
+  }, [input, sendPrompt])
+
+  // Optimize suggestion handling with useCallback
+  const handleSuggestion = useCallback((s: string) => {
+    if (busy) return
+    setInput(s)
+    void sendPrompt(s)
+  }, [busy, sendPrompt])
+
+  // Optimize clear messages with useCallback
+  const clearMessages = useCallback(() => {
+    if (window.confirm('Clear all messages?')) {
+      updateMessages([])
+    }
+  }, [updateMessages])
+
+  // Optimize escape key handler with useCallback
+  const handleEscape = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape' && open) {
+      updateOpenState(false)
+    }
+  }, [open, updateOpenState])
+
+  // Optimize body scroll management with useCallback
+  const updateBodyScroll = useCallback((shouldLock: boolean) => {
+    if (shouldLock && window.innerWidth < 768) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+  }, [])
+
+  // Optimize localStorage sync for editsRemaining
+  useEffect(() => {
+    try {
+      localStorage.setItem('lodestar:editsRemaining', String(Math.max(0, editsRemaining)))
+    } catch {}
+  }, [editsRemaining])
+
+  // Optimize localStorage updates
+  useEffect(() => {
+    if (!open) return
+    const el = endRef.current
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [open, messages.length])
+
+  // Optimize editsRemaining listener with proper cleanup
   useEffect(() => {
     function onStorage(e: StorageEvent) {
       if (e.key === 'lodestar:editsRemaining' && e.newValue != null) {
@@ -122,6 +363,7 @@ export function SolaraLodestar() {
         if (!Number.isNaN(next)) setEditsRemaining(next)
       }
     }
+    
     window.addEventListener('storage', onStorage)
     const interval = window.setInterval(() => {
       try {
@@ -130,13 +372,14 @@ export function SolaraLodestar() {
         if (!Number.isNaN(next) && next !== editsRemaining) setEditsRemaining(next)
       } catch {}
     }, 1500)
+    
     return () => {
       window.removeEventListener('storage', onStorage)
       window.clearInterval(interval)
     }
   }, [editsRemaining])
 
-  // Listen for Polaris data changes
+  // Optimize Polaris data change listener with proper cleanup
   useEffect(() => {
     function onPolarisDataChange() {
       // Force re-evaluation of Polaris data when localStorage changes
@@ -162,131 +405,22 @@ export function SolaraLodestar() {
     }
   }, [gatherPolarisData])
 
-  function newId() {
-    return Math.random().toString(36).slice(2, 10)
-  }
-
-  const systemPrompt = useMemo(() => {
-    const polarisData = gatherPolarisData
-    const hasData = polarisData.companyName || polarisData.stage1Answers || polarisData.stage2Answers || polarisData.stage3Answers
-    
-    let basePrompt = 'You are Solara Lodestar, a concise, warm, highly capable AI L&D consultant. ' +
-      'Adopt a Claude-like tone: thoughtful, structured, transparent about uncertainty, and collaborative. ' +
-      'Prefer short paragraphs, clear lists, and concrete next steps. Use plain language.'
-    
-    if (hasData) {
-      basePrompt += '\n\nIMPORTANT: You have access to Polaris needs analysis data. When users ask for analysis, reviews, or recommendations, ALWAYS use this data instead of asking them to provide information. Analyze what you have and provide specific, actionable insights.'
-      
-      if (polarisData.companyName) basePrompt += `\n- Organization: ${polarisData.companyName}`
-      if (polarisData.dataSummary) basePrompt += `\n- Available Data: ${polarisData.dataSummary}`
-      if (polarisData.greetingReport) basePrompt += '\n- Greeting/Research Report'
-      if (polarisData.orgReport) basePrompt += '\n- Organization Analysis Report'
-      if (polarisData.requirementReport) basePrompt += '\n- Requirements Analysis Report'
-      if (polarisData.stage1Answers && Object.keys(polarisData.stage1Answers).length > 0) basePrompt += '\n- Stage 1: Requester & Organization Details'
-      if (polarisData.stage2Answers && Object.keys(polarisData.stage2Answers).length > 0) basePrompt += '\n- Stage 2: Project & Stakeholder Details'
-      if (polarisData.stage3Answers && Object.keys(polarisData.stage3Answers).length > 0) basePrompt += '\n- Stage 3: Technical & Implementation Details'
-      
-      basePrompt += '\n\nCRITICAL INSTRUCTION: When users ask for analysis or recommendations, DO NOT ask them to provide information you already have. Instead, analyze the available data and provide specific insights. If you need more information, ask specific follow-up questions about areas not covered in the data.'
-    }
-    
-    return basePrompt
-  }, [gatherPolarisData])
-
-  async function sendPrompt(text: string) {
-    const trimmed = text.trim()
-    if (!trimmed || busy) return
-    setBusy(true)
-
-    const nextMessages: Message[] = [
-      ...messages,
-      { id: newId(), role: 'user', content: trimmed },
-    ]
-    setMessages(nextMessages)
-    setInput('')
-
-    try {
-      const polarisData = gatherPolarisData
-      const hasData = polarisData.companyName || polarisData.stage1Answers || polarisData.stage2Answers || polarisData.stage3Answers
-      
-      let contextMessage = ''
-      if (hasData) {
-        contextMessage = '\n\nCURRENT POLARIS DATA:\n'
-        if (polarisData.companyName) contextMessage += `Organization: ${polarisData.companyName}\n`
-        if (polarisData.dataSummary) contextMessage += `Available Data: ${polarisData.dataSummary}\n`
-        if (polarisData.greetingReport) contextMessage += `\nGreeting Report:\n${polarisData.greetingReport}\n`
-        if (polarisData.orgReport) contextMessage += `\nOrganization Report:\n${polarisData.orgReport}\n`
-        if (polarisData.requirementReport) contextMessage += `\nRequirements Report:\n${polarisData.requirementReport}\n`
-        if (Object.keys(polarisData.stage1Answers || {}).length > 0) {
-          contextMessage += `\nStage 1 Answers (Requester & Organization):\n${JSON.stringify(polarisData.stage1Answers, null, 2)}\n`
-        }
-        if (Object.keys(polarisData.stage2Answers || {}).length > 0) {
-          contextMessage += `\nStage 2 Answers (Project & Stakeholders):\n${JSON.stringify(polarisData.stage2Answers, null, 2)}\n`
-        }
-        if (Object.keys(polarisData.stage3Answers || {}).length > 0) {
-          contextMessage += `\nStage 3 Answers (Technical & Implementation):\n${JSON.stringify(polarisData.stage3Answers, null, 2)}\n`
-        }
-      }
-      
-      const finalPayload: ChatMessage[] = [
-        { role: 'system', content: systemPrompt + contextMessage },
-        ...nextMessages.map(({ role, content }) => ({ role, content })),
-      ]
-
-      const { content } = await llmService.callLLM(finalPayload)
-      setMessages((prev) => [...prev, { id: newId(), role: 'assistant', content: content || '…' }])
-    } catch (err: any) {
-      const fallback = err?.message ? String(err.message) : 'Something went wrong. Please try again.'
-      setMessages((prev) => [
-        ...prev,
-        { id: newId(), role: 'assistant', content: `I hit an error: ${fallback}` },
-      ])
-    } finally {
-      setBusy(false)
-      setTimeout(() => endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 50)
-    }
-  }
-
-  function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    void sendPrompt(input)
-  }
-
-  function handleSuggestion(s: string) {
-    if (busy) return
-    setInput(s)
-    void sendPrompt(s)
-  }
-
-  const suggestions = [
-    'Analyze my organization & project context',
-    'Review my requirements & learner profiles',
-    'Provide personalized L&D recommendations',
-  ]
-
-  // Add escape key handler
+  // Optimize escape key handler
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && open) {
-        setOpen(false)
-      }
-    }
     window.addEventListener('keydown', handleEscape)
     return () => window.removeEventListener('keydown', handleEscape)
-  }, [open])
+  }, [handleEscape])
 
-  // Prevent body scroll when chat is open on mobile
+  // Optimize body scroll management
   useEffect(() => {
-    if (open && window.innerWidth < 768) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
+    updateBodyScroll(open)
     return () => {
-      document.body.style.overflow = ''
+      updateBodyScroll(false)
     }
-  }, [open])
+  }, [open, updateBodyScroll])
 
-  const overlay = (
+  // Memoize overlay JSX to prevent unnecessary re-renders
+  const overlay = useMemo(() => (
     <div className="fixed right-0 bottom-0 z-[9999] pointer-events-none">
       <div className="relative pointer-events-auto p-6">
         {/* Chat Window */}
@@ -317,9 +451,7 @@ export function SolaraLodestar() {
                     className="w-7 h-7 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-all duration-200" 
                     aria-label="Clear conversation" 
                     title="Clear conversation" 
-                    onClick={() => {
-                      if (window.confirm('Clear all messages?')) setMessages([])
-                    }}
+                    onClick={clearMessages}
                   >
                     <svg className="w-4 h-4 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
@@ -331,7 +463,7 @@ export function SolaraLodestar() {
                     className="w-7 h-7 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-all duration-200" 
                     aria-label="Close chat" 
                     title="Close chat (Esc)" 
-                    onClick={() => setOpen(false)}
+                    onClick={() => updateOpenState(false)}
                   >
                     <svg className="w-5 h-5 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="M18 6L6 18" />
@@ -363,38 +495,21 @@ export function SolaraLodestar() {
                 )}
                 {messages.length === 0 && (
                   <div className="mb-3 grid grid-cols-1 gap-2">
-                    {suggestions.map((s, idx) => (
-                      <button 
+                    {SUGGESTIONS.map((s, idx) => (
+                      <SuggestionButton 
                         key={s} 
-                        type="button" 
-                        className="group flex items-center gap-2 text-left px-3 py-2.5 rounded-xl border border-white/10 bg-white/5 text-white/85 hover:text-white hover:bg-white/10 hover:border-white/20 focus:outline-none focus:ring-2 focus:ring-primary-500/30 transition-all duration-200 transform hover:translate-x-1" 
-                        onClick={() => handleSuggestion(s)}
-                        style={{ animationDelay: `${idx * 50}ms` }}
-                      >
-                        <svg className="w-3.5 h-3.5 opacity-70 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M9 18l6-6-6-6"/>
-                        </svg>
-                        <span className="text-xs">{s}</span>
-                      </button>
+                        suggestion={s}
+                        index={idx}
+                        onClick={handleSuggestion}
+                      />
                     ))}
                   </div>
                 )}
                 <div className="flex-1 overflow-y-auto pr-1 custom-scroll">
                   {messages.map((m) => (
-                    <div key={m.id} className={`mb-2 flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap break-words max-w-[85%] ${m.role === 'user' ? 'bg-secondary-400/20 border border-secondary-400/30 text-white/95' : 'bg-white/5 border border-white/10 text-white/90'}`}>
-                        {m.content}
-                      </div>
-                    </div>
+                    <MessageBubble key={m.id} message={m} />
                   ))}
-                  {busy && (
-                    <div className="mb-2 flex justify-start">
-                      <div className="rounded-2xl px-3 py-2 text-sm bg-white/5 border border-white/10 text-white/70">
-                        <span className="inline-block w-2 h-2 rounded-full bg-white/50 animate-pulse mr-1" />
-                        Thinking…
-                      </div>
-                    </div>
-                  )}
+                  {busy && <LoadingIndicator />}
                   <div ref={endRef} />
                 </div>
                 <form onSubmit={onSubmit} className="mt-4 pt-2 border-t border-white/10">
@@ -444,7 +559,7 @@ export function SolaraLodestar() {
           type="button"
           aria-label={open ? 'Close Solara Lodestar' : 'Open Solara Lodestar'}
           title={open ? 'Close chat' : 'Open Solara Lodestar AI Assistant'}
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => updateOpenState(!open)}
           className={`
             relative group inline-flex items-center gap-2 
             ${open 
@@ -478,11 +593,13 @@ export function SolaraLodestar() {
         </button>
       </div>
     </div>
-  )
+  ), [open, editsRemaining, messages.length, gatherPolarisData, busy, input, handleSuggestion, clearMessages, updateOpenState, onSubmit, sendPrompt])
 
   if (typeof document === 'undefined') return overlay
   return createPortal(overlay, document.body)
-}
+})
+
+SolaraLodestar.displayName = 'SolaraLodestar'
 
 export default SolaraLodestar
 

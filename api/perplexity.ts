@@ -5,6 +5,22 @@ const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || process.env.VITE_PE
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || process.env.VITE_PERPLEXITY_BASE_URL || 'https://api.perplexity.ai'
 const PERPLEXITY_MODEL = process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'llama-3.1-sonar-small-128k-online'
 
+function normalizePerplexityModel(input?: string): string {
+  const requested = (input || '').trim().toLowerCase()
+  // Backward-compat aliases → current model ids
+  if (!requested || requested === 'sonar' || requested === 'sonar-small' || requested === 'sonar-small-online') {
+    return 'llama-3.1-sonar-small-128k-online'
+  }
+  if (requested === 'sonar-medium' || requested === 'sonar-medium-online' || requested === 'sonar-large') {
+    return 'llama-3.1-sonar-large-128k-online'
+  }
+  if (requested.startsWith('llama-3.1-sonar')) {
+    return requested
+  }
+  // Fallback to a safe default
+  return 'llama-3.1-sonar-small-128k-online'
+}
+
 // Temporary hardcoded key - this should be removed in production
 const HARDCODED_KEY = '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'
 
@@ -49,7 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: model || PERPLEXITY_MODEL,
+        model: normalizePerplexityModel(model || PERPLEXITY_MODEL),
         messages,
         temperature,
         max_tokens,

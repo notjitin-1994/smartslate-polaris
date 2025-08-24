@@ -105,6 +105,16 @@ export class PerformanceMonitor {
   
   private observeCLS() {
     try {
+      if (!('PerformanceObserver' in window)) {
+        console.warn('CLS observation not supported: PerformanceObserver missing')
+        return
+      }
+      // Guard: some browsers/devtools builds don't support 'layout-shift'
+      const supported = (PerformanceObserver as any).supportedEntryTypes
+      if (!Array.isArray(supported) || !supported.includes('layout-shift')) {
+        console.warn('CLS observation not supported: layout-shift not available')
+        return
+      }
       let clsValue = 0
       let clsEntries: PerformanceEntry[] = []
       

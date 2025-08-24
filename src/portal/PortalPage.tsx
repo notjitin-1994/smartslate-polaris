@@ -9,7 +9,7 @@ import { getCapitalizedFirstName } from '@/lib/textUtils'
 import { getRecentSummaries, type PolarisSummary } from '@/services/polarisSummaryService'
 
 
-type NavItem = string | { label: string; tagText?: string; tagTone?: 'success' | 'preview' | 'soon' | 'info' }
+type NavItem = string | { label: string; href?: string; tagText?: string; tagTone?: 'success' | 'preview' | 'soon' | 'info' }
 
 type NavSectionProps = {
   title: string
@@ -49,12 +49,12 @@ function NavSection({ title, items, defaultOpen = true }: NavSectionProps) {
       <div id={`section-${title.replace(/\s+/g, '-')}`} className={`${open ? 'block' : 'hidden'} mt-1 pl-2`}>
         <ul className="space-y-0.5">
           {items.map((item) => {
-            const { label, tagText, tagTone } =
+            const { label, tagText, tagTone, href } =
               typeof item === 'string' ? { label: item } : item
             return (
               <li key={label}>
                 <a
-                  href="#"
+                  href={href || '#'}
                   className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 focus-visible:text-primary-500 active:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
                 >
                   <span className="truncate">{label}</span>
@@ -650,7 +650,7 @@ export function PortalPage() {
 
   const solaraItems: NavItem[] = [
     { label: 'Polaris', tagText: '2.5 Preview', tagTone: 'preview' },
-    { label: 'Constellation', tagText: 'V2: Preview', tagTone: 'preview' },
+    { label: 'Constellation', href: typeof window !== 'undefined' ? `${window.location.protocol}//constellation.smartslate.io` : 'https://constellation.smartslate.io', tagText: 'V2: Preview', tagTone: 'preview' },
     { label: 'Nova', tagText: isMobile ? 'Visit on Desktop' : 'Coming Soon', tagTone: 'info' },
     { label: 'Orbit', tagText: isMobile ? 'Visit on Desktop' : 'Coming Soon', tagTone: 'info' },
     { label: 'Spectrum', tagText: isMobile ? 'Visit on Desktop' : 'Coming Soon', tagTone: 'info' },
@@ -734,7 +734,7 @@ export function PortalPage() {
                     </li>
                     {solaraItems.slice(1).map((item) => (
                       <li key={typeof item === 'string' ? item : item.label}>
-                        <a href="#" className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-400 hover:bg-white/5 rounded-lg transition pressable">
+                        <a href={typeof item !== 'string' && item.href ? item.href : '#'} className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-400 hover:bg-white/5 rounded-lg transition pressable">
                           <span className="truncate">{typeof item === 'string' ? item : item.label}</span>
                           {typeof item !== 'string' && item.tagText && (
                             <span className={`ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${item.tagTone === 'preview' ? 'border-primary-400/30 text-primary-300 bg-primary-400/10' : 'border-white/15 text-white/60 bg-white/5'}`}>{item.tagText}</span>

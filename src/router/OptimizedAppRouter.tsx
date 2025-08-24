@@ -16,6 +16,7 @@ const PublicProfile = withLazyLoad(() => import('@/pages/PublicProfile').then(m 
 const PolarisRevamped = withLazyLoad(() => import('@/pages/PolarisRevamped'))
 const AllStarmaps = withLazyLoad(() => import('@/pages/AllBriefings'))
 const StarmapDetail = withLazyLoad(() => import('@/pages/StarmapDetail'))
+const Pricing = withLazyLoad(() => import('@/pages/Pricing'))
 const SeedJitinStarmap = withLazyLoad(() => import('@/pages/SeedJitinStarmap'))
 
 // Loading component for the entire app
@@ -43,6 +44,7 @@ export function OptimizedAppRouter() {
             {/* Public routes */}
             <Route path="/login" element={<AuthLanding />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
+            <Route path={paths.pricing} element={<Pricing />} />
             <Route path={paths.publicProfile} element={<PublicProfile />} />
             
             {/* Protected routes - require authentication */}

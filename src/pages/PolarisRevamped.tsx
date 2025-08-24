@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect } from 'react'
-import { callLLM } from '@/services/llmClient'
+import { callLLM, llmService } from '@/services/llmClient'
 import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle, updateSummaryEditedContent, updateSummaryPrelimReport, updateSummaryFinalContent } from '@/services/polarisSummaryService'
 import { researchGreeting, researchOrganization, researchRequirements } from '@/services/perplexityService'
 import RenderField from '@/polaris/needs-analysis/RenderField'
@@ -553,7 +553,14 @@ Create questions that leverage the research insights to ask more targeted, relev
         }), {})
       }
       
-      // Include prelim and research context in report generation
+      // Summaries to ensure concrete facts are present regardless of research availability
+      const fmt = (v: any) => (Array.isArray(v) ? v.filter(Boolean).join(', ') : (v ?? ''))
+      const tl = (stage3Answers.project_timeline || {}) as { start?: string; end?: string }
+      const stage1Summary = `Requester: ${fmt(stage1Answers.requester_name)} (${fmt(stage1Answers.requester_role)} – ${fmt(stage1Answers.requester_department)})\nEmail: ${fmt(stage1Answers.requester_email)}\nPhone: ${fmt(stage1Answers.requester_phone)}\nTime Zone: ${fmt(stage1Answers.requester_timezone)}`
+      const stage2Summary = `Organization: ${fmt(stage2Answers.org_name)}\nIndustry: ${fmt(stage2Answers.org_industry)}\nSize: ${fmt(stage2Answers.org_size)}\nHeadquarters: ${fmt(stage2Answers.org_headquarters)}\nWebsite: ${fmt(stage2Answers.org_website)}\nMission: ${fmt(stage2Answers.org_mission)}\nCompliance: ${fmt(stage2Answers.org_compliance)}\nStakeholders: ${fmt(stage2Answers.org_stakeholders)}`
+      const stage3Summary = `Objectives: ${fmt(stage3Answers.project_objectives)}\nConstraints: ${fmt(stage3Answers.project_constraints)}\nAudience: ${fmt(stage3Answers.target_audience)}\nTimeline: ${(tl.start || 'TBD')} to ${(tl.end || 'TBD')}\nBudget: ${fmt(stage3Answers.project_budget_range)}\nHardware: ${fmt(stage3Answers.available_hardware)}\nSoftware: ${fmt(stage3Answers.available_software)}\nSMEs: ${fmt(stage3Answers.subject_matter_experts)}\nOther: ${fmt(stage3Answers.additional_context)}`
+
+      // Include prelim, research, and stage answers in final generation
       const enhancedPrompt = `${NA_REPORT_PROMPT(experienceLevel!, allAnswers)}
 
 PRELIMINARY MASTER REPORT (user-confirmed):
@@ -570,9 +577,29 @@ ${orgReport}
 REQUIREMENTS RESEARCH:
 ${requirementReport}
 
+STAGE ANSWERS SUMMARY (authoritative user-provided data):
+STAGE 1 – REQUESTER & ORG CONTACTS:
+${stage1Summary}
+
+STAGE 2 – ORGANIZATION DETAILS:
+${stage2Summary}
+
+STAGE 3 – PROJECT SCOPING:
+${stage3Summary}
+
 Use these to produce the final Starmap. Ensure it resolves open questions using dynamic-stage answers above where possible.`
-      
-      const res = await callLLM([{ role: 'user', content: enhancedPrompt }])
+
+      // Strong system instruction for Claude (Anthropic). We explicitly target Anthropic with fallback to OpenAI.
+      const systemPrompt = `You are an expert Learning Experience Designer and Instructional Designer with decades of hands-on industry experience. You have deep knowledge of past, current, and emerging learning technologies, and you apply principles from cognitive psychology, human factors, and behavior change. Produce pragmatic, decision-ready L&D deliverables that align with business outcomes and constraints.`
+
+      const res = await llmService.callLLMWithFallback(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: enhancedPrompt },
+        ],
+        { temperature: 0.2, maxTokens: 4000 },
+        { primaryProvider: 'anthropic' }
+      )
       
       let reportJson: NAReport
       try {

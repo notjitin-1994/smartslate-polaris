@@ -17,8 +17,22 @@ type NavSectionProps = {
   defaultOpen?: boolean
 }
 
-function NavSection({ title, items, defaultOpen = false }: NavSectionProps) {
-  const [open, setOpen] = useState<boolean>(defaultOpen)
+function NavSection({ title, items, defaultOpen = true }: NavSectionProps) {
+  const sectionKey = `portal:nav:${title.replace(/\s+/g, '-').toLowerCase()}`
+  const [open, setOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return defaultOpen
+    try {
+      const stored = localStorage.getItem(sectionKey)
+      return stored ? stored === '1' : defaultOpen
+    } catch {}
+    return defaultOpen
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(sectionKey, open ? '1' : '0')
+    } catch {}
+  }, [open, sectionKey])
 
   return (
     <div className="select-none">
@@ -264,25 +278,6 @@ function IconArrowRight({ className = '' }: { className?: string }) {
   )
 }
 
-function IconGraduationCap({ className = '' }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M22 9L12 5 2 9l10 4 6-2.4V16" />
-      <path d="M6 10v3.5c0 1.6 2.7 2.9 6 2.9s6-1.3 6-2.9V10" />
-    </svg>
-  )
-}
-
 function IconChecklist({ className = '' }: { className?: string }) {
   return (
     <svg
@@ -362,6 +357,28 @@ function IconSparkle({ className = '' }: { className?: string }) {
     </svg>
   )
 }
+
+// Eye icon to match the collapsed rail in the reference design
+function IconEye({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  )
+}
+
+// Removed unused IconShareNodes to satisfy noUnusedLocals
 
 function SettingsIconImg({ className = '' }: { className?: string }) {
   return (
@@ -626,24 +643,39 @@ export function PortalPage() {
   
 
   const collapsedQuickItems = [
-    { title: 'Ignite', icon: IconGraduationCap },
+    { title: 'Ignite', icon: IconEye },
     { title: 'Strategic Skills Architecture', icon: IconChecklist },
     { title: 'Solara', icon: IconSun },
   ]
 
   const solaraItems: NavItem[] = [
-    { label: 'Polaris', tagText: 'V2.5: Preview', tagTone: 'success' },
-    { label: 'Constellation', tagText: 'V1 - Preview', tagTone: 'preview' },
+    { label: 'Polaris', tagText: '2.5 Preview', tagTone: 'preview' },
+    { label: 'Constellation', tagText: 'V2: Preview', tagTone: 'preview' },
     { label: 'Nova', tagText: isMobile ? 'Visit on Desktop' : 'Coming Soon', tagTone: 'info' },
     { label: 'Orbit', tagText: isMobile ? 'Visit on Desktop' : 'Coming Soon', tagTone: 'info' },
     { label: 'Spectrum', tagText: isMobile ? 'Visit on Desktop' : 'Coming Soon', tagTone: 'info' },
   ]
 
+  // Persisted open state for the Solara section (desktop), matching the arrow behavior
+  const [solaraOpen, setSolaraOpen] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    try {
+      const stored = localStorage.getItem('portal:nav:solara')
+      return stored ? stored === '1' : true
+    } catch {}
+    return true
+  })
+  useEffect(() => {
+    try {
+      localStorage.setItem('portal:nav:solara', solaraOpen ? '1' : '0')
+    } catch {}
+  }, [solaraOpen])
+
   return (
     <div className="h-screen w-full overflow-hidden bg-[rgb(var(--bg))] text-[rgb(var(--text))]">
       <div className="flex h-full">
-        <aside className={`hidden md:flex ${sidebarCollapsed ? 'md:w-16 lg:w-16' : 'md:w-72 lg:w-80'} flex-col border-r border-white/10 bg-white/5/50 backdrop-blur-xl transition-[width] duration-300 ease-in-out`}>
-          <div className={`px-3 ${sidebarCollapsed ? 'py-2' : 'px-4 py-4'} border-b border-white/10 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} gap-2 sticky top-0 z-10`}>
+        <aside className={`hidden md:flex ${sidebarCollapsed ? 'md:w-16 lg:w-16' : 'md:w-72 lg:w-80'} flex-col border-r border-[#141620] bg-[#0D1B2A] transition-[width] duration-300 ease-in-out`}>
+          <div className={`px-3 ${sidebarCollapsed ? 'py-2' : 'px-4 py-4'} border-b border-[#141620] flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between'} gap-2 sticky top-0 z-10`}>
             {!sidebarCollapsed && <Brand />}
             <button
               type="button"
@@ -656,7 +688,7 @@ export function PortalPage() {
             </button>
           </div>
           {sidebarCollapsed ? (
-            <div className="flex-1 overflow-y-auto py-4 flex flex-col items-center gap-3">
+            <div className="flex-1 py-4 flex flex-col items-center gap-3">
               {collapsedQuickItems.map(({ title, icon: Icon }) => (
                 <button
                   key={title}
@@ -674,10 +706,17 @@ export function PortalPage() {
               <NavSection title="Ignite" items={["Explore Learning", "My Learning"]} />
               <NavSection title="Strategic Skills Architecture" items={["Explore Partnership", "My Architecture"]} />
               <div className="select-none">
-                <div className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
+                <button
+                  type="button"
+                  onClick={() => setSolaraOpen((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-400 hover:bg-white/5 rounded-lg transition pressable"
+                  aria-expanded={solaraOpen}
+                  aria-controls="section-solara"
+                >
                   <span>Solara</span>
-                </div>
-                <div className="mt-1 pl-2">
+                  <span className={`inline-block text-xs text-primary-400/80 transition-transform ${solaraOpen ? 'rotate-90' : ''}`}>▶</span>
+                </button>
+                <div id="section-solara" className={`${solaraOpen ? 'block' : 'hidden'} mt-1 pl-2`}>
                   <ul className="space-y-0.5">
                     <li>
                       <a
@@ -685,20 +724,20 @@ export function PortalPage() {
                         aria-current={isPolarisSubdomain ? 'page' : undefined}
                         className={`flex items-center justify-between px-3 py-1.5 text-sm rounded-lg transition pressable ${
                           isPolarisSubdomain
-                            ? 'text-primary-400 bg-primary-400/10 ring-1 ring-inset ring-primary-400/30'
-                            : 'text-white/75 hover:text-primary-500 hover:bg-primary-500/5 focus-visible:text-primary-500 active:text-primary-500'
+                            ? 'text-primary-300 bg-primary-400/10 ring-1 ring-inset ring-primary-400/30'
+                            : 'text-white/75 hover:text-primary-400 hover:bg-white/5 focus-visible:text-primary-400 active:text-primary-400'
                         }`}
                       >
                         <span className="truncate">Polaris</span>
-                        <span className="ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium border-green-500/30 text-green-100 bg-green-500/15">V2.5: Preview</span>
+                        <span className="ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium border-primary-400/30 text-primary-300 bg-primary-400/10">2.5 Preview</span>
                       </a>
                     </li>
                     {solaraItems.slice(1).map((item) => (
                       <li key={typeof item === 'string' ? item : item.label}>
-                        <a href="#" className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable">
+                        <a href="#" className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-400 hover:bg-white/5 rounded-lg transition pressable">
                           <span className="truncate">{typeof item === 'string' ? item : item.label}</span>
                           {typeof item !== 'string' && item.tagText && (
-                            <span className={`ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${item.tagTone === 'preview' ? 'border-primary-400/30 text-primary-500 bg-primary-400/10' : 'border-white/10 text-white/60 bg-white/5'}`}>{item.tagText}</span>
+                            <span className={`ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${item.tagTone === 'preview' ? 'border-primary-400/30 text-primary-300 bg-primary-400/10' : 'border-white/15 text-white/60 bg-white/5'}`}>{item.tagText}</span>
                           )}
                         </a>
                       </li>
@@ -708,10 +747,8 @@ export function PortalPage() {
               </div>
               
               {/* Recent Starmaps Section */}
-              <div className="select-none border-t border-white/10 pt-3">
-                <div className="w-full flex items-center px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
-                  <span className="accent-text-soft">Recent Starmaps</span>
-                </div>
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <h4 className="px-3 text-xs font-semibold text-primary-400 mb-2">Recent Starmaps</h4>
                 <div className="mt-1 pl-2">
                   {recentSummaries.length > 0 ? (
                     <ul className="space-y-0.5">
@@ -720,9 +757,9 @@ export function PortalPage() {
                           <button
                             type="button"
                             onClick={() => navigate(`/portal/starmaps/${summary.id}`)}
-                            className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
+                            className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/85 hover:text-white hover:bg-white/5 rounded-lg transition pressable"
                           >
-                            <span className="truncate accent-text-soft">
+                            <span className="truncate text-white/85">
                               {summary.report_title || summary.company_name || 'Untitled Discovery'}
                             </span>
                             <span className="text-[10px] text-white/40">
@@ -735,7 +772,7 @@ export function PortalPage() {
                         <button
                           type="button"
                           onClick={() => navigate('/portal/starmaps')}
-                          className="w-full text-left px-3 py-1.5 text-sm text-primary-400 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable underline-accent"
+                          className="w-full text-left px-3 py-1.5 text-xs text-white/80 hover:text-white hover:bg-white/5 rounded-lg transition pressable underline-accent"
                         >
                           View all starmaps →
                         </button>
@@ -768,7 +805,7 @@ export function PortalPage() {
                   onClick={goToProfile}
                   className="w-10 h-10 rounded-full text-white/85 hover:text-white flex items-center justify-center pressable"
                 >
-                  <UserAvatar user={user} sizeClass="w-10 h-10" textClass="text-sm font-semibold" />
+                  <UserAvatar user={user} sizeClass="w-6 h-6" textClass="text-sm font-semibold" />
                 </button>
                 <button
                   type="button"
@@ -778,13 +815,22 @@ export function PortalPage() {
                 >
                   <SettingsIconImg className="w-5 h-5" />
                 </button>
+                <button
+                  type="button"
+                  title="Logout from Polaris"
+                  aria-label="Logout from Polaris"
+                  onClick={onLogout}
+                  className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
+                >
+                  <IconLogout className="w-5 h-5" />
+                </button>
               </div>
             ) : (
               <div className="px-3 py-3 space-y-2">
                 <button
                   type="button"
                   onClick={() => navigate('/pricing')}
-                  className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
+                  className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/90 hover:bg-white/5 rounded-lg transition pressable"
                   title="Subscribe to Polaris"
                 >
                   <IconSparkle className="w-5 h-5" />
@@ -821,7 +867,7 @@ export function PortalPage() {
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
+                  className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/90 hover:bg-white/5 rounded-lg transition pressable"
                   title="Logout from Polaris"
                 >
                   <IconLogout className="w-5 h-5" />
@@ -829,14 +875,14 @@ export function PortalPage() {
                 </button>
               </div>
             )}
-            <div className={`border-t border-white/10 text-xs text-white/50 ${sidebarCollapsed ? 'px-0 py-2 flex items-center justify-center' : 'px-4 py-3'}`}>
+            <div className={`border-t border-[#1a2438] text-xs text-white/50 ${sidebarCollapsed ? 'px-0 py-2 flex items-center justify-center' : 'px-4 py-3'}`}>
               {sidebarCollapsed ? '❤️' : 'Made with ❤️ for better education'}
             </div>
           </div>
         </aside>
 
         <main className="flex-1 min-w-0 h-full overflow-y-auto">
-          <header className="sticky top-0 z-10 border-b border-white/10 bg-[rgb(var(--bg))]/80 backdrop-blur-xl mb-12 md:mb-0">
+          <header className="sticky top-0 z-10 border-b border-[#141620] bg-[rgb(var(--bg))]/80 backdrop-blur-xl mb-12 md:mb-0">
             <div className="relative mx-auto max-w-7xl px-4 py-3 sm:py-4">
               {!isPortalRoot && (
                 <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 -top-24 h-48 bg-gradient-to-br from-primary-400/10 via-fuchsia-400/5 to-transparent blur-2xl" />
@@ -1244,7 +1290,7 @@ export function PortalPage() {
           {mobileMenuOpen && (
             <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
               <div className="absolute inset-0 bg-black/50 animate-fade-in" onClick={() => setMobileMenuOpen(false)} />
-              <div className="absolute right-0 top-0 h-full w-72 max-w-[85vw] bg-[rgb(var(--bg))]/95 backdrop-blur-xl border-l border-white/10 shadow-2xl p-3 animate-slide-in-right flex flex-col">
+              <div className="absolute right-0 top-0 h-full w-72 max-w-[85vw] bg-[#0D1B2A] backdrop-blur-xl border-l border-[#141620] shadow-2xl p-3 animate-slide-in-right flex flex-col">
                 <div className="flex items-center justify-between px-1 py-2 border-b border-white/10">
                   <button
                     type="button"
@@ -1262,10 +1308,8 @@ export function PortalPage() {
                   <NavSection title="Solara" items={solaraItems} defaultOpen />
                   
                   {/* Recent Starmaps Section for Mobile */}
-                  <div className="select-none border-t border-white/10 pt-3">
-                    <div className="w-full flex items-center px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
-                      <span>Recent Starmaps</span>
-                    </div>
+                  <div className="mt-4 pt-4 border-t border-white/10">
+                    <h4 className="px-3 text-xs font-semibold text-primary-400 mb-2">Recent Starmaps</h4>
                     <div className="mt-1 pl-2">
                       {recentSummaries.length > 0 ? (
                         <ul className="space-y-0.5">
@@ -1277,9 +1321,9 @@ export function PortalPage() {
                                   setMobileMenuOpen(false)
                                   navigate(`/portal/starmaps/${summary.id}`)
                                 }}
-                                className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
+                                className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/85 hover:text-white hover:bg-white/5 rounded-lg transition pressable"
                               >
-                                <span className="truncate">
+                                <span className="truncate text-white/85">
                                   {summary.company_name || 'Untitled Discovery'}
                                 </span>
                                 <span className="text-[10px] text-white/40">
@@ -1295,7 +1339,7 @@ export function PortalPage() {
                                 setMobileMenuOpen(false)
                                 navigate('/portal/starmaps')
                               }}
-                              className="w-full text-left px-3 py-1.5 text-sm text-primary-400 hover:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
+                              className="w-full text-left px-3 py-1.5 text-xs text-white/80 hover:text-white hover:bg-white/5 rounded-lg transition pressable underline-accent"
                             >
                               View all starmaps →
                             </button>

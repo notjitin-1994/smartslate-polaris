@@ -12,6 +12,7 @@ import AuthCallback from '@/pages/AuthCallback'
 const AuthLanding = withLazyLoad(() => import('@/pages/AuthLanding'))
 const PortalPage = withLazyLoad(() => import('@/pages/PortalPage').then(m => ({ default: m.PortalPage })))
 const SettingsContent = withLazyLoad(() => import('@/portal/SettingsContent').then(m => ({ default: m.SettingsContent })))
+const PortalDashboard = withLazyLoad(() => import('@/portal/PortalDashboard').then(m => ({ default: m.PortalDashboard })))
 const PublicProfile = withLazyLoad(() => import('@/pages/PublicProfile').then(m => ({ default: m.PublicProfile })))
 const PolarisRevamped = withLazyLoad(() => import('@/pages/PolarisRevamped'))
 const AllStarmaps = withLazyLoad(() => import('@/pages/AllBriefings'))
@@ -53,10 +54,11 @@ export function OptimizedAppRouter() {
                 <Route index element={<PolarisRevamped />} />
               </Route>
               <Route path={paths.portal} element={<PortalPage />}>
-                <Route index element={<Navigate to="/" replace />} />
+                <Route index element={<PortalDashboard />} />
                 <Route path="settings" element={<SettingsContent />} />
                 <Route path="starmaps" element={<AllStarmaps />} />
                 <Route path="starmaps/:id" element={<StarmapDetail />} />
+                <Route path="discover" element={<PolarisRevamped />} />
                 <Route path="seed/jitin" element={<SeedJitinStarmap />} />
                 <Route path="briefings" element={<Navigate to="/portal/starmaps" replace />} />
                 <Route path="summaries" element={<Navigate to="/portal/starmaps" replace />} />

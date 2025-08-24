@@ -140,66 +140,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false)
   const [titleInput, setTitleInput] = useState<string>(reportTitle || 'Needs Analysis Report')
   
-  // Memoize sanitizer function
-  const sanitizeInlineHtml = useCallback((raw: string): string => {
-    try {
-      const parser = new DOMParser()
-      const doc = parser.parseFromString(`<div>${raw}</div>`, 'text/html')
-      const container = doc.body.firstElementChild as HTMLElement | null
-      if (!container) return raw
-      const ALLOWED_TAGS = new Set(['SPAN','MARK','A','STRONG','EM','U','CODE','B','I','BR'])
-      const walk = (node: Node) => {
-        const children = Array.from(node.childNodes)
-        for (const child of children) {
-          if (child.nodeType === 1) {
-            const el = child as HTMLElement
-            if (!ALLOWED_TAGS.has(el.tagName)) {
-              // unwrap disallowed elements but keep their children
-              while (el.firstChild) el.parentNode?.insertBefore(el.firstChild, el)
-              el.parentNode?.removeChild(el)
-              continue
-            }
-            // Clean attributes
-            const allowedAttrs = new Set(['style','href','target','rel'])
-            for (const attr of Array.from(el.attributes)) {
-              if (!allowedAttrs.has(attr.name)) el.removeAttribute(attr.name)
-            }
-            // Restrict styles to color and background-color only
-            if (el.hasAttribute('style')) {
-              const style = el.getAttribute('style') || ''
-              const pairs = style.split(';').map(s => s.trim()).filter(Boolean)
-              const next: string[] = []
-              for (const p of pairs) {
-                const [prop, valRaw] = p.split(':').map(s => s.trim().toLowerCase())
-                if (!prop || !valRaw) continue
-                if (prop === 'color' || prop === 'background-color') {
-                  // basic guard against javascript: or url()
-                  if (!/url\(/.test(valRaw)) next.push(`${prop}: ${valRaw}`)
-                }
-              }
-              if (next.length > 0) el.setAttribute('style', next.join('; '))
-              else el.removeAttribute('style')
-            }
-            // Secure links
-            if (el.tagName === 'A') {
-              const href = el.getAttribute('href') || ''
-              if (/^\s*javascript:/i.test(href)) {
-                el.removeAttribute('href')
-              } else {
-                el.setAttribute('rel', 'noopener noreferrer')
-                if (!el.getAttribute('target')) el.setAttribute('target', '_blank')
-              }
-            }
-            walk(el)
-          }
-        }
-      }
-      walk(container)
-      return container.innerHTML
-    } catch {
-      return raw
-    }
-  }, [])
+  // removed legacy HTML sanitizer; summary now renders via structured JSX
 
   // Memoize title save handler
   const handleTitleSave = useCallback(async () => {
@@ -447,10 +388,47 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
                 </div>
                 <h3 className="text-lg font-semibold text-white/90">Executive Summary</h3>
               </div>
-              <div 
-                className="text-sm text-white/80 leading-relaxed prose prose-invert max-w-none"
-                dangerouslySetInnerHTML={{ __html: sanitizeInlineHtml(typeof report.summary === 'string' ? report.summary : JSON.stringify(report.summary)) }}
-              />
+              <div className="text-sm text-white/80 leading-relaxed space-y-4">
+                {report.summary.problem_statement && (
+                  <div>
+                    <span className="font-medium text-white/80">Problem Statement:</span>{' '}
+                    {report.summary.problem_statement}
+                  </div>
+                )}
+
+                {report.summary.current_state && report.summary.current_state.length > 0 && (
+                  <div>
+                    <div className="font-medium text-white/80 mb-1">Current State:</div>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {report.summary.current_state.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {report.summary.root_causes && report.summary.root_causes.length > 0 && (
+                  <div>
+                    <div className="font-medium text-white/80 mb-1">Root Causes:</div>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {report.summary.root_causes.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {report.summary.objectives && report.summary.objectives.length > 0 && (
+                  <div>
+                    <div className="font-medium text-white/80 mb-1">Objectives:</div>
+                    <ul className="list-disc pl-5 space-y-1">
+                      {report.summary.objectives.map((item, idx) => (
+                        <li key={idx}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

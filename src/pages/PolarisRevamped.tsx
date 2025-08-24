@@ -35,9 +35,13 @@ export default function PolarisRevamped() {
   const [greetingReport, setGreetingReport] = useState<string>('')
   const [orgReport, setOrgReport] = useState<string>('')
   const [requirementReport, setRequirementReport] = useState<string>('')
-  const greetingPromiseRef = useRef<Promise<void> | null>(null)
-  const orgPromiseRef = useRef<Promise<void> | null>(null)
-  const reqPromiseRef = useRef<Promise<void> | null>(null)
+  // Hold the actual research promises (resolve to strings) and latest resolved values
+  const greetingPromiseRef = useRef<Promise<string> | null>(null)
+  const orgPromiseRef = useRef<Promise<string> | null>(null)
+  const reqPromiseRef = useRef<Promise<string> | null>(null)
+  const greetingReportRef = useRef<string>('')
+  const orgReportRef = useRef<string>('')
+  const requirementReportRef = useRef<string>('')
   
   // Dynamic questions
   const [dynamicStages, setDynamicStages] = useState<Array<{
@@ -248,10 +252,11 @@ export default function PolarisRevamped() {
         phone: stage1Answers.requester_phone as string | undefined,
         timezone: stage1Answers.requester_timezone as string | undefined
       }
+      // Start research and capture the resolved content directly in a ref to avoid stale React state reads
       greetingPromiseRef.current = researchGreeting(researchData)
-        .then(setGreetingReport)
+      greetingPromiseRef.current
+        .then((text) => { greetingReportRef.current = text; setGreetingReport(text) })
         .catch(() => setGreetingReport('Research unavailable - continuing with provided information.'))
-        .then(() => undefined)
     } catch {}
     // Move on immediately
     setActive('stage2')
@@ -272,9 +277,9 @@ export default function PolarisRevamped() {
         stakeholders: stage2Answers.org_stakeholders as string[] | undefined
       }
       orgPromiseRef.current = researchOrganization(researchData)
-        .then(setOrgReport)
+      orgPromiseRef.current
+        .then((text) => { orgReportRef.current = text; setOrgReport(text) })
         .catch(() => setOrgReport('Research unavailable - continuing with provided information.'))
-        .then(() => undefined)
     } catch {}
     setActive('stage3')
   }
@@ -296,9 +301,9 @@ export default function PolarisRevamped() {
         other: stage3Answers.additional_context as string | undefined
       }
       reqPromiseRef.current = researchRequirements(researchData)
-        .then(setRequirementReport)
+      reqPromiseRef.current
+        .then((text) => { requirementReportRef.current = text; setRequirementReport(text) })
         .catch(() => setRequirementReport('Research unavailable - continuing with provided information.'))
-        .then(() => undefined)
     } catch {}
     // Proceed to preliminary master report; we'll wait briefly for research to finish.
     await generatePrelimReport()
@@ -312,16 +317,39 @@ export default function PolarisRevamped() {
       startSmartLoader('prelim', 12000)
 
       // Ensure research has a short window to complete before we proceed
-      const toWait: Promise<any>[] = []
-      if (greetingPromiseRef.current) toWait.push(greetingPromiseRef.current)
-      if (orgPromiseRef.current) toWait.push(orgPromiseRef.current)
-      if (reqPromiseRef.current) toWait.push(reqPromiseRef.current)
-      if (toWait.length) {
-        await Promise.race([
-          Promise.allSettled(toWait),
+      // Wait for the actual research promises (which resolve to strings). Store latest results in refs to avoid stale state.
+      const pending: Array<Promise<string>> = []
+      const keys: Array<'greet' | 'org' | 'req'> = []
+      if (greetingPromiseRef.current) { pending.push(greetingPromiseRef.current); keys.push('greet') }
+      if (orgPromiseRef.current) { pending.push(orgPromiseRef.current); keys.push('org') }
+      if (reqPromiseRef.current) { pending.push(reqPromiseRef.current); keys.push('req') }
+      let settled: any = null
+      if (pending.length) {
+        settled = await Promise.race([
+          Promise.allSettled(pending),
           new Promise(resolve => setTimeout(resolve, 7000)),
         ])
+        if (Array.isArray(settled)) {
+          settled.forEach((res, i) => {
+            if (res && res.status === 'fulfilled' && typeof res.value === 'string') {
+              const k = keys[i]
+              if (k === 'greet') greetingReportRef.current = res.value
+              else if (k === 'org') orgReportRef.current = res.value
+              else if (k === 'req') requirementReportRef.current = res.value
+            }
+          })
+        }
       }
+
+      // Use resolved refs first, then React state, then safe placeholders
+      const safe = (s?: string) => (s && s.trim().length > 0 ? s : '')
+      let greetingText = safe(greetingReportRef.current) || safe(greetingReport)
+      let orgText = safe(orgReportRef.current) || safe(orgReport)
+      let reqText = safe(requirementReportRef.current) || safe(requirementReport)
+
+      if (!greetingText) greetingText = 'Research unavailable. Proceed with requester details and stated objectives.'
+      if (!orgText) orgText = 'Organization research unavailable. Proceed with Stage 2 organization inputs.'
+      if (!reqText) reqText = 'Requirements research unavailable. Proceed with Stage 3 scoping inputs.'
 
       const prelimPrompt = `You are an expert L&D consultant. Synthesize a concise, editable Preliminary Master Report using the three research inputs below. Use clear markdown with these sections only:
 
@@ -335,13 +363,13 @@ Keep it factual, specific, and succinct. Avoid over-speculation. Do not include 
 
 ---
 GREETING REPORT:
-${greetingReport}
+${greetingText}
 
 ORGANIZATION REPORT:
-${orgReport}
+${orgText}
 
 REQUIREMENTS REPORT:
-${requirementReport}
+${reqText}
 `
 
       const prelimRes = await callLLM([{ role: 'user', content: prelimPrompt }])

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getAllSummaries, deleteSummary, getUserSummaryCount, SUMMARY_LIMIT, type PolarisSummary } from '@/services/polarisSummaryService'
+import { getAllSummaries, deleteSummary, getUserSummaryCount, getUserCreatedCount, CREATION_LIMIT, SAVED_LIMIT, SUMMARY_LIMIT, type PolarisSummary } from '@/services/polarisSummaryService'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 export default function AllSummaries() {
@@ -10,6 +10,7 @@ export default function AllSummaries() {
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [summaryCount, setSummaryCount] = useState<number>(0)
+  const [createdCount, setCreatedCount] = useState<number>(0)
   
   useDocumentTitle('Smartslate | Starmaps')
 
@@ -21,9 +22,10 @@ export default function AllSummaries() {
     try {
       setLoading(true)
       setError(null)
-      const [summariesResult, countResult] = await Promise.all([
+      const [summariesResult, countResult, createdResult] = await Promise.all([
         getAllSummaries(),
-        getUserSummaryCount()
+        getUserSummaryCount(),
+        getUserCreatedCount(),
       ])
       
       if (summariesResult.error) {
@@ -33,9 +35,8 @@ export default function AllSummaries() {
         setSummaries(summariesResult.data || [])
       }
       
-      if (!countResult.error && countResult.count !== null) {
-        setSummaryCount(countResult.count)
-      }
+      if (!countResult.error && countResult.count !== null) setSummaryCount(countResult.count)
+      if (!createdResult.error && createdResult.count !== null) setCreatedCount(createdResult.count)
     } catch (err) {
       setError('Failed to load summaries')
       console.error('Error:', err)
@@ -90,9 +91,22 @@ export default function AllSummaries() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white">Polaris Starmaps</h1>
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-sm text-white/60">{summaryCount} of {SUMMARY_LIMIT} starmaps used</span>
-              {summaryCount >= SUMMARY_LIMIT && (
+            <div className="flex items-center gap-4 mt-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/10">
+                  <svg className="w-3.5 h-3.5 text-primary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                </span>
+                <span className="text-xs text-white/70">Created</span>
+                <span className="text-xs font-semibold text-white/90">{createdCount}/{CREATION_LIMIT}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-white/10">
+                  <svg className="w-3.5 h-3.5 text-secondary-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 7h18"/><path d="M6 7v10a2 2 0 002 2h8a2 2 0 002-2V7"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                </span>
+                <span className="text-xs text-white/70">Saved</span>
+                <span className="text-xs font-semibold text-white/90">{summaryCount}/{SAVED_LIMIT}</span>
+              </div>
+              {(summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT) && (
                 <button
                   type="button"
                   onClick={() => window.open('https://smartslate.io/upgrade', '_blank')}
@@ -107,8 +121,8 @@ export default function AllSummaries() {
             type="button"
             onClick={() => navigate('/portal')}
             className="btn-primary w-10 h-10 flex items-center justify-center p-0"
-            disabled={summaryCount >= SUMMARY_LIMIT}
-            title={summaryCount >= SUMMARY_LIMIT ? 'Limit reached' : 'Start a new discovery'}
+            disabled={summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT}
+            title={summaryCount >= SAVED_LIMIT ? 'Saved limit reached' : (createdCount >= CREATION_LIMIT ? 'Creation limit reached' : 'Start a new discovery')}
             aria-label="New Discovery"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -118,6 +132,27 @@ export default function AllSummaries() {
           </button>
         </div>
         <p className="mt-2 text-sm text-white/60">View and manage all your Polaris discovery starmaps</p>
+        {/* Dual-layer progress bar: creation underlay, saved overlay */}
+        <div className="mt-3">
+          <div className="h-2 rounded-full bg-white/10 overflow-hidden relative" aria-label="Starmap usage">
+            {/* Creation progress underlay */}
+            <div
+              className="absolute inset-y-0 left-0 bg-white/20"
+              style={{ width: `${Math.min(100, Math.round(((createdCount || 0) / Math.max(1, CREATION_LIMIT)) * 100))}%` }}
+              aria-hidden="true"
+            />
+            {/* Saved progress overlay */}
+            <div
+              className="relative h-full rounded-full bg-gradient-to-r from-primary-400 to-secondary-400 transition-all"
+              style={{ width: `${Math.min(100, Math.round((summaryCount / Math.max(1, SAVED_LIMIT)) * 100))}%` }}
+            />
+          </div>
+          <div className="mt-1 flex items-center gap-3 text-[10px] text-white/50">
+            <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-1.5 rounded-full bg-gradient-to-r from-primary-400 to-secondary-400" /> Saved</span>
+            <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-1.5 rounded-full bg-white/30" /> Created</span>
+            <span className="ml-auto">Created {createdCount}/{CREATION_LIMIT}</span>
+          </div>
+        </div>
       </div>
 
       {loading ? (
@@ -179,9 +214,9 @@ export default function AllSummaries() {
         type="button"
         aria-label="New Discovery"
         onClick={() => navigate('/portal')}
-        disabled={summaryCount >= SUMMARY_LIMIT}
-        className={`fixed bottom-6 right-6 z-40 rounded-full shadow-xl w-14 h-14 flex items-center justify-center bg-gradient-to-r from-primary-400 to-secondary-500 text-slate-900 hover:opacity-95 active:opacity-90 float-button ${summaryCount >= SUMMARY_LIMIT ? 'opacity-60 cursor-not-allowed' : ''}`}
-        title={summaryCount >= SUMMARY_LIMIT ? 'Limit reached' : 'Start a new discovery'}
+        disabled={summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT}
+        className={`fixed bottom-6 right-6 z-40 rounded-full shadow-xl w-14 h-14 flex items-center justify-center bg-gradient-to-r from-primary-400 to-secondary-500 text-slate-900 hover:opacity-95 active:opacity-90 float-button ${(summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT) ? 'opacity-60 cursor-not-allowed' : ''}`}
+        title={summaryCount >= SAVED_LIMIT ? 'Saved limit reached' : (createdCount >= CREATION_LIMIT ? 'Creation limit reached' : 'Start a new discovery')}
       >
         <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 5v14" />

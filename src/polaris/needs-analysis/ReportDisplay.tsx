@@ -10,6 +10,7 @@ interface ReportDisplayProps {
   savingTitle?: boolean
   onSaveTitle?: (newTitle: string) => void | Promise<void>
   className?: string
+  hideTitleSection?: boolean
 }
 
 // PriorityBadge component for risk assessment
@@ -134,7 +135,7 @@ const Icon = memo(({ name, className = 'w-4 h-4' }: {
 Icon.displayName = 'Icon'
 
 // Memoized ReportDisplay component for better performance
-const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false, savingTitle = false, onSaveTitle, className = '' }: ReportDisplayProps) => {
+const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false, savingTitle = false, onSaveTitle, className = '', hideTitleSection = false }: ReportDisplayProps) => {
   // Memoize parsed report to prevent recalculation
   const report = useMemo(() => parseMarkdownToReport(reportMarkdown), [reportMarkdown])
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false)
@@ -374,7 +375,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
 
   return (
     <div className={`max-w-6xl mx-auto p-6 ${className}`}>
-      {titleSection}
+      {!hideTitleSection && titleSection}
       
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
@@ -576,34 +577,6 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
               </div>
             </div>
           )}
-        </div>
-      </div>
-      {/* Bottom Action Toolbar (UI-only) */}
-      <div className="sticky bottom-0 mt-6 z-10">
-        <div className="backdrop-blur supports-[backdrop-filter]:bg-primary-500/20 bg-primary-500/15 border border-primary-600/30 rounded-xl p-3 flex items-center justify-center shadow-lg shadow-primary-600/10">
-          <div className="flex items-center gap-2">
-            <button
-              className="h-9 w-9 rounded-lg bg-secondary-500/20 hover:bg-secondary-500/30 text-secondary-200 border border-secondary-400/30 flex items-center justify-center transition-colors"
-              aria-label="Export report"
-              title="Export report"
-            >
-              <Icon name="doc" className="w-4 h-4" />
-            </button>
-            <button
-              className="h-9 w-9 rounded-lg bg-white/5 hover:bg-white/10 text-white/80 border border-white/10 flex items-center justify-center transition-colors"
-              aria-label="Share insights"
-              title="Share insights"
-            >
-              <Icon name="check" className="w-4 h-4" />
-            </button>
-            <button
-              className="h-9 w-9 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-200 border border-emerald-400/30 flex items-center justify-center transition-colors"
-              aria-label="Create action plan"
-              title="Create action plan"
-            >
-              <Icon name="steps" className="w-4 h-4" />
-            </button>
-          </div>
         </div>
       </div>
     </div>

@@ -41,29 +41,40 @@ export default function StarmapCard({ summary, onOpen, onDelete, deleting }: Sta
   const tier = width >= 900 ? 3 : width >= 520 ? 2 : 1
 
   return (
-    <div ref={ref} className="glass-card p-4 transition-all hover:bg-white/10">
+    <div
+      ref={ref}
+      className="glass-card p-5 md:p-6 rounded-xl border border-white/10 hover:border-primary-400/30 hover:bg-white/8 transition-all duration-300 group"
+    >
       <div className="flex items-start justify-between gap-3">
         <button
           type="button"
           onClick={() => onOpen?.(summary.id)}
           className="text-left flex-1 min-w-0"
+          aria-label="Open starmap"
         >
-          <h3 className="font-semibold text-white/90 truncate">
-            {summary.report_title || summary.company_name || 'Untitled Discovery'}
-          </h3>
-          <p className="text-xs text-white/60 mt-1">{createdAt}</p>
+          <div className="flex items-center gap-2">
+            <h3 className="text-white font-semibold text-base md:text-lg truncate">
+              {summary.report_title || summary.company_name || 'Untitled Discovery'}
+            </h3>
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 text-white/50">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+            </span>
+          </div>
+          <p className="text-[11px] md:text-xs text-white/60 mt-1">{createdAt}</p>
 
           {tier === 1 && (
-            <p className="text-xs text-white/70 mt-2">Click to view Starmap</p>
+            <p className="text-xs text-white/65 mt-3">Tap to view details</p>
           )}
 
           {tier === 2 && info && (
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <div className="glass-card p-2">
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="rounded-lg border border-white/10 bg-white/5 p-2">
                 <div className="text-[11px] text-white/60">Sections</div>
                 <div className="text-sm font-semibold text-white/90 truncate">{info.sections.slice(0, 3).join(', ')}{info.sections.length > 3 ? '…' : ''}</div>
               </div>
-              <div className="glass-card p-2">
+              <div className="rounded-lg border border-white/10 bg-white/5 p-2">
                 <div className="text-[11px] text-white/60">Highlights</div>
                 <div className="text-sm font-semibold text-white/90">
                   {info.counts.modalities} mods · {info.counts.phases} phases · {info.counts.metrics} metrics
@@ -73,27 +84,29 @@ export default function StarmapCard({ summary, onOpen, onDelete, deleting }: Sta
           )}
 
           {tier === 3 && info && (
-            <div className="mt-3 grid grid-cols-3 gap-3">
-              <div className="glass-card p-3">
-                <div className="text-xs font-semibold text-white/80 mb-1">In this report</div>
-                <ul className="text-xs text-white/70 space-y-1">
+            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 md:p-4">
+                <div className="text-[11px] tracking-wide uppercase text-white/60 mb-2">In this report</div>
+                <ul className="text-xs text-white/75 space-y-1">
                   {info.sections.slice(0, 6).map((s, i) => (
-                    <li key={i} className="flex items-center gap-1"><span className="h-1 w-1 rounded-full bg-primary-300" />{s}</li>
+                    <li key={i} className="flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-primary-300" />{s}
+                    </li>
                   ))}
                 </ul>
               </div>
-              <div className="glass-card p-3">
-                <div className="text-xs font-semibold text-white/80 mb-1">Key counts</div>
-                <div className="grid grid-cols-2 gap-2 text-xs text-white/75">
-                  <div><span className="text-white/60">Modalities:</span> <span className="font-semibold text-white/90">{info.counts.modalities}</span></div>
-                  <div><span className="text-white/60">Objectives:</span> <span className="font-semibold text-white/90">{info.counts.objectives}</span></div>
-                  <div><span className="text-white/60">Phases:</span> <span className="font-semibold text-white/90">{info.counts.phases}</span></div>
-                  <div><span className="text-white/60">Metrics:</span> <span className="font-semibold text-white/90">{info.counts.metrics}</span></div>
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 md:p-4">
+                <div className="text-[11px] tracking-wide uppercase text-white/60 mb-2">Key counts</div>
+                <div className="grid grid-cols-2 gap-2 text-[12px] text-white/80">
+                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-white/40" /><span className="text-white/60">Modalities:</span> <span className="font-semibold text-white/90">{info.counts.modalities}</span></div>
+                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-white/40" /><span className="text-white/60">Objectives:</span> <span className="font-semibold text-white/90">{info.counts.objectives}</span></div>
+                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-white/40" /><span className="text-white/60">Phases:</span> <span className="font-semibold text-white/90">{info.counts.phases}</span></div>
+                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-white/40" /><span className="text-white/60">Metrics:</span> <span className="font-semibold text-white/90">{info.counts.metrics}</span></div>
                 </div>
               </div>
-              <div className="glass-card p-3">
-                <div className="text-xs font-semibold text-white/80 mb-1">Problem statement</div>
-                <p className="text-xs text-white/70 line-clamp-5">{info.problemStatement || '—'}</p>
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 md:p-4">
+                <div className="text-[11px] tracking-wide uppercase text-white/60 mb-2">Problem statement</div>
+                <p className="text-xs md:text-[13px] text-white/75 leading-relaxed line-clamp-5">{info.problemStatement || '—'}</p>
               </div>
             </div>
           )}
@@ -104,8 +117,9 @@ export default function StarmapCard({ summary, onOpen, onDelete, deleting }: Sta
             type="button"
             onClick={() => onDelete(summary.id)}
             disabled={deleting}
-            className="p-1 text-white/40 hover:text-red-400 transition-colors"
+            className="p-1 text-white/40 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
             title="Delete starmap"
+            aria-label="Delete starmap"
           >
             {deleting ? (
               <div className="w-4 h-4 border-2 border-white/50 border-t-transparent rounded-full animate-spin" />

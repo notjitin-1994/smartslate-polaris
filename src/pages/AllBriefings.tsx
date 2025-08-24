@@ -4,6 +4,9 @@ import {
   getAllSummaries, 
   deleteSummary, 
   getUserSummaryCount, 
+  getUserCreatedCount,
+  CREATION_LIMIT,
+  SAVED_LIMIT,
   SUMMARY_LIMIT, 
   type PolarisSummary 
 } from '@/services/polarisSummaryService'
@@ -17,6 +20,7 @@ export default function AllStarmaps() {
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [summaryCount, setSummaryCount] = useState<number>(0)
+  const [createdCount, setCreatedCount] = useState<number>(0)
   const [page, setPage] = useState<number>(1)
   const PAGE_SIZE = 5
   
@@ -30,9 +34,10 @@ export default function AllStarmaps() {
     try {
       setLoading(true)
       setError(null)
-      const [summariesResult, countResult] = await Promise.all([
+      const [summariesResult, countResult, createdResult] = await Promise.all([
         getAllSummaries(),
-        getUserSummaryCount()
+        getUserSummaryCount(),
+        getUserCreatedCount(),
       ])
 
       if (summariesResult.error) {
@@ -43,6 +48,7 @@ export default function AllStarmaps() {
       }
 
       if (!countResult.error && countResult.count !== null) setSummaryCount(countResult.count)
+      if (!createdResult.error && createdResult.count !== null) setCreatedCount(createdResult.count)
     } catch (err) {
       setError('Failed to load starmaps')
       console.error('Error:', err)
@@ -80,28 +86,55 @@ export default function AllStarmaps() {
   return (
     <div className="px-4 py-6 page-enter">
       <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-white">Polaris Starmaps</h1>
-            <div className="flex items-center gap-3 mt-1">
-              <span className="text-sm text-white/60">
-                {summaryCount} of {SUMMARY_LIMIT} starmaps used
-              </span>
-              {summaryCount >= SUMMARY_LIMIT && (
+        <div className="glass-card p-4 md:p-5 border border-white/10">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h1 className="text-xl md:text-2xl font-bold text-white tracking-tight">Polaris Starmaps</h1>
+              <p className="mt-1 text-xs md:text-sm text-white/70">View and manage all your Polaris discovery starmaps</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/portal')}
+              className={`btn-primary whitespace-nowrap ${(summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT) ? 'opacity-60 cursor-not-allowed' : ''}`}
+              disabled={summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT}
+              aria-label="Start a new discovery"
+            >
+              New Discovery
+            </button>
+          </div>
+          <div className="mt-3">
+            <div className="flex items-center justify-between gap-3 text-xs text-white/70">
+              <span>{summaryCount} of {SAVED_LIMIT} starmaps saved</span>
+              {(summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT) && (
                 <button
                   type="button"
                   onClick={() => window.open('https://smartslate.io/upgrade', '_blank')}
-                  className="text-xs text-amber-400 hover:text-amber-300 underline"
+                  className="text-amber-400 hover:text-amber-300 underline"
                 >
                   Upgrade for more
                 </button>
               )}
             </div>
+            <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden relative" aria-label="Starmap usage">
+              {/* Creation progress underlay */}
+              <div
+                className="absolute inset-y-0 left-0 bg-white/20"
+                style={{ width: `${Math.min(100, Math.round(((createdCount || 0) / Math.max(1, CREATION_LIMIT)) * 100))}%` }}
+                aria-hidden="true"
+              />
+              {/* Saved progress overlay */}
+              <div
+                className="relative h-full rounded-full bg-brand-accent transition-all"
+                style={{ width: `${Math.min(100, Math.round((summaryCount / Math.max(1, SAVED_LIMIT)) * 100))}%` }}
+              />
+            </div>
+            <div className="mt-1 flex items-center gap-3 text-[10px] text-white/50">
+              <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-1.5 rounded-full bg-brand-accent" /> Saved</span>
+              <span className="inline-flex items-center gap-1"><span className="inline-block w-3 h-1.5 rounded-full bg-white/30" /> Created</span>
+              <span className="ml-auto">Created {createdCount}/{CREATION_LIMIT}</span>
+            </div>
           </div>
         </div>
-        <p className="mt-2 text-sm text-white/60">
-          View and manage all your Polaris discovery starmaps
-        </p>
       </div>
 
       {loading ? (
@@ -126,8 +159,10 @@ export default function AllStarmaps() {
         </div>
       ) : (
         <div>
-          <h2 className="text-sm font-semibold text-white/80 mb-3 accent-text-soft">Your Starmaps</h2>
-          <div className="space-y-3">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-sm font-semibold text-white/80 accent-text-soft">Your Starmaps</h2>
+          </div>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 md:gap-4">
             {visible.map((summary) => (
               <StarmapCard
                 key={summary.id}
@@ -141,10 +176,10 @@ export default function AllStarmaps() {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-center gap-2 mt-5">
+            <div className="flex items-center justify-center gap-1.5 mt-5">
               <button
                 type="button"
-                className="px-2 py-1 text-xs rounded border border-white/10 bg-white/5 text-white/70 hover:text-white disabled:opacity-40"
+                className="h-7 px-3 text-xs rounded-full border border-white/10 bg-white/5 text-white/70 hover:text-white disabled:opacity-40"
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
                 aria-label="Previous page"
@@ -156,7 +191,7 @@ export default function AllStarmaps() {
                   key={n}
                   type="button"
                   onClick={() => setPage(n)}
-                  className={`px-2.5 py-1 text-xs rounded border transition-colors ${n === page ? 'border-primary-400 bg-primary-400/20 text-white' : 'border-white/10 bg-white/5 text-white/70 hover:text-white'}`}
+                  className={`h-7 min-w-[30px] px-2 text-xs rounded-full transition-colors ${n === page ? 'bg-primary-400/20 text-white border border-primary-400/50' : 'bg-white/5 text-white/70 border border-white/10 hover:text-white'}`}
                   aria-current={n === page ? 'page' : undefined}
                   aria-label={`Page ${n}`}
                 >
@@ -165,7 +200,7 @@ export default function AllStarmaps() {
               ))}
               <button
                 type="button"
-                className="px-2 py-1 text-xs rounded border border-white/10 bg-white/5 text-white/70 hover:text-white disabled:opacity-40"
+                className="h-7 px-3 text-xs rounded-full border border-white/10 bg-white/5 text-white/70 hover:text-white disabled:opacity-40"
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
                 aria-label="Next page"
@@ -181,9 +216,9 @@ export default function AllStarmaps() {
         type="button"
         aria-label="New Discovery"
         onClick={() => navigate('/portal')}
-        disabled={summaryCount >= SUMMARY_LIMIT}
-        className={`fixed bottom-6 right-6 z-40 rounded-full shadow-xl w-14 h-14 flex items-center justify-center bg-gradient-to-r from-secondary-400 to-secondary-500 text-white hover:opacity-95 active:opacity-90 float-button ${summaryCount >= SUMMARY_LIMIT ? 'opacity-60 cursor-not-allowed' : ''}`}
-        title={summaryCount >= SUMMARY_LIMIT ? 'Limit reached' : 'Start a new discovery'}
+        disabled={summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT}
+        className={`fixed bottom-6 right-6 z-40 rounded-full shadow-xl w-14 h-14 flex items-center justify-center bg-gradient-to-r from-secondary-400 to-secondary-500 text-white hover:opacity-95 active:opacity-90 float-button ${(summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT) ? 'opacity-60 cursor-not-allowed' : ''}`}
+        title={summaryCount >= SAVED_LIMIT ? 'Saved limit reached' : (createdCount >= CREATION_LIMIT ? 'Creation limit reached' : 'Start a new discovery')}
       >
         <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M12 5v14" />

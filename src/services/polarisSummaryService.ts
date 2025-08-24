@@ -4,8 +4,64 @@ import type { Database } from '@/types/database.types'
 export type PolarisSummary = Database['public']['Tables']['polaris_summaries']['Row']
 export type CreatePolarisSummary = Database['public']['Tables']['polaris_summaries']['Insert']
 
-// Free tier limit for summaries
-export const SUMMARY_LIMIT = 10
+// Limits
+export const CREATION_LIMIT = 10
+export const SAVED_LIMIT = 5
+// Back-compat: SUMMARY_LIMIT previously meant saved summaries. Keep export alias.
+export const SUMMARY_LIMIT = SAVED_LIMIT
+
+// Usage helpers
+export async function getUserCreatedCount(): Promise<{ count: number | null; error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { count: null, error: new Error('User not authenticated') }
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('starmaps_created')
+    .eq('id', user.id)
+    .maybeSingle()
+
+  if (error) return { count: null, error }
+  let value = (data?.starmaps_created as unknown as number) ?? 0
+
+  // Self-heal/backfill: ensure lifetime created >= current saved count
+  // This fixes older accounts where the new counter wasn't populated yet.
+  try {
+    const { count: savedCount } = await supabase
+      .from('polaris_summaries')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+
+    if (typeof savedCount === 'number' && savedCount > (value ?? 0)) {
+      value = savedCount
+      // Best-effort update; ignore error to avoid blocking
+      await supabase
+        .from('profiles')
+        .update({ starmaps_created: savedCount })
+        .eq('id', user.id)
+    }
+  } catch {}
+
+  return { count: value, error: null }
+}
+
+export async function incrementUserCreatedCount(): Promise<{ error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return { error: new Error('User not authenticated') }
+
+  // Read-modify-write (simple, safe for our usage volumes)
+  const current = await getUserCreatedCount()
+  if (current.error) return { error: current.error }
+  const next = (current.count ?? 0) + 1
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ starmaps_created: next })
+    .eq('id', user.id)
+  return { error }
+}
 
 export async function saveSummary(data: {
   company_name: string | null
@@ -28,16 +84,23 @@ export async function saveSummary(data: {
     return { data: null, error: new Error('User not authenticated') }
   }
 
-  // Check if user has reached the summary limit
-  const { count, error: countError } = await getUserSummaryCount()
-  if (countError) {
-    return { data: null, error: countError }
+  // Check saved summaries limit (concurrent saved)
+  const { count: savedCount, error: savedErr } = await getUserSummaryCount()
+  if (savedErr) return { data: null, error: savedErr }
+  if (savedCount !== null && savedCount >= SAVED_LIMIT) {
+    return {
+      data: null,
+      error: new Error(`You have reached the saved starmaps limit of ${SAVED_LIMIT}. Delete some or upgrade to save more.`)
+    }
   }
 
-  if (count !== null && count >= SUMMARY_LIMIT) {
-    return { 
-      data: null, 
-      error: new Error(`You have reached the limit of ${SUMMARY_LIMIT} summaries. Please upgrade to create more summaries.`) 
+  // Check creation limit (lifetime)
+  const { count: createdCount, error: createdErr } = await getUserCreatedCount()
+  if (createdErr) return { data: null, error: createdErr }
+  if (createdCount !== null && createdCount >= CREATION_LIMIT) {
+    return {
+      data: null,
+      error: new Error(`You have reached the creation limit of ${CREATION_LIMIT} starmaps. Please upgrade to create more.`)
     }
   }
 
@@ -62,6 +125,11 @@ export async function saveSummary(data: {
     .insert(summaryData)
     .select()
     .single()
+
+  if (!error && savedSummary) {
+    // Increment lifetime creation counter
+    await incrementUserCreatedCount()
+  }
 
   return { data: savedSummary, error }
 }

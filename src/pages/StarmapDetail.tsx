@@ -79,7 +79,7 @@ export default function StarmapDetail() {
       {/* Lodestar only while editing existing report */}
       {isEditMode && <SolaraLodestar />}
       <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-start gap-3">
           <button
             type="button"
             className="icon-btn"
@@ -91,11 +91,13 @@ export default function StarmapDetail() {
               <path d="M15 18l-6-6 6-6" />
             </svg>
           </button>
-          <h1 className="text-xl font-semibold text-white">{summary.company_name || 'Discovery Starmap'}</h1>
-          <p className="text-sm text-white/60 mt-1">
-            {new Date(summary.created_at).toLocaleString()}
-            {summary.is_edited && <span className="ml-2 text-xs text-primary-400">(Edited)</span>}
-          </p>
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold text-white">{(titleInput && titleInput.trim()) || summary.report_title || summary.company_name || 'Discovery Starmap'}</h1>
+            <div className="text-xs text-white/60 mt-0.5">
+              {new Date(summary.created_at).toLocaleString()}
+              {summary.is_edited && <span className="ml-2 text-xs text-primary-400">(Edited)</span>}
+            </div>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {!isEditMode ? (
@@ -141,8 +143,9 @@ export default function StarmapDetail() {
         <ReportDisplay
           reportMarkdown={editedContent}
           reportTitle={titleInput.trim() || undefined}
-          editableTitle
+          editableTitle={false}
           savingTitle={savingTitle}
+          hideTitleSection
           onSaveTitle={async (newTitle) => {
             if (!id || !newTitle.trim()) return
             try {
@@ -159,6 +162,36 @@ export default function StarmapDetail() {
         />
       ) : (
         <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={titleInput}
+              onChange={(e) => setTitleInput(e.target.value)}
+              className="flex-1 input"
+              placeholder="Report title"
+            />
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              disabled={savingTitle || !titleInput.trim()}
+              onClick={async () => {
+                if (!id || !titleInput.trim()) return
+                try {
+                  setSavingTitle(true)
+                  const { error } = await updateSummaryTitle(id, titleInput.trim())
+                  if (!error) {
+                    setTitleInput(titleInput.trim())
+                    setSummary(prev => prev ? { ...prev, report_title: titleInput.trim() } as PolarisSummary : prev)
+                  }
+                } finally {
+                  setSavingTitle(false)
+                }
+              }}
+              title="Save title"
+            >
+              {savingTitle ? 'Saving…' : 'Save title'}
+            </button>
+          </div>
           <AIReportEditorEnhanced
             summaryId={id}
             reportContent={editedContent}

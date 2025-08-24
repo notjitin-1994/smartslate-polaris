@@ -1099,7 +1099,7 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
           </div>
           <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-white/10" />
           <div
-            className="absolute left-0 bottom-0 h-[2px] bg-primary-400 transition-all duration-500"
+            className="absolute left-0 bottom-0 h-[2px] bg-brand-accent transition-all duration-500"
             style={{ width: `${progress * 100}%` }}
           />
         </div>
@@ -1164,7 +1164,7 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
             </div>
             <div className="mt-4">
               <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
-                <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-secondary-400 transition-all duration-200" style={{ width: `${loader.progress}%` }} />
+                <div className="h-full rounded-full bg-brand-accent transition-all duration-200" style={{ width: `${loader.progress}%` }} />
               </div>
             </div>
           </div>
@@ -1412,11 +1412,11 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
       {active === 'report' && reportMarkdown && (
         <section className="space-y-4">
           <div className="sticky top-16 z-30 bg-[rgb(var(--bg))]/70 backdrop-blur-md border-b border-white/10">
-            <div className="flex items-center justify-between gap-3 px-1 py-2">
-              <div className="flex items-center gap-2">
+            <div className="flex items-start justify-between gap-3 px-1 py-2">
+              <div className="flex items-start gap-3">
                 <button
                   type="button"
-                  className="icon-btn"
+                  className="icon-btn mt-1"
                   aria-label="Back"
                   title="Back"
                   onClick={() => (window.location.href = '/portal/starmaps')}
@@ -1425,7 +1425,12 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
                     <path d="M15 18l-6-6 6-6" />
                   </svg>
                 </button>
-                <h3 className="text-lg font-semibold text-white">Your L&D Starmap</h3>
+                <div>
+                  <h2 className="text-xl md:text-2xl font-bold text-white">{reportTitle.trim() || 'Your L&D Starmap'}</h2>
+                  <div className="text-xs text-white/60 mt-0.5">
+                    Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
+                  </div>
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {lastSavedSummaryId && (
@@ -1462,8 +1467,9 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
               <ReportDisplay
                 reportMarkdown={editedContent}
                 reportTitle={reportTitle.trim() || undefined}
-                editableTitle={Boolean(lastSavedSummaryId)}
+                editableTitle={false}
                 savingTitle={savingTitle}
+                hideTitleSection
                 onSaveTitle={async (newTitle) => {
                   if (!lastSavedSummaryId) return
                   try {
@@ -1479,6 +1485,37 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
               />
             ) : (
               <div className="space-y-4">
+                {lastSavedSummaryId && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={reportTitle}
+                      onChange={(e) => setReportTitle(e.target.value)}
+                      className="flex-1 input"
+                      placeholder="Report title"
+                    />
+                    <button
+                      type="button"
+                      className="btn-primary btn-sm"
+                      disabled={savingTitle || !reportTitle.trim()}
+                      onClick={async () => {
+                        if (!lastSavedSummaryId || !reportTitle.trim()) return
+                        try {
+                          setSavingTitle(true)
+                          const { error } = await updateSummaryTitle(lastSavedSummaryId, reportTitle.trim())
+                          if (!error) {
+                            setReportTitle(reportTitle.trim())
+                          }
+                        } finally {
+                          setSavingTitle(false)
+                        }
+                      }}
+                      title="Save title"
+                    >
+                      {savingTitle ? 'Saving…' : 'Save title'}
+                    </button>
+                  </div>
+                )}
                 <AIReportEditorEnhanced
                   summaryId={lastSavedSummaryId || undefined}
                   reportContent={editedContent}

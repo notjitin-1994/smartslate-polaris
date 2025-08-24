@@ -1478,7 +1478,7 @@ export default function Polaris() {
             <ReportDisplay
               reportMarkdown={reportMarkdown}
               reportTitle={reportTitle.trim() || undefined}
-              editableTitle={Boolean(lastSavedSummaryId)}
+              editableTitle={false}
               savingTitle={savingTitle}
               onSaveTitle={async (newTitle) => {
                 if (!lastSavedSummaryId) return

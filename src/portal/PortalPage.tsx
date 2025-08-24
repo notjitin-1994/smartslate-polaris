@@ -690,11 +690,8 @@ export function PortalPage() {
               
               {/* Recent Starmaps Section */}
               <div className="select-none border-t border-white/10 pt-3">
-                <div className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
+                <div className="w-full flex items-center px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
                   <span className="accent-text-soft">Recent Starmaps</span>
-                  {recentSummaries.length > 0 && (
-                    <span className="text-xs text-white/50">{recentSummaries.length}</span>
-                  )}
                 </div>
                 <div className="mt-1 pl-2">
                   {recentSummaries.length > 0 ? (
@@ -1228,11 +1225,8 @@ export function PortalPage() {
                   
                   {/* Recent Starmaps Section for Mobile */}
                   <div className="select-none border-t border-white/10 pt-3">
-                    <div className="w-full flex items-center justify-between px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
+                    <div className="w-full flex items-center px-3 py-2 text-sm font-semibold text-primary-500 rounded-lg">
                       <span>Recent Starmaps</span>
-                      {recentSummaries.length > 0 && (
-                        <span className="text-xs text-white/50">{recentSummaries.length}</span>
-                      )}
                     </div>
                     <div className="mt-1 pl-2">
                       {recentSummaries.length > 0 ? (

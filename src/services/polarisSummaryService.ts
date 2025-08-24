@@ -191,7 +191,7 @@ export async function updateSummaryEditedContent(
   return { error }
 }
 
-export async function getDisplayContent(summary: PolarisSummary): string {
+export async function getDisplayContent(summary: PolarisSummary): Promise<string> {
   // Return edited content if available, otherwise original content
-  return summary.edited_content || summary.summary_content
+  return Promise.resolve(summary.edited_content || summary.summary_content)
 }

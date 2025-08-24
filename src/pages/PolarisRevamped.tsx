@@ -1,0 +1,1225 @@
+import { useRef, useState, useEffect } from 'react'
+import { callLLM } from '@/services/llmClient'
+import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle, updateSummaryEditedContent } from '@/services/polarisSummaryService'
+import { researchGreeting, researchOrganization, researchRequirements } from '@/services/perplexityService'
+import RenderField from '@/polaris/needs-analysis/RenderField'
+import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
+import { RichTextEditor } from '@/components/RichTextEditor'
+import { EXPERIENCE_LEVELS } from '@/polaris/needs-analysis/experience'
+import { STAGE1_REQUESTER_FIELDS, STAGE2_ORGANIZATION_FIELDS, STAGE3_PROJECT_FIELDS } from '@/polaris/needs-analysis/three-stage-static'
+import { NA_STAGE_TITLE_PROMPT, NA_QUESTIONNAIRE_PROMPT } from '@/polaris/needs-analysis/prompts'
+import { NA_REPORT_PROMPT, type NAReport } from '@/polaris/needs-analysis/report'
+import { tryExtractJson } from '@/polaris/needs-analysis/json'
+import type { NAField, NAResponseMap } from '@/polaris/needs-analysis/types'
+import { useAuth } from '@/contexts/AuthContext'
+
+export default function PolarisRevamped() {
+  const { user } = useAuth()
+  const [active, setActive] = useState<'experience' | 'stage1' | 'stage2' | 'stage3' | 'dynamic' | 'report'>('experience')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [summaryCount, setSummaryCount] = useState<number>(0)
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false)
+  
+  // State for all responses
+  const [experienceAnswer, setExperienceAnswer] = useState<NAResponseMap>({})
+  const [stage1Answers, setStage1Answers] = useState<NAResponseMap>({})
+  const [stage2Answers, setStage2Answers] = useState<NAResponseMap>({})
+  const [stage3Answers, setStage3Answers] = useState<NAResponseMap>({})
+  
+  // Research reports
+  const [greetingReport, setGreetingReport] = useState<string>('')
+  const [orgReport, setOrgReport] = useState<string>('')
+  const [requirementReport, setRequirementReport] = useState<string>('')
+  
+  // Dynamic questions
+  const [dynamicStages, setDynamicStages] = useState<Array<{
+    title: string
+    questions: NAField[]
+    answers: NAResponseMap
+  }>>([])
+  const [currentDynamicStage, setCurrentDynamicStage] = useState(0)
+  
+  // Final report and editing
+  const [reportMarkdown, setReportMarkdown] = useState<string>('')
+  const [editedContent, setEditedContent] = useState<string>('')
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [lastSavedSummaryId, setLastSavedSummaryId] = useState<string | null>(null)
+  const [reportTitle, setReportTitle] = useState<string>('')
+  const [savingTitle, setSavingTitle] = useState<boolean>(false)
+  const [savingEdit, setSavingEdit] = useState<boolean>(false)
+  
+  // UI state
+  const summaryRef = useRef<HTMLDivElement | null>(null)
+  const [loader, setLoader] = useState<{ active: boolean; phase?: string; message: string; progress: number; etaSeconds: number }>({ 
+    active: false, message: '', progress: 0, etaSeconds: 0 
+  })
+  const loaderIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  
+  // Prefill user data from auth context on mount
+  useEffect(() => {
+    if (user) {
+      // Prefill email from auth
+      setStage1Answers(prev => ({
+        ...prev,
+        requester_email: user.email || ''
+      }))
+      
+      // Try to get name from user metadata if available
+      const metadata = (user as any).user_metadata
+      if (metadata?.full_name) {
+        setStage1Answers(prev => ({
+          ...prev,
+          requester_name: metadata.full_name
+        }))
+      }
+    }
+  }, [user])
+  
+  // Load user's current summary count on mount
+  useEffect(() => {
+    async function loadSummaryCount() {
+      const { count, error } = await getUserSummaryCount()
+      if (!error && count !== null) {
+        setSummaryCount(count)
+      }
+    }
+    loadSummaryCount()
+  }, [])
+  
+  // Check if stages are complete
+  const experienceLevel = experienceAnswer.exp_level as string | undefined
+  const hasExperience = !!experienceLevel
+  
+  const stage1Complete = STAGE1_REQUESTER_FIELDS.filter(f => f.required).every(f => {
+    const val = stage1Answers[f.id]
+    return val !== undefined && val !== null && val !== ''
+  })
+  
+  const stage2Complete = STAGE2_ORGANIZATION_FIELDS.filter(f => f.required).every(f => {
+    const val = stage2Answers[f.id]
+    if (f.type === 'multi_select') return Array.isArray(val) && val.length > 0
+    return val !== undefined && val !== null && val !== ''
+  })
+  
+  const stage3Complete = STAGE3_PROJECT_FIELDS.filter(f => f.required).every(f => {
+    const val = stage3Answers[f.id]
+    if (f.type === 'calendar_range') {
+      const v = (val || {}) as { start?: string; end?: string }
+      return typeof v.start === 'string' && v.start !== '' && typeof v.end === 'string' && v.end !== ''
+    }
+    return val !== undefined && val !== null && val !== ''
+  })
+  
+  // Helper for smooth loader animation
+  function easeInOutCubic(t: number) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+  }
+
+  function startSmartLoader(phase: string, baseTimeMs: number = 8000) {
+    const targetMs = Math.min(14000, Math.max(5500, baseTimeMs))
+    const start = Date.now()
+    
+    const step = () => {
+      const elapsed = Date.now() - start
+      const ratio = Math.min(1, elapsed / targetMs)
+      const progress = Math.min(95, Math.max(5, Math.round(easeInOutCubic(ratio) * 95)))
+      let message = 'Preparing...'
+      if (progress > 15) message = phase.includes('research') ? 'Researching information...' : 'Analyzing data...'
+      if (progress > 45) message = phase === 'report' ? 'Generating comprehensive report...' : 'Creating tailored content...'
+      if (progress > 70) message = 'Refining details...'
+      if (progress > 85) message = 'Finalizing...'
+      const etaSeconds = Math.max(1, Math.ceil((targetMs - elapsed) / 1000))
+      setLoader({ active: true, phase, message, progress, etaSeconds })
+    }
+    
+    step()
+    if (loaderIntervalRef.current) clearInterval(loaderIntervalRef.current)
+    loaderIntervalRef.current = setInterval(step, 180)
+  }
+
+  function stopSmartLoader() {
+    if (loaderIntervalRef.current) {
+      clearInterval(loaderIntervalRef.current)
+      loaderIntervalRef.current = null
+    }
+    setLoader((prev) => ({ ...prev, active: true, progress: 100, message: 'Ready' }))
+    window.setTimeout(() => setLoader({ active: false, message: '', progress: 0, etaSeconds: 0 }), 450)
+  }
+  
+  // Reset all state
+  function resetAll() {
+    try {
+      if (loaderIntervalRef.current) {
+        clearInterval(loaderIntervalRef.current)
+        loaderIntervalRef.current = null
+      }
+    } catch {}
+
+    setLoader({ active: false, message: '', progress: 0, etaSeconds: 0 })
+    setExperienceAnswer({})
+    setStage1Answers({})
+    setStage2Answers({})
+    setStage3Answers({})
+    setGreetingReport('')
+    setOrgReport('')
+    setRequirementReport('')
+    setDynamicStages([])
+    setCurrentDynamicStage(0)
+    setReportMarkdown('')
+    setEditedContent('')
+    setIsEditMode(false)
+    setActive('experience')
+  }
+  
+  // Stage 1 Research
+  async function completeStage1() {
+    try {
+      setLoading(true)
+      setError(null)
+      startSmartLoader('stage1-research', 10000)
+      
+      const researchData = {
+        name: stage1Answers.requester_name as string,
+        role: stage1Answers.requester_role as string,
+        department: stage1Answers.requester_department as string,
+        email: stage1Answers.requester_email as string,
+        phone: stage1Answers.requester_phone as string | undefined,
+        timezone: stage1Answers.requester_timezone as string | undefined
+      }
+      
+      const report = await researchGreeting(researchData)
+      setGreetingReport(report)
+      setActive('stage2')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to complete Stage 1 research.')
+      // Continue anyway with empty report
+      setGreetingReport('Research unavailable - continuing with provided information.')
+      setActive('stage2')
+    } finally {
+      setLoading(false)
+      stopSmartLoader()
+    }
+  }
+  
+  // Stage 2 Research
+  async function completeStage2() {
+    try {
+      setLoading(true)
+      setError(null)
+      startSmartLoader('stage2-research', 12000)
+      
+      const researchData = {
+        orgName: stage2Answers.org_name as string,
+        industry: stage2Answers.org_industry as string,
+        size: stage2Answers.org_size as string,
+        headquarters: stage2Answers.org_headquarters as string,
+        website: stage2Answers.org_website as string | undefined,
+        mission: stage2Answers.org_mission as string | undefined,
+        constraints: stage2Answers.org_compliance as string[] | undefined,
+        stakeholders: stage2Answers.org_stakeholders as string[] | undefined
+      }
+      
+      const report = await researchOrganization(researchData)
+      setOrgReport(report)
+      setActive('stage3')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to complete Stage 2 research.')
+      setOrgReport('Research unavailable - continuing with provided information.')
+      setActive('stage3')
+    } finally {
+      setLoading(false)
+      stopSmartLoader()
+    }
+  }
+  
+  // Stage 3 Research
+  async function completeStage3() {
+    try {
+      setLoading(true)
+      setError(null)
+      startSmartLoader('stage3-research', 12000)
+      
+      const timeline = stage3Answers.project_timeline as { start?: string; end?: string }
+      const researchData = {
+        objectives: stage3Answers.project_objectives as string,
+        constraints: stage3Answers.project_constraints as string,
+        audience: stage3Answers.target_audience as string,
+        timeline: `${timeline?.start || 'TBD'} to ${timeline?.end || 'TBD'}`,
+        budget: stage3Answers.project_budget_range as string,
+        hardware: stage3Answers.available_hardware as string[] | undefined,
+        software: stage3Answers.available_software as string[] | undefined,
+        experts: stage3Answers.subject_matter_experts ? [stage3Answers.subject_matter_experts as string] : undefined,
+        other: stage3Answers.additional_context as string | undefined
+      }
+      
+      const report = await researchRequirements(researchData)
+      setRequirementReport(report)
+      
+      // Now generate dynamic questions using all research
+      await generateDynamicQuestions()
+    } catch (e: any) {
+      setError(e?.message || 'Failed to complete Stage 3 research.')
+      setRequirementReport('Research unavailable - continuing with provided information.')
+      await generateDynamicQuestions()
+    } finally {
+      setLoading(false)
+      stopSmartLoader()
+    }
+  }
+  
+  // Generate dynamic questions based on research
+  async function generateDynamicQuestions() {
+    try {
+      setLoading(true)
+      setError(null)
+      startSmartLoader('dynamic-generation', 15000)
+      
+      // Combine all research reports into system context
+      const researchContext = `
+RESEARCH REPORTS:
+
+GREETING REPORT:
+${greetingReport}
+
+ORGANIZATION REPORT:
+${orgReport}
+
+REQUIREMENTS REPORT:
+${requirementReport}
+`
+      
+      // Generate 2-4 dynamic stages based on complexity
+      const numStages = Math.min(4, Math.max(2, Math.ceil(Object.keys({...stage1Answers, ...stage2Answers, ...stage3Answers}).length / 10)))
+      const stages: typeof dynamicStages = []
+      
+      for (let i = 0; i < numStages; i++) {
+        const stageNum = i + 2 // Dynamic stages start at 2
+        
+        // Collect all previous answers
+        const allPreviousAnswers = {
+          ...stage1Answers,
+          ...stage2Answers,
+          ...stage3Answers,
+          ...stages.reduce((acc, s) => ({ ...acc, ...s.answers }), {})
+        }
+        
+        // Generate title
+        const titlePrompt = `${NA_STAGE_TITLE_PROMPT(experienceLevel!, stageNum as any, allPreviousAnswers)}
+        
+RESEARCH CONTEXT:
+${researchContext}`
+        
+        const titleRes = await callLLM([{ role: 'user', content: titlePrompt }])
+        const stageTitle = titleRes.content.trim()
+        
+        // Generate questions
+        const questionsPrompt = `${NA_QUESTIONNAIRE_PROMPT(experienceLevel!, stageNum as any, 
+          { ...stage1Answers, ...stage2Answers, ...stage3Answers }, 
+          stages.reduce((acc, s) => ({ ...acc, ...s.answers }), {}))}
+        
+RESEARCH CONTEXT FOR INFORMED QUESTIONS:
+${researchContext}
+
+Create questions that leverage the research insights to ask more targeted, relevant questions.`
+        
+        const res = await callLLM([{ role: 'user', content: questionsPrompt }])
+        const json = JSON.parse(tryExtractJson(res.content))
+        
+        stages.push({
+          title: json.title || stageTitle,
+          questions: json.questions || [],
+          answers: {}
+        })
+      }
+      
+      setDynamicStages(stages)
+      setActive('dynamic')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to generate dynamic questions.')
+      // Skip dynamic stages and go straight to report
+      await generateReport()
+    } finally {
+      setLoading(false)
+      stopSmartLoader()
+    }
+  }
+  
+  // Handle dynamic stage progression
+  async function nextDynamicStage() {
+    if (currentDynamicStage < dynamicStages.length - 1) {
+      setCurrentDynamicStage(prev => prev + 1)
+    } else {
+      await generateReport()
+    }
+  }
+  
+  // Generate final report
+  async function generateReport() {
+    try {
+      setLoading(true)
+      setError(null)
+      startSmartLoader('report', 20000)
+      
+      const allAnswers = {
+        experience: experienceAnswer,
+        stage1: stage1Answers,
+        stage2: stage2Answers,
+        stage3: stage3Answers,
+        ...dynamicStages.reduce((acc, stage, idx) => ({
+          ...acc,
+          [`dynamic_stage_${idx + 1}`]: stage.answers
+        }), {})
+      }
+      
+      // Include research context in report generation
+      const enhancedPrompt = `${NA_REPORT_PROMPT(experienceLevel!, allAnswers)}
+
+RESEARCH INSIGHTS TO INCORPORATE:
+
+GREETING/CONTEXT:
+${greetingReport}
+
+ORGANIZATION ANALYSIS:
+${orgReport}
+
+REQUIREMENTS RESEARCH:
+${requirementReport}
+
+Use these research insights to make the report more specific, actionable, and aligned with industry best practices.`
+      
+      const res = await callLLM([{ role: 'user', content: enhancedPrompt }])
+      
+      let reportJson: NAReport
+      try {
+        const extractedJson = tryExtractJson(res.content)
+        reportJson = JSON.parse(extractedJson) as NAReport
+        
+        // Validate report structure
+        if (!reportJson || typeof reportJson !== 'object' || !reportJson.summary?.problem_statement) {
+          throw new Error('Invalid report structure')
+        }
+      } catch (parseError: any) {
+        console.error('Failed to parse report JSON:', parseError)
+        // Create fallback report
+        reportJson = createFallbackReport()
+      }
+      
+      const markdown = formatReportAsMarkdown(reportJson)
+      setReportMarkdown(markdown)
+      setEditedContent(markdown)
+      
+      // Save summary to database
+      try {
+        const { data: saved, error: saveError } = await saveSummary({
+          company_name: stage2Answers.org_name as string || null,
+          report_title: null,
+          summary_content: markdown,
+          stage1_answers: { ...experienceAnswer, ...stage1Answers },
+          stage2_answers: stage2Answers,
+          stage3_answers: { 
+            ...stage3Answers, 
+            ...dynamicStages.reduce((acc, s) => ({ ...acc, ...s.answers }), {})
+          },
+          stage2_questions: dynamicStages.slice(0, Math.ceil(dynamicStages.length / 2))
+            .flatMap(s => s.questions),
+          stage3_questions: dynamicStages.slice(Math.ceil(dynamicStages.length / 2))
+            .flatMap(s => s.questions),
+          greeting_report: greetingReport,
+          org_report: orgReport,
+          requirement_report: requirementReport
+        })
+        
+        if (saveError) {
+          console.error('Failed to save summary:', saveError)
+          if (saveError.message?.includes('reached the limit')) {
+            setShowUpgradeModal(true)
+          }
+        } else {
+          setSummaryCount(prev => prev + 1)
+          setLastSavedSummaryId(saved?.id || null)
+          setReportTitle((stage2Answers.org_name as string) || '')
+        }
+      } catch (saveErr) {
+        console.error('Error saving summary:', saveErr)
+      }
+      
+      setActive('report')
+    } catch (e: any) {
+      setError(e?.message || 'Failed to generate report.')
+    } finally {
+      setLoading(false)
+      stopSmartLoader()
+    }
+  }
+  
+  // Create fallback report if parsing fails
+  function createFallbackReport(): NAReport {
+    return {
+      summary: {
+        problem_statement: 'Analysis in progress',
+        current_state: ['Current state assessment pending'],
+        root_causes: ['Root cause analysis required'],
+        objectives: ['Define clear objectives']
+      },
+      solution: {
+        modalities: [{ name: 'Blended Learning', reason: 'Flexible approach' }],
+        scope: {
+          audiences: ['Target audience'],
+          competencies: ['Core competencies'],
+          content_outline: ['Module structure']
+        }
+      },
+      learner_analysis: {
+        profile: {
+          demographics: ['Demographic analysis'],
+          tech_readiness: 'Assessment needed',
+          learning_style_fit: ['Learning preferences']
+        },
+        engagement_strategy: {
+          motivation_drivers: ['Motivation factors'],
+          potential_barriers: ['Potential challenges'],
+          support_mechanisms: ['Support systems']
+        },
+        design_implications: {
+          content_adaptations: ['Content adjustments'],
+          delivery_adjustments: ['Delivery modifications'],
+          accessibility_requirements: ['Accessibility needs'],
+          language_considerations: ['Language requirements']
+        }
+      },
+      technology_talent: {
+        tech_enablers: {
+          available: ['Existing technology'],
+          required: ['Required technology'],
+          integration_needs: ['Integration requirements']
+        },
+        talent_requirements: {
+          internal_roles: ['Internal resources'],
+          external_support: ['External support'],
+          development_needs: ['Development requirements']
+        },
+        limitations_impact: {
+          tech_constraints: ['Technology limitations'],
+          talent_gaps_impact: ['Resource gaps'],
+          mitigation_strategies: ['Mitigation approaches']
+        }
+      },
+      delivery_plan: {
+        phases: [
+          {
+            name: 'Discovery',
+            duration_weeks: 2,
+            goals: ['Requirements gathering'],
+            activities: ['Stakeholder interviews']
+          }
+        ],
+        timeline: [{ label: 'Phase 1', start: '2025-01-01', end: '2025-02-01' }],
+        resources: ['Project team']
+      },
+      measurement: {
+        success_metrics: ['Success indicators'],
+        assessment_strategy: ['Assessment methods'],
+        data_sources: ['Data collection']
+      },
+      budget: {
+        notes: 'Budget analysis required',
+        ranges: [{ item: 'Development', low: 'TBD', high: 'TBD' }]
+      },
+      risks: [{ risk: 'Implementation risk', mitigation: 'Risk mitigation strategy' }],
+      next_steps: ['Review requirements', 'Finalize approach']
+    }
+  }
+  
+  // Format report as markdown
+  function formatReportAsMarkdown(report: NAReport): string {
+    let md = '# Learning & Development Starmap Report\n\n'
+    
+    // Executive Summary
+    if (report.summary) {
+      md += '## Executive Summary\n\n'
+      if (report.summary.problem_statement) {
+        md += `**Problem Statement:** ${report.summary.problem_statement}\n\n`
+      }
+      if (report.summary.current_state?.length) {
+        md += '**Current State:**\n'
+        report.summary.current_state.forEach(item => md += `- ${item}\n`)
+      }
+      if (report.summary.root_causes?.length) {
+        md += '\n**Root Causes:**\n'
+        report.summary.root_causes.forEach(item => md += `- ${item}\n`)
+      }
+      if (report.summary.objectives?.length) {
+        md += '\n**Objectives:**\n'
+        report.summary.objectives.forEach(item => md += `- ${item}\n`)
+      }
+    }
+    
+    // Solution Recommendations
+    if (report.solution) {
+      md += '\n## Recommended Solution\n\n'
+      if (report.solution.modalities?.length) {
+        md += '### Delivery Modalities\n'
+        report.solution.modalities.forEach(m => {
+          if (m?.name && m?.reason) {
+            md += `- **${m.name}:** ${m.reason}\n`
+          }
+        })
+      }
+      if (report.solution.scope) {
+        md += '\n### Scope\n'
+        if (report.solution.scope.audiences?.length) {
+          md += '**Target Audiences:**\n'
+          report.solution.scope.audiences.forEach(a => md += `- ${a}\n`)
+        }
+        if (report.solution.scope.competencies?.length) {
+          md += '\n**Key Competencies:**\n'
+          report.solution.scope.competencies.forEach(c => md += `- ${c}\n`)
+        }
+        if (report.solution.scope.content_outline?.length) {
+          md += '\n**Content Outline:**\n'
+          report.solution.scope.content_outline.forEach(c => md += `- ${c}\n`)
+        }
+      }
+    }
+    
+    // Learner Analysis - similar to existing implementation
+    if (report.learner_analysis) {
+      md += '\n## Learner Analysis\n\n'
+      
+      if (report.learner_analysis.profile) {
+        md += '### Learner Profile\n'
+        if (report.learner_analysis.profile.demographics?.length) {
+          md += '**Demographics:**\n'
+          report.learner_analysis.profile.demographics.forEach(d => md += `- ${d}\n`)
+        }
+        if (report.learner_analysis.profile.tech_readiness) {
+          md += `\n**Technology Readiness:** ${report.learner_analysis.profile.tech_readiness}\n`
+        }
+        if (report.learner_analysis.profile.learning_style_fit?.length) {
+          md += '\n**Learning Style Preferences:**\n'
+          report.learner_analysis.profile.learning_style_fit.forEach(l => md += `- ${l}\n`)
+        }
+      }
+      
+      if (report.learner_analysis.engagement_strategy) {
+        md += '\n### Engagement Strategy\n'
+        if (report.learner_analysis.engagement_strategy.motivation_drivers?.length) {
+          md += '**Motivation Drivers:**\n'
+          report.learner_analysis.engagement_strategy.motivation_drivers.forEach(m => md += `- ${m}\n`)
+        }
+        if (report.learner_analysis.engagement_strategy.potential_barriers?.length) {
+          md += '\n**Potential Barriers:**\n'
+          report.learner_analysis.engagement_strategy.potential_barriers.forEach(b => md += `- ${b}\n`)
+        }
+        if (report.learner_analysis.engagement_strategy.support_mechanisms?.length) {
+          md += '\n**Support Mechanisms:**\n'
+          report.learner_analysis.engagement_strategy.support_mechanisms.forEach(s => md += `- ${s}\n`)
+        }
+      }
+      
+      if (report.learner_analysis.design_implications) {
+        md += '\n### Design Implications\n'
+        if (report.learner_analysis.design_implications.content_adaptations?.length) {
+          md += '**Content Adaptations:**\n'
+          report.learner_analysis.design_implications.content_adaptations.forEach(c => md += `- ${c}\n`)
+        }
+        if (report.learner_analysis.design_implications.delivery_adjustments?.length) {
+          md += '\n**Delivery Adjustments:**\n'
+          report.learner_analysis.design_implications.delivery_adjustments.forEach(d => md += `- ${d}\n`)
+        }
+        if (report.learner_analysis.design_implications.accessibility_requirements?.length) {
+          md += '\n**Accessibility Requirements:**\n'
+          report.learner_analysis.design_implications.accessibility_requirements.forEach(a => md += `- ${a}\n`)
+        }
+        if (report.learner_analysis.design_implications.language_considerations?.length) {
+          md += '\n**Language Considerations:**\n'
+          report.learner_analysis.design_implications.language_considerations.forEach(l => md += `- ${l}\n`)
+        }
+      }
+    }
+    
+    // Technology & Talent
+    if (report.technology_talent) {
+      md += '\n## Technology & Talent Analysis\n\n'
+      
+      if (report.technology_talent.tech_enablers) {
+        md += '### Technology Enablers\n'
+        if (report.technology_talent.tech_enablers.available?.length) {
+          md += '**Available Technologies:**\n'
+          report.technology_talent.tech_enablers.available.forEach(t => md += `- ${t}\n`)
+        }
+        if (report.technology_talent.tech_enablers.required?.length) {
+          md += '\n**Required Technologies:**\n'
+          report.technology_talent.tech_enablers.required.forEach(t => md += `- ${t}\n`)
+        }
+        if (report.technology_talent.tech_enablers.integration_needs?.length) {
+          md += '\n**Integration Requirements:**\n'
+          report.technology_talent.tech_enablers.integration_needs.forEach(i => md += `- ${i}\n`)
+        }
+      }
+      
+      if (report.technology_talent.talent_requirements) {
+        md += '\n### Talent Requirements\n'
+        if (report.technology_talent.talent_requirements.internal_roles?.length) {
+          md += '**Internal Roles Needed:**\n'
+          report.technology_talent.talent_requirements.internal_roles.forEach(r => md += `- ${r}\n`)
+        }
+        if (report.technology_talent.talent_requirements.external_support?.length) {
+          md += '\n**External Support Required:**\n'
+          report.technology_talent.talent_requirements.external_support.forEach(e => md += `- ${e}\n`)
+        }
+        if (report.technology_talent.talent_requirements.development_needs?.length) {
+          md += '\n**Skills Development Needs:**\n'
+          report.technology_talent.talent_requirements.development_needs.forEach(d => md += `- ${d}\n`)
+        }
+      }
+      
+      if (report.technology_talent.limitations_impact) {
+        md += '\n### Limitations & Mitigation\n'
+        if (report.technology_talent.limitations_impact.tech_constraints?.length) {
+          md += '**Technology Constraints:**\n'
+          report.technology_talent.limitations_impact.tech_constraints.forEach(c => md += `- ${c}\n`)
+        }
+        if (report.technology_talent.limitations_impact.talent_gaps_impact?.length) {
+          md += '\n**Talent Gaps Impact:**\n'
+          report.technology_talent.limitations_impact.talent_gaps_impact.forEach(g => md += `- ${g}\n`)
+        }
+        if (report.technology_talent.limitations_impact.mitigation_strategies?.length) {
+          md += '\n**Mitigation Strategies:**\n'
+          report.technology_talent.limitations_impact.mitigation_strategies.forEach(m => md += `- ${m}\n`)
+        }
+      }
+    }
+    
+    // Delivery Plan
+    if (report.delivery_plan) {
+      md += '\n## Delivery Plan\n\n'
+      if (report.delivery_plan.phases?.length) {
+        md += '### Phases\n'
+        report.delivery_plan.phases.forEach(p => {
+          if (p?.name && p?.duration_weeks) {
+            md += `\n**${p.name}** (${p.duration_weeks} weeks)\n`
+            if (p.goals?.length) {
+              md += 'Goals:\n'
+              p.goals.forEach(g => md += `- ${g}\n`)
+            }
+            if (p.activities?.length) {
+              md += 'Activities:\n'
+              p.activities.forEach(a => md += `- ${a}\n`)
+            }
+          }
+        })
+      }
+      
+      if (report.delivery_plan.timeline?.length) {
+        md += '\n### Timeline\n'
+        report.delivery_plan.timeline.forEach(t => {
+          if (t?.label && t?.start && t?.end) {
+            md += `- **${t.label}:** ${t.start} to ${t.end}\n`
+          }
+        })
+      }
+      
+      if (report.delivery_plan.resources?.length) {
+        md += '\n### Resources Needed\n'
+        report.delivery_plan.resources.forEach(r => md += `- ${r}\n`)
+      }
+    }
+    
+    // Measurement
+    if (report.measurement) {
+      md += '\n## Measurement & Success\n\n'
+      if (report.measurement.success_metrics?.length) {
+        md += '**Success Metrics:**\n'
+        report.measurement.success_metrics.forEach(m => md += `- ${m}\n`)
+      }
+      if (report.measurement.assessment_strategy?.length) {
+        md += '\n**Assessment Strategy:**\n'
+        report.measurement.assessment_strategy.forEach(a => md += `- ${a}\n`)
+      }
+      if (report.measurement.data_sources?.length) {
+        md += '\n**Data Sources:**\n'
+        report.measurement.data_sources.forEach(d => md += `- ${d}\n`)
+      }
+    }
+    
+    // Budget
+    if (report.budget) {
+      md += '\n## Budget Considerations\n\n'
+      if (report.budget.notes) {
+        md += `${report.budget.notes}\n\n`
+      }
+      if (report.budget.ranges?.length) {
+        report.budget.ranges.forEach(r => {
+          if (r?.item && r?.low && r?.high) {
+            md += `- **${r.item}:** ${r.low} - ${r.high}\n`
+          }
+        })
+      }
+    }
+    
+    // Risks
+    if (report.risks?.length) {
+      md += '\n## Risk Mitigation\n\n'
+      report.risks.forEach(r => {
+        if (r?.risk && r?.mitigation) {
+          md += `- **Risk:** ${r.risk}\n  **Mitigation:** ${r.mitigation}\n`
+        }
+      })
+    }
+    
+    // Next Steps
+    if (report.next_steps?.length) {
+      md += '\n## Next Steps\n\n'
+      report.next_steps.forEach((s, i) => md += `${i + 1}. ${s}\n`)
+    }
+    
+    return md
+  }
+  
+  // Save edited content
+  async function saveEditedContent() {
+    if (!lastSavedSummaryId) return
+    
+    try {
+      setSavingEdit(true)
+      const { error } = await updateSummaryEditedContent(lastSavedSummaryId, editedContent)
+      if (error) {
+        setError('Failed to save edits')
+      } else {
+        setIsEditMode(false)
+      }
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+  
+  // Render stepper for progress
+  function Stepper() {
+    const steps = [
+      { key: 'experience', label: 'Experience', enabled: true },
+      { key: 'stage1', label: 'Your Details', enabled: hasExperience },
+      { key: 'stage2', label: 'Organization', enabled: stage1Complete },
+      { key: 'stage3', label: 'Project Scope', enabled: stage2Complete },
+      { key: 'dynamic', label: 'Deep Dive', enabled: stage3Complete },
+      { key: 'report', label: 'Starmap Report', enabled: true }
+    ]
+    
+    const activeIndex = steps.findIndex(s => s.key === active)
+    const progress = Math.max(0, Math.min(1, activeIndex / (steps.length - 1)))
+    
+    return (
+      <div className="mb-5">
+        <div className="glass-card p-4 md:p-6 elevate relative">
+          <div className="flex items-center justify-between gap-3">
+            <ol className="flex items-center gap-4 overflow-x-auto">
+              {steps.map((s, idx) => {
+                const isCompleted = idx < activeIndex
+                const isActive = idx === activeIndex
+                const canNavigate = s.enabled && (isCompleted || isActive)
+                
+                return (
+                  <li key={s.key} className="flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => canNavigate && setActive(s.key as any)}
+                      disabled={!canNavigate}
+                      className={`flex items-center gap-2 rounded-full px-3 py-1.5 border text-xs md:text-sm ${
+                        isActive
+                          ? 'border-primary-400 bg-white/10'
+                          : isCompleted
+                          ? 'border-primary-400/40 bg-primary-400/10'
+                          : s.enabled
+                          ? 'border-white/10 bg-white/5 hover:bg-white/10'
+                          : 'border-white/5 bg-white/5 cursor-not-allowed'
+                      }`}
+                    >
+                      <span className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${
+                        isCompleted ? 'bg-primary-400 text-slate-900' : isActive ? 'bg-white/90 text-slate-900' : 'bg-white/10'
+                      }`}>
+                        {isCompleted ? '✓' : (idx + 1)}
+                      </span>
+                      <span>{s.label}</span>
+                    </button>
+                  </li>
+                )
+              })}
+            </ol>
+            <div className="flex items-center gap-3">
+              <div className="text-xs text-white/60">
+                {summaryCount}/{SUMMARY_LIMIT} starmaps
+              </div>
+              <button
+                type="button"
+                className="icon-btn icon-btn-sm icon-btn-ghost"
+                onClick={resetAll}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div className="absolute left-0 right-0 bottom-0 h-[2px] bg-white/10" />
+          <div
+            className="absolute left-0 bottom-0 h-[2px] bg-primary-400 transition-all duration-500"
+            style={{ width: `${progress * 100}%` }}
+          />
+        </div>
+      </div>
+    )
+  }
+  
+  return (
+    <div className="px-4 py-6 page-enter">
+      {/* Upgrade Modal */}
+      {showUpgradeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+          <div className="glass-card p-6 w-[92%] max-w-md shadow-2xl border border-white/20">
+            <div className="text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center mb-4">
+                <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <h3 className="text-xl font-semibold text-white mb-2">Starmap Limit Reached</h3>
+              <p className="text-white/70 mb-4">
+                You've reached your limit of {SUMMARY_LIMIT} starmaps. Upgrade to create unlimited starmaps.
+              </p>
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => window.open('https://smartslate.io/upgrade', '_blank')}
+                  className="w-full btn-primary"
+                >
+                  Upgrade to Pro
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUpgradeModal(false)}
+                  className="w-full btn-ghost"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Loader overlay */}
+      {loader.active && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm">
+          <div className="glass-card p-5 md:p-6 w-[92%] max-w-md shadow-2xl border border-white/10">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-400 to-secondary-400 animate-pulse" />
+              <div className="flex-1 space-y-1">
+                <div className="text-sm font-semibold text-white/90">Processing...</div>
+                <div className="text-xs text-white/70">{loader.message}</div>
+              </div>
+              <div className="text-[11px] text-white/60 whitespace-nowrap">
+                ~{loader.etaSeconds}s
+              </div>
+            </div>
+            <div className="mt-4">
+              <div className="h-2 w-full rounded-full bg-white/10 overflow-hidden">
+                <div className="h-full rounded-full bg-gradient-to-r from-primary-400 to-secondary-400 transition-all duration-200" style={{ width: `${loader.progress}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <Stepper />
+      
+      {error && (
+        <div className="mb-4 rounded-xl border-l-4 border-red-400/80 bg-red-500/10 p-3 text-red-200 text-sm">{error}</div>
+      )}
+      
+      {/* Experience Check */}
+      {active === 'experience' && (
+        <section className="space-y-4">
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold text-white mb-4">Welcome to Starmap Creation</h2>
+            <p className="text-white/70 mb-6">
+              Let's create a comprehensive L&D strategy tailored to your needs. First, tell us about your experience level.
+            </p>
+            <div className="max-w-md">
+              {EXPERIENCE_LEVELS.map(field => (
+                <RenderField
+                  key={field.id}
+                  field={field}
+                  value={experienceAnswer[field.id]}
+                  onChange={(id, value) => setExperienceAnswer(prev => ({ ...prev, [id]: value }))}
+                />
+              ))}
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                className={`btn-primary ${hasExperience ? '' : 'opacity-60 cursor-not-allowed'}`}
+                onClick={() => hasExperience && setActive('stage1')}
+                disabled={!hasExperience}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+      
+      {/* Stage 1: Requester Details */}
+      {active === 'stage1' && (
+        <section className="space-y-4">
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold text-white mb-2">Your Details</h2>
+            <p className="text-white/60 text-sm mb-6">Tell us about yourself so we can personalize your experience</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {STAGE1_REQUESTER_FIELDS.map(field => (
+                <div key={field.id} className="glass-card p-4">
+                  <RenderField
+                    field={field}
+                    value={stage1Answers[field.id]}
+                    onChange={(id, value) => setStage1Answers(prev => ({ ...prev, [id]: value }))}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-between">
+              <button type="button" className="btn-ghost" onClick={() => setActive('experience')}>
+                Back
+              </button>
+              <button
+                type="button"
+                className={`btn-primary ${stage1Complete ? '' : 'opacity-60 cursor-not-allowed'}`}
+                onClick={completeStage1}
+                disabled={!stage1Complete || loading}
+              >
+                {loading ? 'Researching...' : 'Continue'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+      
+      {/* Stage 2: Organization Information */}
+      {active === 'stage2' && (
+        <section className="space-y-4">
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold text-white mb-2">Organization Information</h2>
+            <p className="text-white/60 text-sm mb-6">Help us understand your organization's context and needs</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {STAGE2_ORGANIZATION_FIELDS.map(field => (
+                <div key={field.id} className={`glass-card p-4 ${field.type === 'textarea' ? 'md:col-span-2' : ''}`}>
+                  <RenderField
+                    field={field}
+                    value={stage2Answers[field.id]}
+                    onChange={(id, value) => setStage2Answers(prev => ({ ...prev, [id]: value }))}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-between">
+              <button type="button" className="btn-ghost" onClick={() => setActive('stage1')}>
+                Back
+              </button>
+              <button
+                type="button"
+                className={`btn-primary ${stage2Complete ? '' : 'opacity-60 cursor-not-allowed'}`}
+                onClick={completeStage2}
+                disabled={!stage2Complete || loading}
+              >
+                {loading ? 'Researching...' : 'Continue'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+      
+      {/* Stage 3: Project Scoping */}
+      {active === 'stage3' && (
+        <section className="space-y-4">
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold text-white mb-2">Project Scoping</h2>
+            <p className="text-white/60 text-sm mb-6">Define your L&D initiative requirements and constraints</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {STAGE3_PROJECT_FIELDS.map(field => (
+                <div key={field.id} className={`glass-card p-4 ${field.type === 'textarea' ? 'md:col-span-2' : ''}`}>
+                  <RenderField
+                    field={field}
+                    value={stage3Answers[field.id]}
+                    onChange={(id, value) => setStage3Answers(prev => ({ ...prev, [id]: value }))}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-between">
+              <button type="button" className="btn-ghost" onClick={() => setActive('stage2')}>
+                Back
+              </button>
+              <button
+                type="button"
+                className={`btn-primary ${stage3Complete ? '' : 'opacity-60 cursor-not-allowed'}`}
+                onClick={completeStage3}
+                disabled={!stage3Complete || loading}
+              >
+                {loading ? 'Analyzing...' : 'Continue'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+      
+      {/* Dynamic Stages */}
+      {active === 'dynamic' && dynamicStages.length > 0 && (
+        <section className="space-y-4">
+          <div className="glass-card p-6">
+            <h2 className="text-xl font-semibold text-white mb-2">
+              {dynamicStages[currentDynamicStage]?.title || 'Additional Questions'}
+            </h2>
+            <p className="text-white/60 text-sm mb-6">
+              Stage {currentDynamicStage + 1} of {dynamicStages.length}
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {dynamicStages[currentDynamicStage]?.questions.map(field => (
+                <div key={field.id} className={`glass-card p-4 ${field.type === 'textarea' ? 'md:col-span-2' : ''}`}>
+                  <RenderField
+                    field={field}
+                    value={dynamicStages[currentDynamicStage].answers[field.id]}
+                    onChange={(id, value) => {
+                      const newStages = [...dynamicStages]
+                      newStages[currentDynamicStage].answers[id] = value
+                      setDynamicStages(newStages)
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+            <div className="mt-6 flex justify-between">
+              <button 
+                type="button" 
+                className="btn-ghost" 
+                onClick={() => {
+                  if (currentDynamicStage > 0) {
+                    setCurrentDynamicStage(prev => prev - 1)
+                  } else {
+                    setActive('stage3')
+                  }
+                }}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={nextDynamicStage}
+                disabled={loading}
+              >
+                {currentDynamicStage < dynamicStages.length - 1 ? 'Continue' : loading ? 'Generating Report...' : 'Generate Report'}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+      
+      {/* Final Report */}
+      {active === 'report' && reportMarkdown && (
+        <section className="space-y-4">
+          <div className="sticky top-16 z-30 bg-[rgb(var(--bg))]/70 backdrop-blur-md border-b border-white/10">
+            <div className="flex items-center justify-between gap-3 px-1 py-2">
+              <h3 className="text-lg font-semibold text-white">Your L&D Starmap</h3>
+              <div className="flex items-center gap-2">
+                {lastSavedSummaryId && (
+                  <>
+                    {!isEditMode ? (
+                      <button
+                        type="button"
+                        className="btn-ghost text-xs"
+                        onClick={() => setIsEditMode(true)}
+                      >
+                        Edit Report
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          className="btn-ghost text-xs"
+                          onClick={() => {
+                            setEditedContent(reportMarkdown)
+                            setIsEditMode(false)
+                          }}
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-primary text-xs"
+                          onClick={saveEditedContent}
+                          disabled={savingEdit}
+                        >
+                          {savingEdit ? 'Saving...' : 'Save Changes'}
+                        </button>
+                      </>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+          
+          <div ref={summaryRef}>
+            {!isEditMode ? (
+              <ReportDisplay
+                reportMarkdown={editedContent}
+                reportTitle={reportTitle.trim() || undefined}
+                editableTitle={Boolean(lastSavedSummaryId)}
+                savingTitle={savingTitle}
+                onSaveTitle={async (newTitle) => {
+                  if (!lastSavedSummaryId) return
+                  try {
+                    setSavingTitle(true)
+                    const { error } = await updateSummaryTitle(lastSavedSummaryId, newTitle)
+                    if (!error) {
+                      setReportTitle(newTitle)
+                    }
+                  } finally {
+                    setSavingTitle(false)
+                  }
+                }}
+              />
+            ) : (
+              <div className="glass-card p-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Edit Your Report</h3>
+                <RichTextEditor
+                  value={editedContent}
+                  onChange={setEditedContent}
+                  placeholder="Edit your report content..."
+                  maxWords={5000}
+                  className="min-h-[500px]"
+                />
+              </div>
+            )}
+          </div>
+          
+          <div className="flex items-center justify-between gap-2 mt-6">
+            <button
+              type="button"
+              className="btn-ghost"
+              onClick={() => window.location.href = '/portal/starmaps'}
+            >
+              View All Starmaps
+            </button>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={resetAll}
+            >
+              Create New Starmap
+            </button>
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}

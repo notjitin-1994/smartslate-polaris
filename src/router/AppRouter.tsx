@@ -5,7 +5,7 @@ import AuthLanding from '@/pages/AuthLanding'
 import { PortalPage } from '@/pages/PortalPage'
 import { SettingsContent } from '@/portal/SettingsContent'
 import { PublicProfile } from '@/pages/PublicProfile'
-import Polaris from '@/pages/Polaris'
+import PolarisRevamped from '@/pages/PolarisRevamped'
 import AllStarmaps from '@/pages/AllBriefings'
 import StarmapDetail from '@/pages/StarmapDetail'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
@@ -22,7 +22,7 @@ export function AppRouter() {
         {/* Protected routes - require authentication */}
         <Route element={<ProtectedRoute />}>
           <Route path={paths.home} element={<PortalPage />}>
-            <Route index element={<Polaris />} />
+            <Route index element={<PolarisRevamped />} />
           </Route>
           <Route path={paths.portal} element={<PortalPage />}>
             <Route index element={<Navigate to="/" replace />} />

@@ -1,5 +1,5 @@
 // src/polaris/needs-analysis/ReportDisplay.tsx
-import type { NAReport } from './report'
+// Note: type imported where needed in shared parser; unused here
 import { useState, type ReactNode } from 'react'
 import { parseMarkdownToReport } from './parse'
 

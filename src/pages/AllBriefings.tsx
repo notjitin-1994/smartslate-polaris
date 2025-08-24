@@ -71,59 +71,6 @@ export default function AllStarmaps() {
     }
   }
 
-  function formatDate(dateString: string) {
-    const date = new Date(dateString)
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
-
-  function extractHighlights(markdown: string) {
-    const lines = markdown.split('\n').slice(0, 6)
-    const raw = lines.join('\n')
-    return raw.length > 400 ? raw.slice(0, 400) + '...' : raw
-  }
-
-  function toHtmlPreview(markdown: string) {
-    try {
-      const preview = extractHighlights(markdown)
-      let html = preview
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-
-      // Headings (#..######)
-      html = html
-        .replace(/^######\s+(.+)$/gim, '<span class="text-[11px] font-semibold text-white/80">$1</span>')
-        .replace(/^#####\s+(.+)$/gim, '<span class="text-[12px] font-semibold text-white/85">$1</span>')
-        .replace(/^####\s+(.+)$/gim, '<span class="text-[12px] font-semibold text-white/85">$1</span>')
-        .replace(/^###\s+(.+)$/gim, '<span class="text-[13px] font-semibold text-white/85">$1</span>')
-        .replace(/^##\s+(.+)$/gim, '<span class="text-sm font-semibold text-white/85">$1</span>')
-        .replace(/^#\s+(.+)$/gim, '<span class="text-sm font-semibold text-white/90">$1</span>')
-
-      // Lists (unordered and ordered)
-      html = html
-        .replace(/^\s*[-*+]\s+(.*)$/gim, '<span class="mr-1 text-primary-400">•</span><span>$1</span>')
-        .replace(/^\s*\d+\.\s+(.*)$/gim, '<span class="mr-1 text-primary-400">•</span><span>$1</span>')
-
-      // Bold / italic
-      html = html
-        .replace(/\*\*(.*?)\*\*/gim, '<strong class="text-white/90">$1</strong>')
-        .replace(/\*(.*?)\*/gim, '<em>$1</em>')
-
-      // Paragraph spacing and single line breaks
-      html = html.replace(/\n{2,}/g, '<br />').replace(/\n/g, ' ')
-
-      return html
-    } catch {
-      return extractHighlights(markdown)
-    }
-  }
-
   const totalPages = Math.max(1, Math.ceil(summaries.length / PAGE_SIZE))
   const startIdx = (page - 1) * PAGE_SIZE
   const visible = summaries.slice(startIdx, startIdx + PAGE_SIZE)

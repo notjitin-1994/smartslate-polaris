@@ -21,7 +21,7 @@ class PerplexityService {
   
   constructor() {
     this.client = new BaseApiClient({
-      baseUrl: '/api',
+      baseUrl: '/api', // Always use API routes for consistent behavior
       timeout: 50000, // keep below Vercel 60s limit
       retries: 1,
       retryDelay: 800,
@@ -51,12 +51,19 @@ class PerplexityService {
     ]
     
     try {
-      const response = await this.client.post<any>('/perplexity', {
+      const requestPayload = {
         model,
         temperature,
         messages,
         max_tokens: maxTokens,
-      }, { timeout: env.isDev ? 75000 : 50000, retries: 1 })
+      }
+      
+      if (env.isDev) {
+        console.log('Perplexity request payload:', JSON.stringify(requestPayload, null, 2))
+        console.log('Using model:', model)
+      }
+      
+      const response = await this.client.post<any>('/perplexity', requestPayload, { timeout: env.isDev ? 75000 : 50000, retries: 1 })
       
       const content = response.data?.choices?.[0]?.message?.content
       
@@ -67,6 +74,10 @@ class PerplexityService {
       return { content, model }
     } catch (error) {
       console.warn('Perplexity research error:', error)
+      // Log more details about the error
+      if (error instanceof Error && (error as any).details) {
+        console.warn('Error details:', (error as any).details)
+      }
       throw error
     }
   }

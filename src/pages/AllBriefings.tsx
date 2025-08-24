@@ -182,10 +182,13 @@ export default function AllStarmaps() {
         aria-label="New Discovery"
         onClick={() => navigate('/portal')}
         disabled={summaryCount >= SUMMARY_LIMIT}
-        className={`fixed bottom-6 right-6 z-40 rounded-full shadow-xl px-5 py-3 text-sm font-semibold bg-gradient-to-r from-secondary-400 to-secondary-500 text-white hover:opacity-95 active:opacity-90 float-button ${summaryCount >= SUMMARY_LIMIT ? 'opacity-60 cursor-not-allowed' : ''}`}
+        className={`fixed bottom-6 right-6 z-40 rounded-full shadow-xl w-14 h-14 flex items-center justify-center bg-gradient-to-r from-secondary-400 to-secondary-500 text-white hover:opacity-95 active:opacity-90 float-button ${summaryCount >= SUMMARY_LIMIT ? 'opacity-60 cursor-not-allowed' : ''}`}
         title={summaryCount >= SUMMARY_LIMIT ? 'Limit reached' : 'Start a new discovery'}
       >
-        + New Discovery
+        <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 5v14" />
+          <path d="M5 12h14" />
+        </svg>
       </button>
     </div>
   )

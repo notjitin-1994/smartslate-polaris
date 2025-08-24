@@ -79,6 +79,7 @@ export function OptimizedAppRouter() {
               }
             />
           </Routes>
+          
         </Suspense>
       </AuthProvider>
     </BrowserRouter>

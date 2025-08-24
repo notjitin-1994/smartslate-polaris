@@ -15,6 +15,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    assetsInclude: ['**/*.html'],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

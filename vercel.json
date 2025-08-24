@@ -9,6 +9,9 @@
   },
   "routes": [
     { "handle": "filesystem" },
+    { "src": "/@vite/(.*)", "dest": "/@vite/$1" },
+    { "src": "/@react-refresh", "dest": "/@react-refresh" },
+    { "src": "/__vite_ping", "dest": "/__vite_ping" },
     { "src": "/.*", "dest": "/index.html" }
   ]
 }

@@ -4,7 +4,9 @@ import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle, up
 import { researchGreeting, researchOrganization, researchRequirements } from '@/services/perplexityService'
 import RenderField from '@/polaris/needs-analysis/RenderField'
 import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
-import { RichTextEditor } from '@/components/RichTextEditor'
+import { AIReportEditorEnhanced } from '@/components/AIReportEditorEnhanced'
+import { SolaraLodestar } from '@/components'
+import { IconButton } from '@/components/ui/IconButton'
 import { EXPERIENCE_LEVELS } from '@/polaris/needs-analysis/experience'
 import { STAGE1_REQUESTER_FIELDS, STAGE2_ORGANIZATION_FIELDS, STAGE3_PROJECT_FIELDS } from '@/polaris/needs-analysis/three-stage-static'
 import { NA_STAGE_TITLE_PROMPT, NA_QUESTIONNAIRE_PROMPT } from '@/polaris/needs-analysis/prompts'
@@ -925,6 +927,8 @@ Use these research insights to make the report more specific, actionable, and al
   
   return (
     <div className="px-4 py-6 page-enter">
+      {/* Lodestar only when editing the report */}
+      {active === 'report' && isEditMode && <SolaraLodestar />}
       {/* Upgrade Modal */}
       {showUpgradeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm">
@@ -1180,38 +1184,42 @@ Use these research insights to make the report more specific, actionable, and al
         <section className="space-y-4">
           <div className="sticky top-16 z-30 bg-[rgb(var(--bg))]/70 backdrop-blur-md border-b border-white/10">
             <div className="flex items-center justify-between gap-3 px-1 py-2">
-              <h3 className="text-lg font-semibold text-white">Your L&D Starmap</h3>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  aria-label="Back"
+                  title="Back"
+                  onClick={() => (window.location.href = '/portal/starmaps')}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M15 18l-6-6 6-6" />
+                  </svg>
+                </button>
+                <h3 className="text-lg font-semibold text-white">Your L&D Starmap</h3>
+              </div>
               <div className="flex items-center gap-2">
                 {lastSavedSummaryId && (
                   <>
                     {!isEditMode ? (
-                      <button
-                        type="button"
-                        className="btn-ghost text-xs"
-                        onClick={() => setIsEditMode(true)}
-                      >
-                        Edit Report
-                      </button>
+                      <IconButton ariaLabel="Edit report" title="Edit report" onClick={() => setIsEditMode(true)} size="sm">
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M12 20h9" />
+                          <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+                        </svg>
+                      </IconButton>
                     ) : (
                       <>
-                        <button
-                          type="button"
-                          className="btn-ghost text-xs"
-                          onClick={() => {
-                            setEditedContent(reportMarkdown)
-                            setIsEditMode(false)
-                          }}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="btn-primary text-xs"
-                          onClick={saveEditedContent}
-                          disabled={savingEdit}
-                        >
-                          {savingEdit ? 'Saving...' : 'Save Changes'}
-                        </button>
+                        <IconButton ariaLabel="Cancel edits" title="Cancel edits" onClick={() => { setEditedContent(reportMarkdown); setIsEditMode(false) }} size="sm">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M18 6L6 18M6 6l12 12" />
+                          </svg>
+                        </IconButton>
+                        <IconButton ariaLabel="Save changes" title="Save changes" onClick={saveEditedContent} disabled={savingEdit} variant="primary" size="sm">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M20 6L9 17l-5-5" />
+                          </svg>
+                        </IconButton>
                       </>
                     )}
                   </>
@@ -1241,14 +1249,16 @@ Use these research insights to make the report more specific, actionable, and al
                 }}
               />
             ) : (
-              <div className="glass-card p-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Edit Your Report</h3>
-                <RichTextEditor
-                  value={editedContent}
-                  onChange={setEditedContent}
-                  placeholder="Edit your report content..."
-                  maxWords={5000}
-                  className="min-h-[500px]"
+              <div className="space-y-4">
+                <AIReportEditorEnhanced
+                  summaryId={lastSavedSummaryId || undefined}
+                  reportContent={editedContent}
+                  greetingReport={greetingReport}
+                  orgReport={orgReport}
+                  requirementReport={requirementReport}
+                  maxEdits={3}
+                  onContentChange={setEditedContent}
+                  className="min-h-[600px]"
                 />
               </div>
             )}

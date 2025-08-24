@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { getSummaryById, type PolarisSummary, updateSummaryTitle, updateSummaryEditedContent, getDisplayContent } from '@/services/polarisSummaryService'
 import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
-import { RichTextEditor } from '@/components/RichTextEditor'
+import { AIReportEditorEnhanced } from '@/components/AIReportEditorEnhanced'
+import { SolaraLodestar } from '@/components'
+import { IconButton } from '@/components/ui/IconButton'
 
 export default function StarmapDetail() {
   const { id } = useParams()
@@ -74,8 +76,21 @@ export default function StarmapDetail() {
 
   return (
     <div className="px-4 py-6">
+      {/* Lodestar only while editing existing report */}
+      {isEditMode && <SolaraLodestar />}
       <div className="flex items-start justify-between mb-4">
-        <div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => navigate('/portal/starmaps')}
+            aria-label="Back"
+            title="Back"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+          </button>
           <h1 className="text-xl font-semibold text-white">{summary.company_name || 'Discovery Starmap'}</h1>
           <p className="text-sm text-white/60 mt-1">
             {new Date(summary.created_at).toLocaleString()}
@@ -84,33 +99,39 @@ export default function StarmapDetail() {
         </div>
         <div className="flex items-center gap-2">
           {!isEditMode ? (
-            <button
-              type="button"
-              className="btn-ghost text-xs"
-              onClick={() => setIsEditMode(true)}
-            >
-              Edit Report
-            </button>
+            <IconButton ariaLabel="Edit report" onClick={() => setIsEditMode(true)} size="sm" title="Edit report">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+              </svg>
+            </IconButton>
           ) : (
             <>
-              <button
-                type="button"
-                className="btn-ghost text-xs"
+              <IconButton
+                ariaLabel="Cancel edits"
+                title="Cancel edits"
                 onClick={() => {
                   setEditedContent(getDisplayContent(summary))
                   setIsEditMode(false)
                 }}
+                size="sm"
               >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="btn-primary text-xs"
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12" />
+                </svg>
+              </IconButton>
+              <IconButton
+                ariaLabel="Save changes"
+                title="Save changes"
                 onClick={saveEditedContent}
                 disabled={savingEdit}
+                variant="primary"
+                size="sm"
               >
-                {savingEdit ? 'Saving...' : 'Save Changes'}
-              </button>
+                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M20 6L9 17l-5-5" />
+                </svg>
+              </IconButton>
             </>
           )}
         </div>
@@ -137,32 +158,21 @@ export default function StarmapDetail() {
           }}
         />
       ) : (
-        <div className="glass-card p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">Edit Your Report</h3>
-          <RichTextEditor
-            value={editedContent}
-            onChange={setEditedContent}
-            placeholder="Edit your report content..."
-            maxWords={5000}
-            className="min-h-[500px]"
+        <div className="space-y-4">
+          <AIReportEditorEnhanced
+            summaryId={id}
+            reportContent={editedContent}
+            greetingReport={summary.greeting_report as string || ''}
+            orgReport={summary.org_report as string || ''}
+            requirementReport={summary.requirement_report as string || ''}
+            maxEdits={3}
+            onContentChange={setEditedContent}
+            className="min-h-[600px]"
           />
         </div>
       )}
 
-      {/* Bottom action bar with brand-aligned Back icon */}
-      <div className="flex items-center justify-between gap-2 mt-6">
-        <button
-          type="button"
-          className="icon-btn"
-          onClick={() => navigate('/portal/starmaps')}
-          aria-label="Back"
-          title="Back"
-        >
-          <svg className="w-4 h-4 accent-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M15 18l-6-6 6-6" />
-          </svg>
-        </button>
-      </div>
+      
     </div>
   )
 }

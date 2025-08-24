@@ -25,6 +25,7 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 VITE_LLM_PROVIDER=anthropic
 VITE_ANTHROPIC_API_KEY=your_anthropic_api_key_here
 VITE_ANTHROPIC_MODEL=claude-3-5-sonnet-latest
+VITE_ANTHROPIC_MAX_TOKENS=12000  # Important: Set to 12000 for AI report editing
 
 # Perplexity Configuration (already configured with your key)
 VITE_PERPLEXITY_API_KEY=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
@@ -35,17 +36,19 @@ Execute the migrations in your Supabase SQL editor:
 
 ```sql
 -- Run these in order:
--- 1. Create polaris_summaries table
--- 2. Create profiles table  
--- 3. Fix profiles table
--- 4. Add report_title field
--- 5. Add research reports and editing fields (new)
+-- 1. Create polaris_summaries table (20240101000000_create_polaris_summaries.sql)
+-- 2. Create profiles table (20240101000001_create_profiles.sql)
+-- 3. Fix profiles table (20240101000002_fix_profiles_table.sql)
+-- 4. Add report_title field (20240101000003_add_report_title.sql)
+-- 5. Add research reports (20240101000004_add_research_reports.sql)
+-- 6. Add AI edit sessions (20240101000005_add_ai_edit_sessions.sql) - NEW!
 ```
 
-The new migration adds:
+The new migrations add:
 - Research report storage fields
 - Edited content field
 - Edit tracking fields
+- AI edit sessions table with history tracking
 
 ### 4. Start Development Server
 ```bash
@@ -95,12 +98,17 @@ Visit `http://localhost:5173`
 - Includes all sections per requirements
 - Research insights are incorporated
 
-### Step 6: Edit Report (New Feature!)
+### Step 6: Edit Report with Solara Lodestar (New Feature!)
 1. Click "Edit Report" button
-2. Use rich text editor to modify content
-3. Format with bold, italic, lists, links
-4. Save changes when done
-5. Report shows "(Edited)" indicator
+2. Toggle "Solara Lodestar" for intelligent editing help
+3. Make up to 3 AI-powered edits per report:
+   - Type natural language requests like "Make the executive summary more concise"
+   - AI maintains all sections and formatting
+   - Use undo/redo to navigate changes
+4. Or use the rich text editor for manual edits
+5. Format with bold, italic, lists, links
+6. Save changes when done
+7. Report shows "(Edited)" indicator
 
 ## Viewing Saved Starmaps
 1. Go to `/portal/starmaps` to see all starmaps

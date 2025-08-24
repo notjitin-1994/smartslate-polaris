@@ -1,5 +1,5 @@
 // src/polaris/needs-analysis/ReportDisplay.tsx
-// Note: type imported where needed in shared parser; unused here
+// Enhanced UX version with improved readability, scanability, and actionability
 import { useState, type ReactNode } from 'react'
 import { parseMarkdownToReport } from './parse'
 
@@ -19,6 +19,67 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false)
   const [titleInput, setTitleInput] = useState<string>(reportTitle || 'Needs Analysis Report')
   
+  // Minimal sanitizer to preserve only safe inline formatting (colors, links) coming from the editor
+  function sanitizeInlineHtml(raw: string): string {
+    try {
+      const parser = new DOMParser()
+      const doc = parser.parseFromString(`<div>${raw}</div>`, 'text/html')
+      const container = doc.body.firstElementChild as HTMLElement | null
+      if (!container) return raw
+      const ALLOWED_TAGS = new Set(['SPAN','MARK','A','STRONG','EM','U','CODE','B','I','BR'])
+      const walk = (node: Node) => {
+        const children = Array.from(node.childNodes)
+        for (const child of children) {
+          if (child.nodeType === 1) {
+            const el = child as HTMLElement
+            if (!ALLOWED_TAGS.has(el.tagName)) {
+              // unwrap disallowed elements but keep their children
+              while (el.firstChild) el.parentNode?.insertBefore(el.firstChild, el)
+              el.parentNode?.removeChild(el)
+              continue
+            }
+            // Clean attributes
+            const allowedAttrs = new Set(['style','href','target','rel'])
+            for (const attr of Array.from(el.attributes)) {
+              if (!allowedAttrs.has(attr.name)) el.removeAttribute(attr.name)
+            }
+            // Restrict styles to color and background-color only
+            if (el.hasAttribute('style')) {
+              const style = el.getAttribute('style') || ''
+              const pairs = style.split(';').map(s => s.trim()).filter(Boolean)
+              const next: string[] = []
+              for (const p of pairs) {
+                const [prop, valRaw] = p.split(':').map(s => s.trim().toLowerCase())
+                if (!prop || !valRaw) continue
+                if (prop === 'color' || prop === 'background-color') {
+                  // basic guard against javascript: or url()
+                  if (!/url\(/.test(valRaw)) next.push(`${prop}: ${valRaw}`)
+                }
+              }
+              if (next.length > 0) el.setAttribute('style', next.join('; '))
+              else el.removeAttribute('style')
+            }
+            // Secure links
+            if (el.tagName === 'A') {
+              const href = el.getAttribute('href') || ''
+              if (/^\s*javascript:/i.test(href)) {
+                el.removeAttribute('href')
+              } else {
+                el.setAttribute('rel', 'noopener noreferrer')
+                if (!el.getAttribute('target')) el.setAttribute('target', '_blank')
+              }
+            }
+            walk(el)
+          }
+        }
+      }
+      walk(container)
+      return container.innerHTML
+    } catch {
+      return raw
+    }
+  }
+
   // Simple inline icon set (stroke-current), sized via className
   function Icon({ name, className = 'w-4 h-4' }: { name: 'summary' | 'solution' | 'delivery' | 'metrics' | 'timeline' | 'steps' | 'risks' | 'audience' | 'modality' | 'tech' | 'doc' | 'blend' | 'online' | 'workshop' | 'coach' | 'toolbox' | 'check' | 'database' | 'assessment' | 'target'; className?: string }) {
     switch (name) {
@@ -128,14 +189,48 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
     return null
   }
 
-  function StatsCard({ icon, label, value }: { icon: ReactNode; label: string; value: string | number }) {
+  function StatsCard({ icon, label, value, trend }: { icon: ReactNode; label: string; value: string | number; trend?: 'up' | 'down' | 'neutral' }) {
+    const trendColor = trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-red-400' : 'text-white/90'
+    const trendIcon = trend === 'up' ? '↗' : trend === 'down' ? '↘' : ''
+    
     return (
-      <div className="glass-card p-3 flex items-center gap-2">
-        {icon}
-        <div>
-          <div className="text-[11px] text-white/60">{label}</div>
-          <div className="text-sm font-semibold text-white/90">{value}</div>
+      <div className="glass-card p-4 flex items-center gap-3 hover:bg-white/8 transition-all duration-200 group">
+        <div className="p-2 rounded-lg bg-white/5 group-hover:bg-white/10 transition-colors">
+          {icon}
         </div>
+        <div className="flex-1">
+          <div className="text-xs text-white/60 mb-1">{label}</div>
+          <div className={`text-lg font-semibold ${trendColor} flex items-center gap-1`}>
+            {value}
+            {trendIcon && <span className="text-sm">{trendIcon}</span>}
+          </div>
+        </div>
+      </div>
+    )
+  }
+  
+  function CalloutBox({ type, title, children }: { type: 'info' | 'warning' | 'success' | 'critical'; title: string; children: ReactNode }) {
+    const styles = {
+      info: 'border-blue-400/40 bg-blue-500/10 text-blue-200',
+      warning: 'border-amber-400/40 bg-amber-500/10 text-amber-200',
+      success: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-200',
+      critical: 'border-red-400/40 bg-red-500/10 text-red-200'
+    }
+    
+    const icons = {
+      info: '💡',
+      warning: '⚠️',
+      success: '✅',
+      critical: '🚨'
+    }
+    
+    return (
+      <div className={`border rounded-xl p-4 ${styles[type]} mb-4`}>
+        <div className="flex items-center gap-2 mb-2">
+          <span>{icons[type]}</span>
+          <h4 className="font-semibold">{title}</h4>
+        </div>
+        <div className="text-sm opacity-90">{children}</div>
       </div>
     )
   }
@@ -187,15 +282,15 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
     return (
       <div className={className}>
         <div 
-          className="prose prose-invert max-w-none"
+          className="prose prose-invert max-w-none report-prose"
           dangerouslySetInnerHTML={{ 
-            __html: reportMarkdown
+            __html: sanitizeInlineHtml(reportMarkdown)
               .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold text-white/90 mt-4 mb-2">$1</h3>')
               .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold text-white mt-6 mb-3">$1</h2>')
               .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold text-white mb-4">$1</h1>')
               .replace(/^\*\s+(.*)$/gim, '<ul class="list-disc list-inside text-white/80"><li>$1</li></ul>')
               .replace(/^\-\s+(.*)$/gim, '<ul class="list-disc list-inside text-white/80"><li>$1</li></ul>')
-              .replace(/\*\*(.*?)\*\*/gim, '<strong class="font-semibold text-white/90">$1</strong>')
+              .replace(/\*\*(.*?)\*\*/gim, '<strong class="font-semibold accent-text-soft">$1</strong>')
               .replace(/\*(.*?)\*/gim, '<em>$1</em>')
               .replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 bg-white/10 rounded text-primary-300">$1</code>')
               .replace(/\n/g, '<br />')
@@ -211,7 +306,7 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main report */}
         <div className="lg:col-span-2">
-          <article className="read-surface p-6" role="article" aria-labelledby="report-title">
+          <article className="read-surface p-6 report-prose" role="article" aria-labelledby="report-title">
             <div className="flex items-center gap-2 mb-4">
               {isEditingTitle ? (
                 <>
@@ -265,20 +360,60 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
               )}
             </div>
             
-            {/* Stat tiles - Row 1 */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <StatsCard icon={<Icon name="audience" className="w-5 h-5 text-primary-300" />} label="Target Audiences" value={report.solution.scope?.audiences?.length || 0} />
-              <StatsCard icon={<Icon name="modality" className="w-5 h-5 text-primary-300" />} label="Modalities" value={report.solution.modalities.length} />
-              <StatsCard icon={<Icon name="metrics" className="w-5 h-5 text-primary-300" />} label="Success Metrics" value={report.measurement.success_metrics.length} />
-              <StatsCard icon={<Icon name="steps" className="w-5 h-5 text-primary-300" />} label="Phases" value={report.delivery_plan.phases.length} />
+            {/* Enhanced stat tiles with better visual hierarchy */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <StatsCard 
+                icon={<Icon name="audience" className="w-6 h-6 text-primary-300" />} 
+                label="Target Audiences" 
+                value={report.solution.scope?.audiences?.length || 0}
+                trend="neutral"
+              />
+              <StatsCard 
+                icon={<Icon name="modality" className="w-6 h-6 text-secondary-400" />} 
+                label="Delivery Methods" 
+                value={report.solution.modalities.length}
+                trend="up"
+              />
+              <StatsCard 
+                icon={<Icon name="metrics" className="w-6 h-6 text-emerald-400" />} 
+                label="Success Metrics" 
+                value={report.measurement.success_metrics.length}
+                trend="neutral"
+              />
+              <StatsCard 
+                icon={<Icon name="steps" className="w-6 h-6 text-amber-400" />} 
+                label="Project Phases" 
+                value={report.delivery_plan.phases.length}
+                trend="neutral"
+              />
             </div>
 
-            {/* Stat tiles - Row 2 (spaced for aesthetics) */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-              <StatsCard icon={<Icon name="assessment" className="w-5 h-5 text-primary-300" />} label="Assessment Items" value={report.measurement.assessment_strategy?.length || 0} />
-              <StatsCard icon={<Icon name="database" className="w-5 h-5 text-primary-300" />} label="Data Sources" value={report.measurement.data_sources?.length || 0} />
-              <StatsCard icon={<Icon name="risks" className="w-5 h-5 text-amber-300" />} label="Risks" value={report.risks?.length || 0} />
-              <StatsCard icon={<Icon name="target" className="w-5 h-5 text-primary-300" />} label="Objectives" value={report.summary.objectives?.length || 0} />
+            {/* Key Performance Indicators */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <StatsCard 
+                icon={<Icon name="assessment" className="w-6 h-6 text-purple-400" />} 
+                label="Assessments" 
+                value={report.measurement.assessment_strategy?.length || 0}
+                trend="neutral"
+              />
+              <StatsCard 
+                icon={<Icon name="database" className="w-6 h-6 text-blue-400" />} 
+                label="Data Sources" 
+                value={report.measurement.data_sources?.length || 0}
+                trend="neutral"
+              />
+              <StatsCard 
+                icon={<Icon name="risks" className="w-6 h-6 text-red-400" />} 
+                label="Risk Factors" 
+                value={report.risks?.length || 0}
+                trend={report.risks?.length > 3 ? "down" : "neutral"}
+              />
+              <StatsCard 
+                icon={<Icon name="target" className="w-6 h-6 text-emerald-400" />} 
+                label="Objectives" 
+                value={report.summary.objectives?.length || 0}
+                trend="up"
+              />
             </div>
 
             {/* Learner tech readiness gauge (if detectable) */}
@@ -328,64 +463,102 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
               )
             })()}
 
-            <div className="space-y-8">
-              {/* Executive Summary */}
+            <div className="space-y-10">
+              {/* Executive Summary with enhanced readability */}
               <section>
-                <h2 id="executive-summary" className="heading-accent text-xl font-semibold text-white mb-3 scroll-mt-20">Executive Summary</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 id="executive-summary" className="heading-accent text-2xl font-bold text-white scroll-mt-20">Executive Summary</h2>
+                  <div className="text-sm text-white/60 flex items-center gap-2">
+                    <Icon name="summary" className="w-4 h-4" />
+                    Overview
+                  </div>
+                </div>
+                
                 {report.summary.problem_statement && (
-                  <p className="text-[15px] leading-7 text-white/80 mb-4">
-                    <strong className="font-semibold text-white/90">Problem Statement:</strong> {report.summary.problem_statement}
-                  </p>
+                  <CalloutBox type="critical" title="Problem Statement">
+                    <p className="text-base leading-relaxed">{report.summary.problem_statement}</p>
+                  </CalloutBox>
                 )}
                 
                 {report.summary.current_state.length > 0 && (
-                  <div className="mb-3">
-                    <strong className="font-semibold text-white/90">Current State:</strong>
-                    <ul className="list-disc pl-5 marker:text-primary-300 text-white/80 leading-6 mt-1 space-y-1">
+                  <div className="glass-card p-6 mb-6">
+                    <h3 className="text-lg font-semibold text-white/90 mb-4 flex items-center gap-2">
+                      <Icon name="database" className="w-5 h-5 text-blue-400" />
+                      Current State Analysis
+                    </h3>
+                    <ul className="space-y-3">
                       {report.summary.current_state.map((item, i) => (
-                        <li key={i}>{item}</li>
+                        <li key={i} className="text-white/85 leading-relaxed flex items-start gap-3">
+                          <span className="w-2 h-2 rounded-full bg-primary-400 mt-2 flex-shrink-0" />
+                          <span className="text-base">{item}</span>
+                        </li>
                       ))}
                     </ul>
                   </div>
                 )}
                 
                 {report.summary.root_causes.length > 0 && (
-                  <div className="mb-3">
-                    <strong className="font-semibold text-white/90">Root Causes:</strong>
-                    <ul className="list-disc pl-5 marker:text-primary-300 text-white/80 leading-6 mt-1 space-y-1">
+                  <CalloutBox type="warning" title="Root Causes Identified">
+                    <ul className="space-y-2">
                       {report.summary.root_causes.map((item, i) => (
-                        <li key={i}>{item}</li>
+                        <li key={i} className="text-base leading-relaxed flex items-start gap-3">
+                          <span className="text-amber-400 text-lg leading-none">•</span>
+                          <span>{item}</span>
+                        </li>
                       ))}
                     </ul>
-                  </div>
+                  </CalloutBox>
                 )}
                 
                 {report.summary.objectives.length > 0 && (
-                  <div className="mb-3">
-                    <strong className="font-semibold text-white/90">Objectives:</strong>
-                    <ul className="list-disc pl-5 marker:text-primary-300 text-white/80 leading-6 mt-1 space-y-1">
+                  <div className="glass-card p-6">
+                    <h3 className="text-lg font-semibold text-white/90 mb-4 flex items-center gap-2">
+                      <Icon name="target" className="w-5 h-5 text-emerald-400" />
+                      Strategic Objectives
+                    </h3>
+                    <div className="space-y-3">
                       {report.summary.objectives.map((item, i) => (
-                        <li key={i}>{item}</li>
+                        <div key={i} className="flex items-start gap-4 p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center">
+                            <span className="text-emerald-400 text-sm font-semibold">{i + 1}</span>
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-base text-white/90 leading-relaxed">{item}</p>
+                          </div>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </div>
                 )}
               </section>
               
-              {/* Recommended Solution */}
+              {/* Enhanced Recommended Solution */}
               <section>
-                <h2 id="recommended-solution" className="heading-accent text-xl font-semibold text-white mb-3 scroll-mt-20">Recommended Solution</h2>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 id="recommended-solution" className="heading-accent text-2xl font-bold text-white scroll-mt-20">Recommended Solution</h2>
+                  <div className="text-sm text-white/60 flex items-center gap-2">
+                    <Icon name="solution" className="w-4 h-4" />
+                    Strategy
+                  </div>
+                </div>
                 
                 {report.solution.modalities.length > 0 && (
-                  <div className="mb-4">
-                    <h3 className="text-lg font-semibold text-white/90 mb-2">Delivery Modalities</h3>
-                    <div className="space-y-1">
+                  <div className="glass-card p-6 mb-6">
+                    <h3 className="text-xl font-semibold text-white/90 mb-6 flex items-center gap-3">
+                      <Icon name="delivery" className="w-6 h-6 text-secondary-400" />
+                      Delivery Methods & Rationale
+                    </h3>
+                    <div className="grid md:grid-cols-2 gap-4">
                       {report.solution.modalities.map((m, i) => (
-                        <div key={i} className="text-white/80 flex items-start gap-2">
-                          <Icon name={modalityIconName(m.name)} className="w-4 h-4 text-primary-300 mt-0.5" />
-                          <div>
-                            <div className="font-semibold text-white/90">{m.name}</div>
-                            <div className="text-[13px] text-white/70">{m.reason}</div>
+                        <div key={i} className="p-4 rounded-xl bg-white/5 hover:bg-white/8 transition-colors border border-white/10">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-lg bg-secondary-500/20">
+                              <Icon name={modalityIconName(m.name)} className="w-5 h-5 text-secondary-400" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-semibold text-white/95 mb-2 text-lg">{m.name}</div>
+                              <p className="text-sm text-white/75 leading-relaxed">{m.reason}</p>
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -394,56 +567,99 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
                 )}
                 
                 {report.solution.scope && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-white/90 mb-2">Scope</h3>
+                  <div className="space-y-6">
+                    <h3 className="text-xl font-semibold text-white/90 mb-4">Project Scope & Focus Areas</h3>
                     
                     {report.solution.scope.audiences.length > 0 && (
-                      <div className="mb-3">
-                        <strong className="font-semibold text-white/90">Target Audiences:</strong>
-                        <ul className="list-disc pl-5 marker:text-primary-300 text-white/80 leading-6 mt-1 space-y-1">
+                      <div className="glass-card p-6">
+                        <h4 className="font-semibold text-lg text-white/90 mb-4 flex items-center gap-2">
+                          <Icon name="audience" className="w-5 h-5 text-primary-400" />
+                          Target Audiences
+                        </h4>
+                        <div className="grid sm:grid-cols-2 gap-3">
                           {report.solution.scope.audiences.map((a, i) => (
-                            <li key={i}>{a}</li>
+                            <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+                              <div className="w-3 h-3 rounded-full bg-primary-400" />
+                              <span className="text-white/90 font-medium">{a}</span>
+                            </div>
                           ))}
-                        </ul>
+                        </div>
                       </div>
                     )}
                     
                     {report.solution.scope.competencies.length > 0 && (
-                      <div className="mb-3">
-                        <strong className="font-semibold text-white/90">Key Competencies:</strong>
-                        <ul className="list-disc pl-5 marker:text-primary-300 text-white/80 leading-6 mt-1 space-y-1">
+                      <div className="glass-card p-6">
+                        <h4 className="font-semibold text-lg text-white/90 mb-4 flex items-center gap-2">
+                          <Icon name="target" className="w-5 h-5 text-emerald-400" />
+                          Core Competencies & Skills
+                        </h4>
+                        <div className="space-y-3">
                           {report.solution.scope.competencies.map((c, i) => (
-                            <li key={i}>{c}</li>
+                            <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+                              <span className="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 text-sm font-semibold mt-1">{i + 1}</span>
+                              <span className="text-white/90 leading-relaxed">{c}</span>
+                            </div>
                           ))}
-                        </ul>
+                        </div>
                       </div>
                     )}
                   </div>
                 )}
               </section>
               
-              {/* Delivery Plan */}
+              {/* Enhanced Delivery Plan */}
               {report.delivery_plan.phases.length > 0 && (
                 <section>
-                  <h2 id="delivery-plan" className="heading-accent text-xl font-semibold text-white mb-3 scroll-mt-20">Delivery Plan</h2>
-                  <div className="space-y-3">
-                    {report.delivery_plan.phases.map((phase, i) => (
-                      <div key={i}>
-                        <h3 className="text-lg font-semibold text-white/90">
-                          {phase.name} <span className="text-sm text-white/60">({phase.duration_weeks} weeks)</span>
-                        </h3>
-                        {phase.goals.length > 0 && (
-                          <div className="mt-2">
-                            <strong className="text-sm text-white/80">Goals:</strong>
-                            <ul className="list-disc pl-5 marker:text-primary-300 text-sm text-white/70 mt-1 space-y-1 leading-6">
-                              {phase.goals.map((g, j) => (
-                                <li key={j}>{g}</li>
-                              ))}
-                            </ul>
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 id="delivery-plan" className="heading-accent text-2xl font-bold text-white scroll-mt-20">Implementation Roadmap</h2>
+                    <div className="text-sm text-white/60 flex items-center gap-2">
+                      <Icon name="timeline" className="w-4 h-4" />
+                      {report.delivery_plan.phases.length} Phases
+                    </div>
+                  </div>
+                  
+                  {/* Phase Timeline Visual */}
+                  <div className="glass-card p-6 mb-6">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Icon name="steps" className="w-5 h-5 text-amber-400" />
+                      <h3 className="text-lg font-semibold text-white/90">Phase Overview</h3>
+                    </div>
+                    <div className="relative">
+                      <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-gradient-to-b from-primary-400 to-secondary-500" />
+                      <div className="space-y-6">
+                        {report.delivery_plan.phases.map((phase, i) => (
+                          <div key={i} className="relative flex gap-4">
+                            <div className="relative z-10 w-16 h-16 rounded-xl bg-gradient-to-br from-primary-400 to-secondary-500 flex items-center justify-center text-white font-bold text-lg shadow-lg">
+                              {i + 1}
+                            </div>
+                            <div className="flex-1 pb-6">
+                              <div className="glass-card p-4 hover:bg-white/8 transition-colors">
+                                <div className="flex items-start justify-between mb-3">
+                                  <h4 className="text-lg font-semibold text-white/95">{phase.name}</h4>
+                                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/30">
+                                    <Icon name="timeline" className="w-3 h-3" />
+                                    <span className="text-sm font-medium">{phase.duration_weeks} weeks</span>
+                                  </div>
+                                </div>
+                                {phase.goals.length > 0 && (
+                                  <div>
+                                    <div className="text-sm font-medium text-primary-400 mb-2">Key Goals:</div>
+                                    <div className="space-y-2">
+                                      {phase.goals.map((g, j) => (
+                                        <div key={j} className="flex items-start gap-2 text-sm text-white/80 leading-relaxed">
+                                          <Icon name="check" className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+                                          <span>{g}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        )}
+                        ))}
                       </div>
-                    ))}
+                    </div>
                   </div>
                 </section>
               )}
@@ -451,19 +667,66 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
           </article>
         </div>
         
-        {/* Sidebar */}
-        <div className="space-y-4 sticky-col">
-          {/* TOC */}
-          <nav className="glass-card p-4 md:p-5" aria-label="Table of contents">
-            <h4 className="text-sm font-semibold mb-2 text-white/90">On this page</h4>
-            <ul className="text-sm text-white/80 space-y-1">
-              <li><a className="hover:text-primary-300" href="#executive-summary">Executive Summary</a></li>
-              <li><a className="hover:text-primary-300" href="#recommended-solution">Recommended Solution</a></li>
+        {/* Enhanced Sidebar */}
+        <div className="space-y-6 sticky-col">
+          {/* Enhanced TOC */}
+          <nav className="glass-card p-5" aria-label="Table of contents">
+            <div className="flex items-center gap-2 mb-4">
+              <Icon name="doc" className="w-4 h-4 text-primary-400" />
+              <h4 className="text-sm font-semibold text-white/90">Report Navigation</h4>
+            </div>
+            <ul className="space-y-2">
+              <li>
+                <a className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white/80 hover:text-primary-300 hover:bg-white/5 transition-colors" href="#executive-summary">
+                  <Icon name="summary" className="w-3 h-3" />
+                  Executive Summary
+                </a>
+              </li>
+              <li>
+                <a className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white/80 hover:text-primary-300 hover:bg-white/5 transition-colors" href="#recommended-solution">
+                  <Icon name="solution" className="w-3 h-3" />
+                  Recommended Solution
+                </a>
+              </li>
               {report.delivery_plan.phases.length > 0 && (
-                <li><a className="hover:text-primary-300" href="#delivery-plan">Delivery Plan</a></li>
+                <li>
+                  <a className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-white/80 hover:text-primary-300 hover:bg-white/5 transition-colors" href="#delivery-plan">
+                    <Icon name="timeline" className="w-3 h-3" />
+                    Implementation Roadmap
+                  </a>
+                </li>
               )}
             </ul>
           </nav>
+          
+          {/* Action Items - New Priority Section */}
+          {report.next_steps.length > 0 && (
+            <div className="glass-card p-5 border-l-4 border-l-emerald-400">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-emerald-500/20">
+                  <Icon name="check" className="w-4 h-4 text-emerald-400" />
+                </div>
+                <h4 className="text-sm font-semibold text-white/90">Priority Actions</h4>
+              </div>
+              <div className="space-y-3">
+                {report.next_steps.slice(0, 3).map((s, i) => (
+                  <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-emerald-500/10 border border-emerald-400/20 hover:bg-emerald-500/15 transition-colors cursor-pointer group">
+                    <div className="w-5 h-5 rounded-full border border-emerald-400/50 flex items-center justify-center text-xs text-emerald-400 font-semibold mt-0.5 group-hover:bg-emerald-400 group-hover:text-white transition-colors">
+                      {i + 1}
+                    </div>
+                    <span className="text-sm text-white/90 leading-relaxed">{s}</span>
+                  </div>
+                ))}
+              </div>
+              {report.next_steps.length > 3 && (
+                <div className="mt-3 text-center">
+                  <button className="text-xs text-emerald-400 hover:text-emerald-300 underline">
+                    View all {report.next_steps.length} action items
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Recommended Modalities */}
           {report.solution.modalities.length > 0 && (
@@ -532,17 +795,7 @@ export default function ReportDisplay({ reportMarkdown, reportTitle, editableTit
             </div>
           )}
           
-          {/* Immediate Next Steps */}
-          {report.next_steps.length > 0 && (
-            <div className="glass-card p-4 md:p-5">
-              <h4 className="text-sm font-semibold mb-2 text-white/90 accent-text-soft">Immediate Next Steps</h4>
-              <ol className="list-decimal pl-5 space-y-1 text-sm text-white/80 leading-6">
-                {report.next_steps.slice(0, 3).map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ol>
-            </div>
-          )}
+
           
           {/* Risks */}
           {report.risks.length > 0 && (

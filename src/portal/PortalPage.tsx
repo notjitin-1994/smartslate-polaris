@@ -371,6 +371,17 @@ export function PortalPage() {
   const [displayName, setDisplayName] = useState<string>('')
 
   const [jobTitle, setJobTitle] = useState<string>('')
+  
+  // Check if we're on the Polaris subdomain (handles prod and preview hosts)
+  const isPolarisSubdomain = typeof window !== 'undefined' && (() => {
+    const host = window.location.hostname.toLowerCase()
+    return (
+      host === 'polaris.smartslate.io' ||
+      host.startsWith('polaris.') ||
+      host.startsWith('polaris-') ||
+      host.split('.').some((part) => part === 'polaris')
+    )
+  })()
   const [company, setCompany] = useState<string>('')
   const [website, setWebsite] = useState<string>('')
   const [city, setCity] = useState<string>('')
@@ -652,7 +663,12 @@ export function PortalPage() {
                     <li>
                       <a
                         href={typeof window !== 'undefined' ? `${window.location.protocol}//polaris.smartslate.io` : 'https://polaris.smartslate.io'}
-                        className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-500 focus-visible:text-primary-500 active:text-primary-500 hover:bg-primary-500/5 rounded-lg transition pressable"
+                        aria-current={isPolarisSubdomain ? 'page' : undefined}
+                        className={`flex items-center justify-between px-3 py-1.5 text-sm rounded-lg transition pressable ${
+                          isPolarisSubdomain
+                            ? 'text-primary-400 bg-primary-400/10 ring-1 ring-inset ring-primary-400/30'
+                            : 'text-white/75 hover:text-primary-500 hover:bg-primary-500/5 focus-visible:text-primary-500 active:text-primary-500'
+                        }`}
                       >
                         <span className="truncate">Polaris</span>
                         <span className="ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium border-green-500/30 text-green-100 bg-green-500/15">V2.6: Preview</span>

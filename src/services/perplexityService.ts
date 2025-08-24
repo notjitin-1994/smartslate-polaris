@@ -22,9 +22,9 @@ class PerplexityService {
   constructor() {
     this.client = new BaseApiClient({
       baseUrl: '/api',
-      timeout: 90000, // 90 seconds for research calls (Perplexity can be slow)
-      retries: 3,
-      retryDelay: 1200,
+      timeout: 50000, // keep below Vercel 60s limit
+      retries: 1,
+      retryDelay: 800,
     })
   }
   
@@ -35,9 +35,9 @@ class PerplexityService {
     prompt: string,
     config: PerplexityConfig = {}
   ): Promise<{ content: string; model?: string }> {
-    const model = config.model || env.perplexityModel || 'sonar-deep-research'
-    const temperature = config.temperature ?? 0.2
-    const maxTokens = config.maxTokens || 4096
+    const model = config.model || env.perplexityModel || 'llama-3.1-sonar-small-128k-online'
+    const temperature = config.temperature ?? 0.1
+    const maxTokens = config.maxTokens || 800
     
     const messages: PerplexityMessage[] = [
       {
@@ -56,7 +56,7 @@ class PerplexityService {
         temperature,
         messages,
         max_tokens: maxTokens,
-      }, { timeout: 90000, retries: 2 }) // extend timeout per request as well
+      }, { timeout: env.isDev ? 75000 : 50000, retries: 1 })
       
       const content = response.data?.choices?.[0]?.message?.content
       
@@ -66,7 +66,7 @@ class PerplexityService {
       
       return { content, model }
     } catch (error) {
-      console.error('Perplexity research error:', error)
+      console.warn('Perplexity research error:', error)
       throw error
     }
   }
@@ -99,7 +99,7 @@ class PerplexityService {
     
     Keep the response professional but personalized.`
     
-    const result = await this.research(prompt)
+    const result = await this.researchWithRetry(prompt)
     return result.content
   }
   
@@ -138,7 +138,7 @@ class PerplexityService {
     
     Focus on actionable insights for L&D planning.`
     
-    const result = await this.research(prompt)
+    const result = await this.researchWithRetry(prompt)
     return result.content
   }
   
@@ -180,7 +180,7 @@ class PerplexityService {
     
     Provide specific, actionable recommendations.`
     
-    const result = await this.research(prompt)
+    const result = await this.researchWithRetry(prompt)
     return result.content
   }
   

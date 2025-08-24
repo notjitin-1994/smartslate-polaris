@@ -12,6 +12,8 @@ import { NA_REPORT_PROMPT, type NAReport } from '@/polaris/needs-analysis/report
 import { tryExtractJson } from '@/polaris/needs-analysis/json'
 import type { NAField, NAResponseMap } from '@/polaris/needs-analysis/types'
 import { useAuth } from '@/contexts/AuthContext'
+import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { env } from '@/config/env'
 
 export default function PolarisRevamped() {
   const { user } = useAuth()
@@ -21,11 +23,11 @@ export default function PolarisRevamped() {
   const [summaryCount, setSummaryCount] = useState<number>(0)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
   
-  // State for all responses
-  const [experienceAnswer, setExperienceAnswer] = useState<NAResponseMap>({})
-  const [stage1Answers, setStage1Answers] = useState<NAResponseMap>({})
-  const [stage2Answers, setStage2Answers] = useState<NAResponseMap>({})
-  const [stage3Answers, setStage3Answers] = useState<NAResponseMap>({})
+  // State for all responses (persist to localStorage for quicker testing)
+  const [experienceAnswer, setExperienceAnswer] = useLocalStorage<NAResponseMap>('polaris_experience', {})
+  const [stage1Answers, setStage1Answers] = useLocalStorage<NAResponseMap>('polaris_stage1', {})
+  const [stage2Answers, setStage2Answers] = useLocalStorage<NAResponseMap>('polaris_stage2', {})
+  const [stage3Answers, setStage3Answers] = useLocalStorage<NAResponseMap>('polaris_stage3', {})
   
   // Research reports
   const [greetingReport, setGreetingReport] = useState<string>('')
@@ -175,6 +177,57 @@ export default function PolarisRevamped() {
     setIsEditMode(false)
     setActive('experience')
   }
+
+  // Autofill demo data for faster local testing
+  function autofillDemo() {
+    const today = new Date()
+    const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 7)
+    const end = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 45)
+    const startStr = start.toISOString().slice(0, 10)
+    const endStr = end.toISOString().slice(0, 10)
+
+    setExperienceAnswer({ exp_level: 'expert' })
+
+    setStage1Answers({
+      requester_name: 'Jane Smith',
+      requester_role: 'Head of L&D',
+      requester_department: 'Learning & Development',
+      requester_email: 'jane.smith@acme.com',
+      requester_phone: '+1 555-0123',
+      requester_timezone: 'UTC+05:30 (IST)'
+    })
+
+    setStage2Answers({
+      org_name: 'Acme Corporation',
+      org_industry: 'Technology',
+      org_size: '1001-5000 employees',
+      org_headquarters: 'San Francisco, CA, USA',
+      org_website: 'https://www.acme.com',
+      org_mission: 'Innovate and deliver world-class solutions that empower businesses globally.',
+      org_compliance: ['SOC 2', 'GDPR'],
+      org_stakeholders: ['HR Leadership', 'Department Heads', 'C-Suite']
+    })
+
+    setStage3Answers({
+      project_objectives: 'Reduce onboarding time by 50% and improve sales performance by 15% within 2 quarters.',
+      project_constraints: 'Limited budget; distributed workforce across 4 time zones; legacy LMS integration.',
+      target_audience: 'New hires and mid-level sales managers with 3-7 years experience; tech-savvy.',
+      project_timeline: { start: startStr, end: endStr },
+      project_budget_range: '$100,000 - $250,000',
+      available_hardware: ['Laptops', 'Smartphones'],
+      available_software: ['LMS', 'Microsoft 365', 'Zoom', 'Slack'],
+      subject_matter_experts: 'Internal Sales Enablement and Product Marketing',
+      additional_context: 'Executive sponsors aligned; preference for blended learning approach.'
+    })
+  }
+
+  // Support query param ?demo=1 to auto-populate on load
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search)
+    if (sp.get('demo') === '1') {
+      autofillDemo()
+    }
+  }, [])
   
   // Stage 1 Research (background)
   async function completeStage1() {
@@ -839,6 +892,16 @@ Use these research insights to make the report more specific, actionable, and al
               <div className="text-xs text-white/60">
                 {summaryCount}/{SUMMARY_LIMIT} starmaps
               </div>
+              {env.isDev && (
+                <button
+                  type="button"
+                  className="icon-btn icon-btn-sm icon-btn-ghost"
+                  onClick={autofillDemo}
+                  title="Autofill demo data"
+                >
+                  Autofill
+                </button>
+              )}
               <button
                 type="button"
                 className="icon-btn icon-btn-sm icon-btn-ghost"

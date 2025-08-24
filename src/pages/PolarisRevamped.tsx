@@ -656,7 +656,8 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
           })
           if (saveError) {
             console.error('Failed to save summary:', saveError)
-            if (saveError.message?.includes('reached the limit')) {
+            const msg = (saveError?.message || '').toLowerCase()
+            if (msg.includes('reached the saved') || msg.includes('reached the creation') || msg.includes('reached the limit')) {
               setShowUpgradeModal(true)
             }
           } else {
@@ -1128,13 +1129,12 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
                 You've reached your limit of {SUMMARY_LIMIT} starmaps. Upgrade to create unlimited starmaps.
               </p>
               <div className="space-y-3">
-                <button
-                  type="button"
-                  onClick={() => window.open('https://smartslate.io/upgrade', '_blank')}
-                  className="w-full btn-primary"
+                <a
+                  href="/pricing"
+                  className="w-full inline-flex justify-center btn-primary"
                 >
-                  Upgrade to Pro
-                </button>
+                  View Plans & Upgrade
+                </a>
                 <button
                   type="button"
                   onClick={() => setShowUpgradeModal(false)}

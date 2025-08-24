@@ -3,6 +3,7 @@ import { paths } from '@/routes/paths'
 import AuthCallback from '@/pages/AuthCallback'
 import AuthLanding from '@/pages/AuthLanding'
 import { PortalPage } from '@/pages/PortalPage'
+import Pricing from '@/pages/Pricing'
 import { SettingsContent } from '@/portal/SettingsContent'
 import { PublicProfile } from '@/pages/PublicProfile'
 import PolarisRevamped from '@/pages/PolarisRevamped'
@@ -17,6 +18,7 @@ export function AppRouter() {
         {/* Public routes */}
         <Route path="/login" element={<AuthLanding />} />
         <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route path={paths.pricing} element={<Pricing />} />
         <Route path={paths.publicProfile} element={<PublicProfile />} />
         
         {/* Protected routes - require authentication */}

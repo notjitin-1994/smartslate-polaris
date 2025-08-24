@@ -105,13 +105,12 @@ export default function AllStarmaps() {
             <div className="flex items-center justify-between gap-3 text-xs text-white/70">
               <span>{summaryCount} of {SAVED_LIMIT} starmaps saved</span>
               {(summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT) && (
-                <button
-                  type="button"
-                  onClick={() => window.open('https://smartslate.io/upgrade', '_blank')}
+                <a
+                  href="/pricing"
                   className="text-amber-400 hover:text-amber-300 underline"
                 >
                   Upgrade for more
-                </button>
+                </a>
               )}
             </div>
             <div className="mt-2 h-2 rounded-full bg-white/10 overflow-hidden relative" aria-label="Starmap usage">

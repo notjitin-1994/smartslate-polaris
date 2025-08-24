@@ -345,6 +345,24 @@ function IconSun({ className = '' }: { className?: string }) {
   )
 }
 
+function IconSparkle({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 3l2.2 4.5L19 9.8l-4.3 2.3L12 17l-2.7-4.9L5 9.8l4.8-2.3L12 3z" />
+    </svg>
+  )
+}
+
 function SettingsIconImg({ className = '' }: { className?: string }) {
   return (
     <img
@@ -613,7 +631,7 @@ export function PortalPage() {
   ]
 
   const solaraItems: NavItem[] = [
-    { label: 'Polaris', tagText: 'V2.6: Preview', tagTone: 'success' },
+    { label: 'Polaris', tagText: 'V2.5: Preview', tagTone: 'success' },
     { label: 'Constellation', tagText: 'V1 - Preview', tagTone: 'preview' },
     { label: 'Nova', tagText: isMobile ? 'Visit on Desktop' : 'Coming Soon', tagTone: 'info' },
     { label: 'Orbit', tagText: isMobile ? 'Visit on Desktop' : 'Coming Soon', tagTone: 'info' },
@@ -671,7 +689,7 @@ export function PortalPage() {
                         }`}
                       >
                         <span className="truncate">Polaris</span>
-                        <span className="ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium border-green-500/30 text-green-100 bg-green-500/15">V2.6: Preview</span>
+                        <span className="ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium border-green-500/30 text-green-100 bg-green-500/15">V2.5: Preview</span>
                       </a>
                     </li>
                     {solaraItems.slice(1).map((item) => (
@@ -737,6 +755,14 @@ export function PortalPage() {
               <div className="px-0 py-3 flex flex-col items-center gap-2">
                 <button
                   type="button"
+                  title="Subscribe to Polaris"
+                  onClick={() => navigate('/pricing')}
+                  className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
+                >
+                  <IconSparkle className="w-5 h-5" />
+                </button>
+                <button
+                  type="button"
                   title={`${getCapitalizedFirstName((user?.user_metadata?.first_name as string) || (user?.user_metadata?.name as string) || (user?.user_metadata?.full_name as string) || 'Your')}'s Profile`}
                   onClick={goToProfile}
                   className="w-10 h-10 rounded-full text-white/85 hover:text-white flex items-center justify-center pressable"
@@ -754,6 +780,15 @@ export function PortalPage() {
               </div>
             ) : (
               <div className="px-3 py-3 space-y-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('/pricing')}
+                  className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
+                  title="Subscribe to Polaris"
+                >
+                  <IconSparkle className="w-5 h-5" />
+                  <span>Subscribe to Polaris</span>
+                </button>
                 <button
                   type="button"
                   onClick={goToProfile}
@@ -1272,6 +1307,21 @@ export function PortalPage() {
                   </div>
                 </nav>
                 <div className="mt-auto">
+                  {/* Mobile subscribe button above bottom actions */}
+                  <div className="px-1 pb-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMobileMenuOpen(false)
+                        navigate('/pricing')
+                      }}
+                      className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
+                      title="Subscribe to Polaris"
+                    >
+                      <IconSparkle className="w-5 h-5" />
+                      <span>Subscribe to Polaris</span>
+                    </button>
+                  </div>
                   <div className="px-1 py-2 border-t border-white/10">
                     <div className="flex items-center justify-between">
                       <button

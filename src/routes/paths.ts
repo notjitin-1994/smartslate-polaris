@@ -3,6 +3,7 @@ export const paths = {
   portal: '/portal',
   portalUser: '/portal/:user',
   settings: '/portal/settings',
+  pricing: '/pricing',
   publicProfile: '/:username',
 } as const
 

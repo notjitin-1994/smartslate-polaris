@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getAllSummaries, deleteSummary, getUserSummaryCount, getUserCreatedCount, CREATION_LIMIT, SAVED_LIMIT, SUMMARY_LIMIT, type PolarisSummary } from '@/services/polarisSummaryService'
+import { getAllSummaries, deleteSummary, getUserSummaryCount, getUserCreatedCount, CREATION_LIMIT, SAVED_LIMIT, type PolarisSummary } from '@/services/polarisSummaryService'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 export default function AllSummaries() {

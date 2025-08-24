@@ -7,7 +7,6 @@ import {
   getUserCreatedCount,
   CREATION_LIMIT,
   SAVED_LIMIT,
-  SUMMARY_LIMIT, 
   type PolarisSummary 
 } from '@/services/polarisSummaryService'
 import StarmapCard from '@/components/StarmapCard'

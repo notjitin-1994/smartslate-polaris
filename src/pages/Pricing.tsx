@@ -189,7 +189,7 @@ export default function Pricing() {
           </p>
           
           {/* Billing Toggle - Material Design Inspired */}
-          <div className="inline-flex items-center mt-8 p-1 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl">
+          <div className="relative inline-flex items-center mt-8 p-1 rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl">
             <button
               type="button"
               className={`relative px-6 py-3 rounded-xl text-sm font-medium transition-all duration-300 ${
@@ -210,13 +210,11 @@ export default function Pricing() {
               }`}
               onClick={() => setBilling('annual')}
             >
-              <span className="flex items-center gap-2">
-                Annual
-                <span className="px-2 py-0.5 rounded-full bg-[rgb(var(--primary-dark))] text-xs font-bold text-white">
-                  SAVE 20%
-                </span>
-              </span>
+              Annual
             </button>
+            <span className="pointer-events-none absolute -top-3 right-2 px-2 py-0.5 rounded-full bg-emerald-400 text-xs font-bold text-[#0A1628] shadow-lg shadow-emerald-500/25">
+              SAVE 20%
+            </span>
           </div>
           
           {/* Trust Signals */}

@@ -3,7 +3,7 @@ import { env } from '@/config/env'
 import { AppError } from '@/lib/errors'
 
 export type PerplexityMessage = {
-  role: 'system' | 'user' | 'assistant'
+  role: 'user' | 'assistant'  // Perplexity API only supports 'user' and 'assistant' roles
   content: string
 }
 
@@ -39,14 +39,15 @@ class PerplexityService {
     const temperature = config.temperature ?? 0.1
     const maxTokens = config.maxTokens || 800
     
+    // Perplexity API doesn't support 'system' role, so we include context in the user message
+    const contextualPrompt = `You are a helpful research assistant. Provide comprehensive, accurate information based on current web sources. Focus on facts and cite sources when possible.
+
+${prompt}`
+    
     const messages: PerplexityMessage[] = [
       {
-        role: 'system',
-        content: 'You are a helpful research assistant. Provide comprehensive, accurate information based on current web sources. Focus on facts and cite sources when possible.'
-      },
-      {
         role: 'user',
-        content: prompt
+        content: contextualPrompt
       }
     ]
     

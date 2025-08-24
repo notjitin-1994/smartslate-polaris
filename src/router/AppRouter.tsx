@@ -3,6 +3,7 @@ import { paths } from '@/routes/paths'
 import AuthCallback from '@/pages/AuthCallback'
 import AuthLanding from '@/pages/AuthLanding'
 import { PortalPage } from '@/pages/PortalPage'
+import { PortalDashboard } from '@/portal/PortalDashboard'
 import Pricing from '@/pages/Pricing'
 import { SettingsContent } from '@/portal/SettingsContent'
 import { PublicProfile } from '@/pages/PublicProfile'
@@ -27,10 +28,11 @@ export function AppRouter() {
             <Route index element={<PolarisRevamped />} />
           </Route>
           <Route path={paths.portal} element={<PortalPage />}>
-            <Route index element={<Navigate to="/" replace />} />
+            <Route index element={<PortalDashboard />} />
             <Route path="settings" element={<SettingsContent />} />
             <Route path="starmaps" element={<AllStarmaps />} />
             <Route path="starmaps/:id" element={<StarmapDetail />} />
+            <Route path="discover" element={<PolarisRevamped />} />
             <Route path="briefings" element={<Navigate to="/portal/starmaps" replace />} />
             <Route path="summaries" element={<Navigate to="/portal/starmaps" replace />} />
           </Route>

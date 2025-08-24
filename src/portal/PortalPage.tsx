@@ -380,6 +380,7 @@ export function PortalPage() {
   const location = useLocation()
   const isSettings = location.pathname.endsWith('/settings')
   const isStarmaps = location.pathname.endsWith('/starmaps')
+  const isPortalRoot = location.pathname === '/portal'
   const { user: userParam } = useParams()
   const outlet = useOutlet()
   const viewingProfile = Boolean(userParam)
@@ -837,7 +838,9 @@ export function PortalPage() {
         <main className="flex-1 min-w-0 h-full overflow-y-auto">
           <header className="sticky top-0 z-10 border-b border-white/10 bg-[rgb(var(--bg))]/80 backdrop-blur-xl mb-12 md:mb-0">
             <div className="relative mx-auto max-w-7xl px-4 py-3 sm:py-4">
-              <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 -top-24 h-48 bg-gradient-to-br from-primary-400/10 via-fuchsia-400/5 to-transparent blur-2xl" />
+              {!isPortalRoot && (
+                <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 -top-24 h-48 bg-gradient-to-br from-primary-400/10 via-fuchsia-400/5 to-transparent blur-2xl" />
+              )}
               <div className="relative animate-fade-in-up">
                 <div className="flex items-center md:hidden gap-2">
                   <Brand />

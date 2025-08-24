@@ -351,7 +351,14 @@ export default function PolarisRevamped() {
       if (!orgText) orgText = 'Organization research unavailable. Proceed with Stage 2 organization inputs.'
       if (!reqText) reqText = 'Requirements research unavailable. Proceed with Stage 3 scoping inputs.'
 
-      const prelimPrompt = `You are an expert L&D consultant. Synthesize a concise, editable Preliminary Master Report using the three research inputs below. Use clear markdown with these sections only:
+      // Build concise summaries from stage answers to ensure the LLM has concrete facts
+      const fmt = (v: any) => (Array.isArray(v) ? v.filter(Boolean).join(', ') : (v ?? ''))
+      const timeline = (stage3Answers.project_timeline || {}) as { start?: string; end?: string }
+      const stage1Summary = `Requester: ${fmt(stage1Answers.requester_name)} (${fmt(stage1Answers.requester_role)} – ${fmt(stage1Answers.requester_department)})\nEmail: ${fmt(stage1Answers.requester_email)}\nPhone: ${fmt(stage1Answers.requester_phone)}\nTime Zone: ${fmt(stage1Answers.requester_timezone)}`
+      const stage2Summary = `Organization: ${fmt(stage2Answers.org_name)}\nIndustry: ${fmt(stage2Answers.org_industry)}\nSize: ${fmt(stage2Answers.org_size)}\nHeadquarters: ${fmt(stage2Answers.org_headquarters)}\nWebsite: ${fmt(stage2Answers.org_website)}\nMission: ${fmt(stage2Answers.org_mission)}\nCompliance: ${fmt(stage2Answers.org_compliance)}\nStakeholders: ${fmt(stage2Answers.org_stakeholders)}`
+      const stage3Summary = `Objectives: ${fmt(stage3Answers.project_objectives)}\nConstraints: ${fmt(stage3Answers.project_constraints)}\nAudience: ${fmt(stage3Answers.target_audience)}\nTimeline: ${(timeline.start || 'TBD')} to ${(timeline.end || 'TBD')}\nBudget: ${fmt(stage3Answers.project_budget_range)}\nHardware: ${fmt(stage3Answers.available_hardware)}\nSoftware: ${fmt(stage3Answers.available_software)}\nSMEs: ${fmt(stage3Answers.subject_matter_experts)}\nOther: ${fmt(stage3Answers.additional_context)}`
+
+      const prelimPrompt = `You are an expert L&D consultant. Synthesize a concise, editable Preliminary Master Report using the three research inputs and stage answers below. Use clear markdown with these sections only:
 
 1. Executive Summary
 2. Organization Context
@@ -370,6 +377,17 @@ ${orgText}
 
 REQUIREMENTS REPORT:
 ${reqText}
+
+---
+STAGE ANSWERS SUMMARY (use these details directly if research is thin or generic):
+STAGE 1 – REQUESTER & ORG CONTACTS:
+${stage1Summary}
+
+STAGE 2 – ORGANIZATION DETAILS:
+${stage2Summary}
+
+STAGE 3 – PROJECT SCOPING:
+${stage3Summary}
 `
 
       const prelimRes = await callLLM([{ role: 'user', content: prelimPrompt }])

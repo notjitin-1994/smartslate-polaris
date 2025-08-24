@@ -7,6 +7,7 @@ import {
   SUMMARY_LIMIT, 
   type PolarisSummary 
 } from '@/services/polarisSummaryService'
+import StarmapCard from '@/components/StarmapCard'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 
 export default function AllStarmaps() {
@@ -181,37 +182,13 @@ export default function AllStarmaps() {
           <h2 className="text-sm font-semibold text-white/80 mb-3 accent-text-soft">Your Starmaps</h2>
           <div className="space-y-3">
             {visible.map((summary) => (
-              <div key={summary.id} className="glass-card p-4 transition-all hover:bg-white/10">
-                <div className="flex items-start justify-between gap-2">
-                  <button
-                    type="button"
-                    onClick={() => navigate(`/portal/starmaps/${summary.id}`)}
-                    className="text-left flex-1 min-w-0"
-                  >
-                    <h3 className="font-semibold text-white/90 truncate">{summary.report_title || summary.company_name || 'Untitled Discovery'}</h3>
-                    <p className="text-xs text-white/60 mt-1">{formatDate(summary.created_at)}</p>
-                    <div
-                      className="text-xs text-white/70 mt-2 line-clamp-2"
-                      dangerouslySetInnerHTML={{ __html: toHtmlPreview(summary.summary_content) }}
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(summary.id)}
-                    disabled={deletingId === summary.id}
-                    className="p-1 text-white/40 hover:text-red-400 transition-colors"
-                    title="Delete starmap"
-                  >
-                    {deletingId === summary.id ? (
-                      <div className="w-4 h-4 border-2 border-white/50 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
-              </div>
+              <StarmapCard
+                key={summary.id}
+                summary={summary}
+                onOpen={(id) => navigate(`/portal/starmaps/${id}`)}
+                onDelete={(id) => handleDelete(id)}
+                deleting={deletingId === summary.id}
+              />
             ))}
           </div>
 

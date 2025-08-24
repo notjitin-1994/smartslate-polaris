@@ -62,6 +62,12 @@ export interface Database {
           stage3_answers: Json
           stage2_questions: Json
           stage3_questions: Json
+          greeting_report: string | null
+          org_report: string | null
+          requirement_report: string | null
+          edited_content: string | null
+          is_edited: boolean
+          last_edited_at: string | null
           created_at: string
         }
         Insert: {
@@ -75,6 +81,12 @@ export interface Database {
           stage3_answers: Json
           stage2_questions: Json
           stage3_questions: Json
+          greeting_report?: string | null
+          org_report?: string | null
+          requirement_report?: string | null
+          edited_content?: string | null
+          is_edited?: boolean
+          last_edited_at?: string | null
           created_at?: string
         }
         Update: {
@@ -88,6 +100,12 @@ export interface Database {
           stage3_answers?: Json
           stage2_questions?: Json
           stage3_questions?: Json
+          greeting_report?: string | null
+          org_report?: string | null
+          requirement_report?: string | null
+          edited_content?: string | null
+          is_edited?: boolean
+          last_edited_at?: string | null
           created_at?: string
         }
       }

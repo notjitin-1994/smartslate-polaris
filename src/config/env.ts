@@ -12,6 +12,9 @@ type AppEnv = {
   VITE_ANTHROPIC_BASE_URL?: string
   VITE_ANTHROPIC_MODEL?: string
   VITE_ANTHROPIC_MAX_TOKENS?: string
+  VITE_PERPLEXITY_API_KEY?: string
+  VITE_PERPLEXITY_BASE_URL?: string
+  VITE_PERPLEXITY_MODEL?: string
   MODE: string
   DEV: boolean
   PROD: boolean
@@ -38,6 +41,9 @@ export const env = {
   anthropicBaseUrl: read('VITE_ANTHROPIC_BASE_URL'),
   anthropicModel: read('VITE_ANTHROPIC_MODEL') || 'claude-3-5-sonnet-latest',
   anthropicMaxTokens: read('VITE_ANTHROPIC_MAX_TOKENS'),
+  perplexityApiKey: read('VITE_PERPLEXITY_API_KEY') || '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',
+  perplexityBaseUrl: read('VITE_PERPLEXITY_BASE_URL') || 'https://api.perplexity.ai',
+  perplexityModel: read('VITE_PERPLEXITY_MODEL') || 'llama-3.1-sonar-large-128k-online',
   mode: raw.MODE,
   isDev: raw.DEV,
   isProd: raw.PROD,

@@ -106,6 +106,55 @@ polaris_summaries:
 - `getSummaryById()` - Get specific summary
 - `deleteSummary()` - Delete a summary
 
+## Embeddable Polaris Starmap Picker
+
+You can embed a lightweight picker in other Smartslate subdomains to let users choose an existing starmap. The picker uses cross-subdomain Supabase session handoff automatically.
+
+Build the embed bundle:
+
+```bash
+npm run build:embed
+```
+
+This produces:
+
+- `dist/embed/smartslate-polaris.iife.js` (load via a <script> tag)
+- `dist/embed/smartslate-polaris.esm.js` (ES module import)
+
+Usage via script tag (IIFE):
+
+```html
+<script src="https://app.smartslate.io/embed/smartslate-polaris.iife.js"></script>
+<script>
+  async function startWithPolaris() {
+    const chosen = await window.SmartslatePolaris.openStarmapPicker({
+      title: 'Start with a Polaris Starmap',
+      description: 'Pick one of your discovery starmaps',
+      onSelect(summary) {
+        console.log('Selected', summary.id)
+      },
+    })
+    console.log('Result:', chosen)
+  }
+</script>
+```
+
+Usage via ESM:
+
+```html
+<script type="module">
+  import { openStarmapPicker, listStarmaps } from 'https://app.smartslate.io/embed/smartslate-polaris.esm.js'
+  document.getElementById('btn').addEventListener('click', async () => {
+    const selected = await openStarmapPicker()
+    console.log(selected)
+  })
+  const all = await listStarmaps()
+  console.log(all)
+</script>
+```
+
+Unauthenticated users will be prompted to sign in; the picker links to `app.smartslate.io/login` and will adopt the session via the cross-subdomain cookie.
+
 ## Troubleshooting
 
 ### If starmaps are not saving:

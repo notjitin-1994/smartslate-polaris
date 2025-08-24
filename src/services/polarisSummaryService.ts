@@ -16,6 +16,9 @@ export async function saveSummary(data: {
   stage3_answers: Record<string, any>
   stage2_questions: any[]
   stage3_questions: any[]
+  greeting_report?: string | null
+  org_report?: string | null
+  requirement_report?: string | null
 }): Promise<{ data: PolarisSummary | null; error: any }> {
   const supabase = getSupabase()
   const { data: { user } } = await supabase.auth.getUser()
@@ -47,6 +50,9 @@ export async function saveSummary(data: {
     stage3_answers: data.stage3_answers,
     stage2_questions: data.stage2_questions,
     stage3_questions: data.stage3_questions,
+    greeting_report: data.greeting_report ?? null,
+    org_report: data.org_report ?? null,
+    requirement_report: data.requirement_report ?? null,
   }
 
   const { data: savedSummary, error } = await supabase
@@ -159,4 +165,33 @@ export async function getUserSummaryCount(): Promise<{ count: number | null; err
     .eq('user_id', user.id)
 
   return { count, error }
+}
+
+export async function updateSummaryEditedContent(
+  id: string, 
+  editedContent: string
+): Promise<{ error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { error: new Error('User not authenticated') }
+  }
+
+  const { error } = await supabase
+    .from('polaris_summaries')
+    .update({ 
+      edited_content: editedContent,
+      is_edited: true,
+      last_edited_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .eq('user_id', user.id)
+
+  return { error }
+}
+
+export async function getDisplayContent(summary: PolarisSummary): string {
+  // Return edited content if available, otherwise original content
+  return summary.edited_content || summary.summary_content
 }

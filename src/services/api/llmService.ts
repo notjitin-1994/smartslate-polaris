@@ -99,7 +99,10 @@ class LLMService {
   ): Promise<{ content: string; model?: string }> {
     const model = config.model || env.anthropicModel || 'claude-3-5-sonnet-latest'
     const temperature = config.temperature ?? 0.2
-    const maxTokens = config.maxTokens || env.anthropicMaxTokens ? Number(env.anthropicMaxTokens) : 4096
+    // Fix operator precedence bug that could send NaN and cause 400s
+    const maxTokens = typeof config.maxTokens === 'number'
+      ? config.maxTokens
+      : (env.anthropicMaxTokens ? Number(env.anthropicMaxTokens) : 4096)
     
     // Convert OpenAI-style messages to Anthropic format
     const systemParts = messages

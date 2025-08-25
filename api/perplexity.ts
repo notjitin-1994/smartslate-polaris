@@ -7,16 +7,32 @@ const PERPLEXITY_MODEL = process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLE
 
 function normalizePerplexityModel(input?: string): string {
   const requested = (input || '').trim().toLowerCase()
-  // Backward-compat aliases → current model ids
+
+  // Friendly aliases from docs → API model ids
+  // Search
   if (!requested || requested === 'sonar' || requested === 'sonar-small' || requested === 'sonar-small-online') {
     return 'llama-3.1-sonar-small-128k-online'
   }
-  if (requested === 'sonar-medium' || requested === 'sonar-medium-online' || requested === 'sonar-large') {
+  if (requested === 'sonar pro' || requested === 'sonar-pro' || requested === 'sonar-large' || requested === 'sonar-medium' || requested === 'sonar-medium-online' || requested === 'sonar-large-online') {
     return 'llama-3.1-sonar-large-128k-online'
   }
+
+  // Reasoning
+  if (requested === 'sonar reasoning' || requested === 'sonar-reasoning') {
+    return 'sonar-reasoning'
+  }
+  if (requested === 'sonar reasoning pro' || requested === 'sonar-reasoning-pro') {
+    return 'sonar-reasoning-pro'
+  }
+
+  // Direct passthroughs
   if (requested.startsWith('llama-3.1-sonar')) {
     return requested
   }
+  if (requested.startsWith('sonar-')) {
+    return requested
+  }
+
   // Fallback to a safe default
   return 'llama-3.1-sonar-small-128k-online'
 }

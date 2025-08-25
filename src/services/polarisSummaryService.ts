@@ -314,6 +314,33 @@ export async function updateSummaryFinalContent(
   return { error }
 }
 
+// Save individual research report fields to an existing summary
+export async function updateSummaryReports(
+  id: string,
+  reports: { greeting_report?: string | null; org_report?: string | null; requirement_report?: string | null }
+): Promise<{ error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return { error: new Error('User not authenticated') }
+  }
+  const payload: Partial<CreatePolarisSummary> = {}
+  if (reports.greeting_report !== undefined) (payload as any).greeting_report = reports.greeting_report
+  if (reports.org_report !== undefined) (payload as any).org_report = reports.org_report
+  if (reports.requirement_report !== undefined) (payload as any).requirement_report = reports.requirement_report
+
+  const { error } = await supabase
+    .from('polaris_summaries')
+    .update({
+      ...payload,
+      last_edited_at: new Date().toISOString(),
+    })
+    .eq('id', id)
+    .eq('user_id', user.id)
+
+  return { error }
+}
+
 export function getDisplayContent(summary: PolarisSummary): string {
   // Return edited content if available, otherwise original content
   return summary.edited_content || summary.summary_content

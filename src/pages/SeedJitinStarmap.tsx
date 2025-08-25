@@ -233,7 +233,7 @@ Establish a lean baseline; scale with measurable ROI.
         }
 
         setStatus('Redirecting…')
-        navigate(`/portal/starmaps/${data.id}`, { replace: true })
+        navigate(`/starmaps/${data.id}`, { replace: true })
       } catch (e: any) {
         setError(e?.message || 'Unexpected error')
         setStatus('Error')

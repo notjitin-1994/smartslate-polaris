@@ -30,49 +30,33 @@ function parseReport(content: string): NAReport | null {
           problem_statement: '',
           current_state: [],
           root_causes: [],
-          objectives: []
+          objectives: [],
+          assumptions: [],
+          unknowns: [],
+          confidence: 0.5
         },
         solution: {
-          modalities: [],
-          scope: {
-            audiences: [],
-            competencies: [],
-            content_outline: []
-          }
+          delivery_modalities: [],
+          target_audiences: [],
+          key_competencies: [],
+          content_outline: [],
+          accessibility_and_inclusion: { standards: [], notes: null }
         },
         learner_analysis: {
-          profile: {
-            demographics: [],
-            tech_readiness: '',
-            learning_style_fit: []
-          },
-          engagement_strategy: {
-            motivation_drivers: [],
-            potential_barriers: [],
-            support_mechanisms: []
-          },
-          design_implications: {
-            content_adaptations: [],
-            delivery_adjustments: [],
-            accessibility_requirements: [],
-            language_considerations: []
-          }
+          profiles: [],
+          readiness_risks: []
         },
         technology_talent: {
-          tech_enablers: {
-            available: [],
-            required: [],
-            integration_needs: []
+          technology: {
+            current_stack: [],
+            gaps: [],
+            recommendations: [],
+            data_plan: { standards: [], integrations: [] }
           },
-          talent_requirements: {
-            internal_roles: [],
-            external_support: [],
-            development_needs: []
-          },
-          limitations_impact: {
-            tech_constraints: [],
-            talent_gaps_impact: [],
-            mitigation_strategies: []
+          talent: {
+            available_roles: [],
+            gaps: [],
+            recommendations: []
           }
         },
         delivery_plan: {
@@ -83,11 +67,13 @@ function parseReport(content: string): NAReport | null {
         measurement: {
           success_metrics: [],
           assessment_strategy: [],
-          data_sources: []
+          data_sources: [],
+          learning_analytics: { levels: [], reporting_cadence: null }
         },
         budget: {
-          notes: '',
-          ranges: []
+          currency: 'USD',
+          notes: null,
+          items: []
         },
         risks: [],
         next_steps: []
@@ -268,7 +254,7 @@ export async function exportToWord(
       }
       
       // Recommended Solution
-      if (report.solution && report.solution.modalities.length > 0) {
+      if (report.solution && report.solution.delivery_modalities.length > 0) {
         sections.push(
           new Paragraph({
             text: "▎ RECOMMENDED SOLUTION",
@@ -326,14 +312,14 @@ export async function exportToWord(
           })
         ];
         
-        report.solution.modalities.forEach((m, index) => {
+        report.solution.delivery_modalities.forEach((m, index) => {
           modalityRows.push(
             new TableRow({
               children: [
                 new TableCell({
                   children: [new Paragraph({ 
                     children: [new TextRun({ 
-                      text: m.name, 
+                      text: m.modality, 
                       bold: true,
                       color: "A7DADB",
                       size: 20
@@ -385,7 +371,7 @@ export async function exportToWord(
                   size: 22
                 }),
                 new TextRun({ 
-                  text: metric,
+                  text: typeof metric === 'string' ? metric : metric.metric,
                   color: "FFFFFF",
                   size: 22
                 })

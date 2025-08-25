@@ -1,8 +1,8 @@
 export const paths = {
   home: '/',
-  portal: '/portal',
-  portalUser: '/portal/:user',
-  settings: '/portal/settings',
+  portal: '/',
+  portalUser: '/:user',
+  settings: '/settings',
   pricing: '/pricing',
   publicProfile: '/:username',
 } as const
@@ -11,7 +11,7 @@ export type AppPath = typeof paths[keyof typeof paths]
 
 export function portalUserPath(user: string): string {
   const safe = (user || 'user').toString().trim()
-  return `/portal/${encodeURIComponent(safe)}`
+  return `/${encodeURIComponent(safe)}`
 }
 
 export function publicProfilePath(username: string): string {

@@ -32,6 +32,13 @@ INSTRUCTIONS:
 - If learners have low tech savviness or limited device access, ask about simplified delivery methods, support systems, or alternative formats.
 - If learner motivation is low, explore engagement strategies, incentives, or mandatory vs. optional approaches.
 - Consider accessibility needs and language diversity when asking about content delivery and support mechanisms.
+ - Mandatory coverage for Recommended Solution sub-sections. Until fully specified, include at least one question per area (avoid simple duplication; ask confirmations/clarifiers if already answered):
+   - Delivery Modalities: preferences and constraints (synchronous vs async; cohort vs self-paced; blended ratio; session length/cadence; mobile/offline; bandwidth/device limits; classroom/on-the-job components); rationale and trade-offs.
+   - Target Audiences: segments/roles; approximate headcount/coverage %; locations/time zones; languages; accessibility needs; device/work context; time availability; mandatory vs optional learners; risks to reach/coverage.
+   - Key Competencies: competency names/frameworks; target proficiency levels; critical vs optional; prerequisite skills; assessment expectations; recertification cycles; evidence requirements (e.g., audit, manager sign-off).
+   - Content Outline: modules/topics; depth/level; prerequisites/dependencies; estimated time per module; gated vs open; optional/specialization tracks; examples/case sources; content reusability constraints; must-include/must-exclude.
+ - Choose fitting question types: multi_select/single_select for options; slider/number for coverage %, durations, ratios; calendar_date/calendar_range for key dates; textarea for rationale/constraints.
+ - Ask only for gaps; if prior answers exist, ask clarifiers or confirmations rather than repeating.
 - IMPORTANT: Output **pure JSON** matching this schema:
 {
   "title": "<short stage title>",

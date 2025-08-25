@@ -22,21 +22,19 @@ export function AppRouter() {
         <Route path={paths.pricing} element={<Pricing />} />
         <Route path={paths.publicProfile} element={<PublicProfile />} />
         
+        
         {/* Protected routes - require authentication */}
         <Route element={<ProtectedRoute />}>
-          <Route path={paths.home} element={<PortalPage />}>
-            <Route index element={<PolarisRevamped />} />
-          </Route>
           <Route path={paths.portal} element={<PortalPage />}>
             <Route index element={<PortalDashboard />} />
             <Route path="settings" element={<SettingsContent />} />
             <Route path="starmaps" element={<AllStarmaps />} />
             <Route path="starmaps/:id" element={<StarmapDetail />} />
             <Route path="discover" element={<PolarisRevamped />} />
-            <Route path="briefings" element={<Navigate to="/portal/starmaps" replace />} />
-            <Route path="summaries" element={<Navigate to="/portal/starmaps" replace />} />
+            <Route path="briefings" element={<Navigate to="/starmaps" replace />} />
+            <Route path="summaries" element={<Navigate to="/starmaps" replace />} />
           </Route>
-          <Route path={paths.portalUser} element={<PortalPage />} />
+          
         </Route>
       </Routes>
     </BrowserRouter>

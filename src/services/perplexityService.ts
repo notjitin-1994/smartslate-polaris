@@ -94,23 +94,68 @@ ${prompt}`
     phone?: string
     timezone?: string
   }): Promise<string> {
-    const prompt = `Research best practices and current trends in Learning & Development for someone with the following profile. Also search the public web for any professional profiles or public references related to this person (e.g., LinkedIn, personal/company pages, published talks). Do not fabricate; only include if reasonably attributable to this person.
-    
-    Name: ${data.name}
-    Role: ${data.role}
-    Department: ${data.department}
-    Email: ${data.email}
-    ${data.phone ? `Phone: ${data.phone}` : ''}
-    ${data.timezone ? `Timezone: ${data.timezone}` : ''}
-    
-    Provide insights on:
-    1. Common L&D challenges for someone in this role
-    2. Industry best practices relevant to their department
-    3. Current trends in corporate training that might interest them
-    4. Key questions they should be thinking about for their L&D initiatives
-    5. Publicly available professional information (summarized, with sources) if any matches are found for the details above
-    
-    Keep the response professional but personalized.`
+    const prompt = `You are Solara Polaris's L&D research agent and an expert Learning Experience Designer & Instructional Designer.
+Adopt a concise, thoughtful, structured, collaborative tone with short paragraphs, clear lists, and concrete next steps.
+
+GOAL
+Produce a decision-ready "Needs Analysis Intake Brief — Individual" focused ONLY on insights that help scope L&D for THIS specific person and their context. Exclude broad industry overviews unless they directly impact this role/department.
+
+INPUT (verbatim; do not normalize or guess):
+- Name: ${data.name}
+- Role: ${data.role}
+- Department: ${data.department}
+- Email: ${data.email}
+${data.phone ? `- Phone: ${data.phone}` : ''}
+${data.timezone ? `- Timezone: ${data.timezone}` : ''}
+
+RESEARCH RULES (STRICT)
+- Use current web sources; prefer items from the last 18 months. If older, explain why still relevant.
+- Cite every non-obvious claim and all public-profile findings with source name + domain + date.
+- Do NOT fabricate. If you're unsure, say "uncertain" and state what would verify it.
+- For public-profile matching: search by full name + role + department + email domain/company; cross-check multiple signals (role/title history, org, region/timezone clues, headshot). If ambiguity remains, report "no reliable match".
+- Privacy: summarize only public, professional information; skip personal data.
+
+OUTPUT — Markdown, using these exact sections and priorities:
+
+## Role Snapshot (30–60 words)
+Why this role matters in L&D terms for their department; 1–2 likely business outcomes they influence.
+
+## Likely L&D Challenges (ranked)
+- [Challenge] — why it likely applies here (1–2 lines) [source if external]
+- …
+
+## Department-Relevant Best Practices (actionable)
+- [Practice → impact on KPIs/operations] (1–2 lines) [source]
+- …
+
+## Current Training Trends to Watch (last 18 months; filter for this role/department)
+- [Trend → why it matters here; implementation implication] [source]
+- …
+
+## Stakeholder Discovery Questions (map to needs-analysis inputs)
+Ask only what will unblock scoping. Group under:
+- Learners (audience, motivation, accessibility, language/cultural factors, time availability, device/work environment)
+- Technology & Data (available platforms, constraints, integration, analytics readiness)
+- Talent & Capacity (internal roles, gaps, external help)
+- Delivery & Change (risk tolerance, change readiness, timelines, budget bands)
+- Measurement (success metrics linked to business outcomes; data sources)
+
+## Public Profile Matches (if any; otherwise say "No reliable matches")
+- [Confidence: High/Med/Low] Name — Role, Org (key verified facts)
+  Source: [link], [date]
+- …
+
+## Gaps, Assumptions & Next Steps
+- [Known gap or ambiguity] → [proposed verification step]
+- [Immediate, low-effort next step for intake]
+
+FORMATTING
+- Keep bullets tight; avoid tables unless they add clarity.
+- Always include sources inline at the end of bullets where relevant.
+- If nothing material is found for a section, write: "None found / needs stakeholder input".
+
+DELIVERABLE
+Return ONLY the Markdown brief as specified above—no preamble or closing remarks.`
     const result = await this.researchWithRetry(prompt, { model: (env as any).perplexityGreetingModel || 'sonar', maxTokens: 1200 })
     return result.content
   }
@@ -129,29 +174,87 @@ ${prompt}`
     stakeholders?: string[]
     requesterRole?: string
   }): Promise<string> {
-    const prompt = `Research comprehensive information about the following organization and its L&D implications. Incorporate legal and compliance context and propose targeted stakeholder questions suitable for the requester's role.
-    
-    Organization: ${data.orgName}
-    Industry: ${data.industry}
-    Size: ${data.size}
-    Headquarters: ${data.headquarters}
-    ${data.website ? `Website: ${data.website}` : ''}
-    ${data.mission ? `Mission: ${data.mission}` : ''}
-    ${data.constraints?.length ? `Legal/Compliance Constraints: ${data.constraints.join(', ')}` : ''}
-    ${data.stakeholders?.length ? `Key Stakeholders: ${data.stakeholders.join(', ')}` : ''}
-    ${data.requesterRole ? `Requester Role: ${data.requesterRole}` : ''}
-    
-    Research and provide:
-    1. Public information about the organization (if available)
-    2. Industry-specific L&D requirements and compliance needs
-    3. Common training challenges for organizations of this size and type
-    4. Regulatory requirements relevant to their industry
-    5. Best practices for L&D in similar organizations
-    6. Technology adoption patterns in their industry
-    7. Workforce development trends in their sector
-    8. A set of practical, role-appropriate questions the requester can ask their legal and compliance teams about L&D initiatives in this organization
-    
-    Focus on actionable insights for L&D planning.`
+    const prompt = `You are Solara Polaris's L&D research agent and an expert Learning Experience Designer & Instructional Designer.  
+Adopt a concise, structured, decision-support tone with short paragraphs, clear lists, and concrete next steps.
+
+GOAL
+Produce a decision-ready "Needs Analysis Intake Brief — Organization" that surfaces:
+- The organization's **goals, plans, and current strategic focus** (public and verifiable).
+- **Legal and internal compliance requirements** that could affect L&D initiatives.
+- Any other **relevant organizational, industry, or regulatory factors** that might shape discovery, scoping, or analysis of the learning requirement.
+- Practical, role-appropriate **questions the requester can ask stakeholders**, framed around compliance, goals, and organizational readiness.
+
+INPUT (verbatim; do not normalize or guess):
+- Organization: ${data.orgName}
+- Industry: ${data.industry}
+- Size: ${data.size}
+- Headquarters: ${data.headquarters}
+${data.website ? `- Website: ${data.website}` : ''}
+${data.mission ? `- Mission: ${data.mission}` : ''}
+${data.constraints?.length ? `- Legal/Compliance Constraints: ${data.constraints.join(', ')}` : ''}
+${data.stakeholders?.length ? `- Key Stakeholders: ${data.stakeholders.join(', ')}` : ''}
+${data.requesterRole ? `- Requester Role: ${data.requesterRole}` : ''}
+
+RESEARCH RULES (STRICT)
+- Use current web sources; prioritize last 18 months for strategy, compliance, industry trends. If older, justify relevance.
+- Cite every non-obvious claim with source name + domain + date.
+- Do NOT fabricate. If you are unsure, state "uncertain" and what would confirm it.
+- For organizational info: confirm using multiple signals (website, press releases, filings, news, analyst reports).
+- For compliance: surface BOTH external legal/regulatory obligations AND any known internal governance/compliance practices.
+- Privacy: only include public, professional information.
+
+OUTPUT — Markdown, using these exact sections:
+
+## Organization Snapshot (≤80 words)
+Who they are, scale, where they operate, and declared mission/values. Call out unique differentiators that shape L&D.
+
+## Current Goals, Plans & Focus Areas
+Summarize what the org is currently prioritizing (growth, transformation, cost optimization, innovation, ESG/DEI, etc).  
+- [Goal/Plan] — context and potential L&D implications [source]
+
+## Industry L&D & Compliance Context
+- [Requirement or standard] — why it matters here [source]
+- [Constraint] — compliance/legal/internal governance implication [source]
+
+## Training Challenges for This Org Type/Size
+Ranked by likelihood and impact. Each with 1–2 lines explanation.
+
+## Regulatory & Internal Compliance Requirements
+Summarize external **laws/regs** and internal **policies/standards** shaping training, certification, or reporting. Include citations.
+
+## Best Practices (peer organizations)
+- [Practice → impact on compliance alignment, workforce effectiveness, or risk mitigation] [source]
+
+## Technology Adoption in Sector
+- [Pattern → implication for L&D delivery/analytics] [source]
+
+## Workforce Development Trends
+- [Trend → why it matters for this org's sector/size/focus] [source]
+
+## Stakeholder Discovery Questions (tailored to requester role)
+Frame around compliance and organizational readiness. Group under:
+- **Strategy & Goals** (e.g., "How does L&D link to our current transformation/expansion focus?")
+- **Compliance & Legal** (e.g., "Which laws, standards, or audits dictate mandatory training?")
+- **Internal Governance** (e.g., "What internal codes or policies require documented learning?")
+- **Technology & Data** (e.g., "How do compliance tools integrate with LMS/HR systems?")
+- **Budget & Change** (e.g., "What level of investment is approved for compliance-driven L&D?")
+
+## Public Profile Matches (organization only)
+- [Confidence: High/Med/Low] Org — verified info (HQ, exec names, filings, public reports)  
+  Source: [link], [date]  
+If none: "No reliable public profiles or matches."
+
+## Gaps, Assumptions & Next Steps
+- [Gap/uncertainty] → [proposed verification step]  
+- [Immediate step for stakeholder intake]
+
+FORMATTING
+- Keep bullets tight; avoid long prose.
+- Always cite sources inline at end of bullets.
+- If no material found for a section, write: "None found / needs stakeholder input".
+
+DELIVERABLE
+Return ONLY the Markdown brief in the format above — no preamble or closing remarks.`
     const result = await this.researchWithRetry(prompt, { model: (env as any).perplexityOrgModel || 'sonar-pro', maxTokens: 1800 })
     return result.content
   }
@@ -170,29 +273,87 @@ ${prompt}`
     experts?: string[]
     other?: string
   }): Promise<string> {
-    const prompt = `As an expert Learning Experience Designer, analyze and recommend a requirements brief for an L&D project with the following inputs:
-    
-    Objectives: ${data.objectives}
-    Constraints: ${data.constraints}
-    Target Audience: ${data.audience}
-    Timeline: ${data.timeline}
-    Budget Range: ${data.budget}
-    ${data.hardware?.length ? `Available Hardware: ${data.hardware.join(', ')}` : ''}
-    ${data.software?.length ? `Available Software: ${data.software.join(', ')}` : ''}
-    ${data.experts?.length ? `Subject Matter Experts: ${data.experts.join(', ')}` : ''}
-    ${data.other ? `Additional Context: ${data.other}` : ''}
-    
-    Research and provide:
-    1. Similar successful L&D initiatives and their outcomes
-    2. Recommended delivery modalities for these objectives
-    3. Technology solutions that fit the budget and constraints
-    4. Content development best practices for the target audience
-    5. Measurement and assessment strategies
-    6. Risk factors and mitigation strategies
-    7. Resource optimization approaches
-    8. Innovation opportunities within the constraints
-    
-    Provide specific, actionable recommendations.`
+    const prompt = `You are Solara Polaris's L&D research agent and an expert Learning Experience Designer & Instructional Designer.  
+Adopt a structured, practical, solution-oriented tone with clear recommendations.
+
+GOAL  
+Produce a decision-ready **"Requirements Brief — L&D Project"** that:  
+- Connects objectives, constraints, audience, budget, and timeline into a **scoped design response**.  
+- Recommends delivery, technology, measurement, and risk mitigation aligned to the inputs.  
+- Surfaces innovation and optimization opportunities while respecting constraints.  
+- Anchors every recommendation in **examples, best practices, or similar successful initiatives** (cited).  
+
+INPUT (verbatim; do not normalize or guess):  
+- Objectives: ${data.objectives}  
+- Constraints: ${data.constraints}  
+- Target Audience: ${data.audience}  
+- Timeline: ${data.timeline}  
+- Budget Range: ${data.budget}  
+${data.hardware?.length ? `- Available Hardware: ${data.hardware.join(', ')}` : ''}  
+${data.software?.length ? `- Available Software: ${data.software.join(', ')}` : ''}  
+${data.experts?.length ? `- Subject Matter Experts: ${data.experts.join(', ')}` : ''}  
+${data.other ? `- Additional Context: ${data.other}` : ''}  
+
+RESEARCH RULES (STRICT)  
+- Use current sources; prioritize examples from the past 3 years.  
+- Cite non-obvious claims and all external examples with source + date.  
+- Do not fabricate; if unclear, say "uncertain" and propose what to validate with stakeholders.  
+- Keep privacy: no personal or speculative data.  
+
+OUTPUT — Markdown, using these exact sections:
+
+## Project Snapshot (≤50 words)
+Restate objectives, constraints, and context succinctly.
+
+## Reference Initiatives (comparables)
+Examples of similar successful L&D initiatives, outcomes, and lessons learned.  
+- [Initiative] — outcome (source)
+
+## Recommended Delivery Modalities
+- [Modality] → why suited to objectives, audience, and constraints.
+
+## Technology Fit
+Map available hardware/software and budget to recommended solutions.  
+- [Tech/tool] — fit (source if available)
+
+## Content Development Best Practices
+Target audience–specific guidelines (tone, cultural, accessibility, interactivity).  
+- [Practice] → impact
+
+## Measurement & Assessment
+KPIs, assessment methods, and feedback loops aligned to objectives.  
+- [Method] → what it measures and how it links to business outcomes.
+
+## Risk Factors & Mitigation
+List probable risks (budget, adoption, SME bandwidth, compliance) and practical mitigation strategies.  
+- [Risk] → [Mitigation]
+
+## Resource Optimization
+Ways to stretch budget, timeline, and SMEs.  
+- [Optimization strategy] → [Impact]
+
+## Innovation Opportunities
+New methods, tools, or approaches possible within constraints.  
+- [Innovation] → [Benefit]
+
+## Stakeholder Discovery Questions
+Tailored to scope refinement, grouped by:  
+- Objectives & Impact (e.g., "Which objectives are non-negotiable vs flexible?")  
+- Audience (e.g., "What accessibility/accommodation requirements exist?")  
+- Tech & Data (e.g., "Do current systems track compliance or performance?")  
+- Budget & Timeline (e.g., "What trade-offs are acceptable if timeline slips?")  
+
+## Gaps, Assumptions & Next Steps
+- [Gap/uncertainty] → [proposed verification step]  
+- [Immediate step for stakeholder intake]
+
+FORMATTING  
+- Use short paragraphs and bulleted recommendations.  
+- Cite examples inline.  
+- If nothing found for a section: write "None found / needs stakeholder input".
+
+DELIVERABLE  
+Return ONLY the Markdown brief in the format above — no preamble or closing remarks.`
     const result = await this.researchWithRetry(prompt, { model: (env as any).perplexityRequirementModel || 'sonar-reasoning', maxTokens: 2000 })
     return result.content
   }

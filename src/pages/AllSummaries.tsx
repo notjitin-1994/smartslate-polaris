@@ -119,7 +119,7 @@ export default function AllSummaries() {
           </div>
           <button
             type="button"
-            onClick={() => navigate('/portal')}
+            onClick={() => navigate('/')}
             className="btn-primary w-10 h-10 flex items-center justify-center p-0"
             disabled={summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT}
             title={summaryCount >= SAVED_LIMIT ? 'Saved limit reached' : (createdCount >= CREATION_LIMIT ? 'Creation limit reached' : 'Start a new discovery')}
@@ -169,7 +169,7 @@ export default function AllSummaries() {
           <p className="mt-2 text-sm text-white/40">Complete a Polaris discovery to see your starmaps here</p>
           <button
             type="button"
-            onClick={() => navigate('/portal')}
+            onClick={() => navigate('/')}
             className="btn-primary mt-4"
           >
             Start Discovery
@@ -213,7 +213,7 @@ export default function AllSummaries() {
       <button
         type="button"
         aria-label="New Discovery"
-        onClick={() => navigate('/portal')}
+        onClick={() => navigate('/')}
         disabled={summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT}
         className={`fixed bottom-6 right-6 z-40 rounded-full shadow-xl w-14 h-14 flex items-center justify-center bg-gradient-to-r from-primary-400 to-secondary-500 text-slate-900 hover:opacity-95 active:opacity-90 float-button ${(summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT) ? 'opacity-60 cursor-not-allowed' : ''}`}
         title={summaryCount >= SAVED_LIMIT ? 'Saved limit reached' : (createdCount >= CREATION_LIMIT ? 'Creation limit reached' : 'Start a new discovery')}

@@ -163,7 +163,7 @@ export default function Pricing() {
   // Compute per-seat price lazily inside render per tier; no top-level const needed
 
   function gotoSignup(planId: string) {
-    navigate(`/portal/settings?plan=${planId}&billing=${billing}`)
+    navigate(`/settings?plan=${planId}&billing=${billing}`)
   }
 
   return (

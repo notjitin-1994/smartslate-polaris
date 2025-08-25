@@ -1,6 +1,6 @@
 import { useRef, useState, useEffect } from 'react'
 import { callLLM } from '@/services/llmClient'
-import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle, updateSummaryEditedContent, updateSummaryPrelimReport, updateSummaryFinalContent, updateSummaryReports } from '@/services/polarisSummaryService'
+import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle, updateSummaryPrelimReport, updateSummaryFinalContent, updateSummaryReports } from '@/services/polarisSummaryService'
 import { researchGreeting, researchOrganization, researchRequirements, perplexityService } from '@/services/perplexityService'
 import RenderField from '@/polaris/needs-analysis/RenderField'
 import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
@@ -9,13 +9,17 @@ import { SolaraLodestar } from '@/components'
 import { EXPERIENCE_LEVELS } from '@/polaris/needs-analysis/experience'
 import { STAGE1_REQUESTER_FIELDS, STAGE2_ORGANIZATION_FIELDS, STAGE3_PROJECT_FIELDS } from '@/polaris/needs-analysis/three-stage-static'
 import { NA_STAGE_TITLE_PROMPT, NA_QUESTIONNAIRE_PROMPT } from '@/polaris/needs-analysis/prompts'
-import { NA_REPORT_PROMPT, type NAReport } from '@/polaris/needs-analysis/report'
+import { CUSTOM_DYNAMIC_PROMPTS } from '@/polaris/needs-analysis/customDynamicPrompts'
+import { buildFastNAReportPrompt, type NAReport } from '@/polaris/needs-analysis/report'
 import { tryExtractJson } from '@/polaris/needs-analysis/json'
 import type { NAField, NAResponseMap } from '@/polaris/needs-analysis/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { env } from '@/config/env'
 import { formatErrorMessage } from '@/lib/errors'
+import { repairNAReport, extractJsonFromText } from '@/utils/reportValidator'
+import { createReportJob } from '@/services/reportJobsService'
+import '@/utils/apiDiagnostics' // Enable console diagnostics
 
 export default function PolarisRevamped() {
   const { user } = useAuth()
@@ -58,7 +62,7 @@ export default function PolarisRevamped() {
   const [lastSavedSummaryId, setLastSavedSummaryId] = useState<string | null>(null)
   const [reportTitle, setReportTitle] = useState<string>('')
   const [savingTitle, setSavingTitle] = useState<boolean>(false)
-  const [savingEdit, setSavingEdit] = useState<boolean>(false)
+  // const [savingEdit, setSavingEdit] = useState<boolean>(false) // Not currently used
   // Preliminary report
   const [prelimMarkdown, setPrelimMarkdown] = useState<string>('')
   const [editedPrelim, setEditedPrelim] = useState<string>('')
@@ -172,22 +176,89 @@ export default function PolarisRevamped() {
   // Promise timeout helper to avoid indefinite hangs
   function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
     return new Promise((resolve, reject) => {
+      let settled = false
       const id = setTimeout(() => {
-        const err: any = new Error(`${label} timed out after ${ms}ms`)
-        err.code = 'TIMEOUT'
-        reject(err)
+        if (!settled) {
+          settled = true
+          const err: any = new Error(`${label} timed out after ${ms}ms`)
+          err.code = 'TIMEOUT'
+          reject(err)
+        }
       }, ms)
       promise.then(
         (res) => {
-          clearTimeout(id)
-          resolve(res)
+          if (!settled) {
+            settled = true
+            clearTimeout(id)
+            resolve(res)
+          }
         },
         (err) => {
-          clearTimeout(id)
-          reject(err)
+          if (!settled) {
+            settled = true
+            clearTimeout(id)
+            reject(err)
+          }
         }
       )
     })
+  }
+  
+  // Validate and fix preliminary report structure
+  function validateAndFixPreliminaryReport(report: string): string {
+    const fmt = (v: any) => (Array.isArray(v) ? v.filter(Boolean).join(', ') : (v ?? ''))
+    const audience = fmt(stage3Answers.target_audience) || 'Primary learners'
+    const objectives = fmt(stage3Answers.project_objectives) || 'Learning objectives to be defined'
+    const budget = fmt(stage3Answers.project_budget_range) || 'Budget TBD'
+    const tl = (stage3Answers.project_timeline || {}) as { start?: string; end?: string }
+    
+    // Check for required sections and add if missing
+    const requiredSections: Array<{ pattern: RegExp; content: string }> = [
+      { pattern: /##\s+Executive Summary/i, content: `## Executive Summary\n**Problem Statement:** ${objectives}\n\n**Current State:**\n- Organization requires learning solution\n\n**Root Causes:**\n- Performance gaps identified\n\n**Objectives:**\n- ${objectives}` },
+      { pattern: /##\s+Recommended Solution/i, content: `## Recommended Solution\n### Delivery Modalities\n- **Blended Learning:** Balance flexibility and engagement\n\n**Target Audiences:**\n- ${audience}\n\n**Key Competencies:**\n- Core job skills\n\n**Content Outline:**\n- Module 1: Foundations\n- Module 2: Application` },
+      { pattern: /##\s+Delivery Plan/i, content: `## Delivery Plan\n**Discovery** (2 weeks)\nGoals:\n- Finalize requirements\nActivities:\n- Stakeholder interviews\n\n### Timeline\n- **Project Window:** ${tl.start || 'TBD'} to ${tl.end || 'TBD'}\n\n### Resources\n- Project team` },
+      { pattern: /##\s+Measurement/i, content: `## Measurement\n**Success Metrics:**\n- Completion rate: 85%\n\n**Assessment Strategy:**\n- Pre/post assessments\n\n**Data Sources:**\n- LMS` },
+      { pattern: /##\s+Budget/i, content: `## Budget\nNotes: ${budget}\n- **Development:** TBD` },
+      { pattern: /##\s+Risk Mitigation/i, content: `## Risk Mitigation\n- **Risk:** Timeline constraints\n  **Mitigation:** Phased approach` },
+      { pattern: /##\s+Next Steps/i, content: `## Next Steps\n1. Validate requirements\n2. Confirm budget` }
+    ]
+    
+    let result = report
+    for (const section of requiredSections) {
+      if (!section.pattern.test(result)) {
+        result += `\n\n${section.content}`
+      }
+    }
+    
+    // Ensure Recommended Solution has all required subsections
+    const recSolMatch = result.match(/(##\s+Recommended Solution[\s\S]*?)(?=\n##\s+|$)/i)
+    if (recSolMatch) {
+      let recSol = recSolMatch[0]
+      
+      // Add Delivery Modalities if missing
+      if (!/###\s+Delivery Modalities/i.test(recSol)) {
+        recSol = recSol.replace(/(##\s+Recommended Solution)/, '$1\n### Delivery Modalities\n- **Blended Learning:** Balance flexibility and engagement')
+      }
+      
+      // Add Target Audiences if missing
+      if (!/\*\*Target Audiences?:\*\*/i.test(recSol)) {
+        recSol += `\n\n**Target Audiences:**\n- ${audience}`
+      }
+      
+      // Add Key Competencies if missing
+      if (!/\*\*Key Competencies:\*\*/i.test(recSol)) {
+        recSol += `\n\n**Key Competencies:**\n- Core competencies aligned to objectives`
+      }
+      
+      // Add Content Outline if missing
+      if (!/\*\*Content Outline:\*\*/i.test(recSol)) {
+        recSol += `\n\n**Content Outline:**\n- Module 1: Foundation\n- Module 2: Application\n- Module 3: Assessment`
+      }
+      
+      result = result.replace(recSolMatch[0], recSol)
+    }
+    
+    return result
   }
   
   // Reset all state
@@ -395,21 +466,35 @@ export default function PolarisRevamped() {
       if (greetingPromiseRef.current) { pending.push(greetingPromiseRef.current); keys.push('greet') }
       if (orgPromiseRef.current) { pending.push(orgPromiseRef.current); keys.push('org') }
       if (reqPromiseRef.current) { pending.push(reqPromiseRef.current); keys.push('req') }
-      let settled: any = null
+      
       if (pending.length) {
-        settled = await Promise.race([
-          Promise.allSettled(pending),
-          new Promise(resolve => setTimeout(resolve, 7000)),
-        ])
-        if (Array.isArray(settled)) {
-          settled.forEach((res, i) => {
-            if (res && res.status === 'fulfilled' && typeof res.value === 'string') {
-              const k = keys[i]
-              if (k === 'greet') greetingReportRef.current = res.value
-              else if (k === 'org') orgReportRef.current = res.value
-              else if (k === 'req') requirementReportRef.current = res.value
-            }
-          })
+        try {
+          // Use Promise.allSettled with timeout wrapper instead of race
+          const settled = await withTimeout(
+            Promise.allSettled(pending),
+            10000, // Give 10 seconds for research to complete
+            'Research promises'
+          ).catch(() => [])
+          
+          if (Array.isArray(settled)) {
+            settled.forEach((res, i) => {
+              if (res && res.status === 'fulfilled' && typeof res.value === 'string') {
+                const k = keys[i]
+                if (k === 'greet') {
+                  greetingReportRef.current = res.value
+                  setGreetingReport(res.value)
+                } else if (k === 'org') {
+                  orgReportRef.current = res.value
+                  setOrgReport(res.value)
+                } else if (k === 'req') {
+                  requirementReportRef.current = res.value
+                  setRequirementReport(res.value)
+                }
+              }
+            })
+          }
+        } catch (timeoutErr) {
+          console.warn('Research promises timeout, continuing with available data:', timeoutErr)
         }
       }
 
@@ -430,70 +515,270 @@ export default function PolarisRevamped() {
       const stage2Summary = `Organization: ${fmt(stage2Answers.org_name)}\nIndustry: ${fmt(stage2Answers.org_industry)}\nSize: ${fmt(stage2Answers.org_size)}\nHeadquarters: ${fmt(stage2Answers.org_headquarters)}\nWebsite: ${fmt(stage2Answers.org_website)}\nMission: ${fmt(stage2Answers.org_mission)}\nCompliance: ${fmt(stage2Answers.org_compliance)}\nStakeholders: ${fmt(stage2Answers.org_stakeholders)}`
       const stage3Summary = `Objectives: ${fmt(stage3Answers.project_objectives)}\nConstraints: ${fmt(stage3Answers.project_constraints)}\nAudience: ${fmt(stage3Answers.target_audience)}\nTimeline: ${(timeline.start || 'TBD')} to ${(timeline.end || 'TBD')}\nBudget: ${fmt(stage3Answers.project_budget_range)}\nHardware: ${fmt(stage3Answers.available_hardware)}\nSoftware: ${fmt(stage3Answers.available_software)}\nSMEs: ${fmt(stage3Answers.subject_matter_experts)}\nOther: ${fmt(stage3Answers.additional_context)}`
 
-      const prelimPrompt = `You are an expert L&D consultant. Produce a Preliminary Master Report in MARKDOWN that our viewer can parse. FOLLOW THESE RULES EXACTLY:
+      const prelimPrompt = `You are Solara Polaris's expert L&D consultant.  
+Adopt a concise, structured, and advisory tone. Your job now is to **synthesize** the earlier reports and stage summaries into a single, coherent **Preliminary Master Report** and generate dynamic follow-up questions.
 
-TOP-LEVEL HEADINGS (use these exact strings, with two leading hashes):
-## Executive Summary
-## Recommended Solution
-## Delivery Plan
-## Measurement
-## Budget
-## Risk Mitigation
-## Next Steps
+GOAL
+- Produce a clean, Markdown-formatted report using the exact headings and formatting rules below.  
+- Integrate and reconcile the content from the three prior reports (greeting/individual, organization, project requirements) plus the stage summaries.  
+- Analyze overlaps, contradictions, and gaps — do not simply copy/paste.  
+- Create **new, stage-driving questions** that logically follow from the analysis and will unblock deeper discovery/scoping.  
 
-FORMATTING REQUIREMENTS:
-- Under Executive Summary, include lines and lists in this exact pattern:
-  **Problem Statement:** <one sentence>
-  **Current State:**\n- <bullet>\n- <bullet>
-  **Root Causes:**\n- <bullet>\n- <bullet>
-  **Objectives:**\n- <bullet>\n- <bullet>
-- Under Recommended Solution:
-  ### Delivery Modalities\n- **<Modality Name>:** <reason>
-  **Target Audiences:**\n- <bullet>
-  **Key Competencies:**\n- <bullet>
-  **Content Outline:**\n- <bullet>
-- Under Delivery Plan:
-  **<Phase Name>** (<number> weeks)\nGoals:\n- <bullet>\nActivities:\n- <bullet>
-  ### Timeline\n- **<Label>:** yyyy-mm-dd to yyyy-mm-dd
-  ### Resources\n- <role>
-- Under Measurement:
-  **Success Metrics:**\n- <bullet>
-  **Assessment Strategy:**\n- <bullet>
-  **Data Sources:**\n- <bullet>
-- Under Budget:
-  Notes: <one sentence>
-  - **<Item>:** <low> - <high>
-- Under Risk Mitigation:
-  - **Risk:** <text>\n  **Mitigation:** <text>
-- Under Next Steps:
-  1. <short step>\n  2. <short step>
-
-Use the inputs below. Be specific and concise. If research is thin, use the stage answers directly.
-
+INPUTS (verbatim; do not normalize):
 ---
-GREETING REPORT:\n${greetingText}
+GREETING REPORT:
+${greetingText}
 
-ORGANIZATION REPORT:\n${orgText}
+ORGANIZATION REPORT:
+${orgText}
 
-REQUIREMENTS REPORT:\n${reqText}
+REQUIREMENTS REPORT:
+${reqText}
 
 ---
 STAGE ANSWERS SUMMARY (authoritative user-provided data):
-STAGE 1 – REQUESTER & ORG CONTACTS:\n${stage1Summary}
+STAGE 1 – REQUESTER & ORG CONTACTS:
+${stage1Summary}
 
-STAGE 2 – ORGANIZATION DETAILS:\n${stage2Summary}
+STAGE 2 – ORGANIZATION DETAILS:
+${stage2Summary}
 
-STAGE 3 – PROJECT SCOPING:\n${stage3Summary}
-`
+STAGE 3 – PROJECT SCOPING:
+${stage3Summary}
 
-      // Generate prelim with Sonar Reasoning via Perplexity
+REASONING RULES
+- Compare across reports; surface convergences, contradictions, and gaps.  
+- If evidence is thin in one report, use authoritative stage answers instead.  
+- If still unclear, mark as "Uncertain — requires stakeholder input".  
+- Keep recommendations **specific and actionable**.  
+- Do not fabricate; ground every claim in provided or well-established L&D practice.  
+- Mandatory sections: Always include "## Recommended Solution" with "### Delivery Modalities", "**Target Audiences:**", "**Key Competencies:**", and "**Content Outline:**" — include at least one bullet each; if unknown, write "TBD — requires stakeholder input".  
+
+- Compliance self-check: Before responding, verify these top-level headings exist: "## Executive Summary", "## Recommended Solution", "## Delivery Plan", "## Measurement", "## Budget", "## Risk Mitigation", "## Next Steps". Verify within "Recommended Solution" that "### Delivery Modalities", "**Target Audiences:**", "**Key Competencies:**", and "**Content Outline:**" exist with ≥1 bullet each. If any are missing or empty, revise the report and re-verify until compliant. Do not include this check text in the output.  
+
+OUTPUT — Markdown, using these exact top-level headings and formats:
+
+## Executive Summary
+**Problem Statement:** <one sentence>  
+**Current State:**  
+- <bullet>  
+- <bullet>  
+**Root Causes:**  
+- <bullet>  
+- <bullet>  
+**Objectives:**  
+- <bullet>  
+- <bullet>
+
+## Recommended Solution
+### Delivery Modalities
+- **<Modality>:** <reason>  
+**Target Audiences:**  
+- <bullet>  
+**Key Competencies:**  
+- <bullet>  
+**Content Outline:**  
+- <bullet>  
+
+## Delivery Plan
+**<Phase Name>** (<number> weeks)  
+Goals:  
+- <bullet>  
+Activities:  
+- <bullet>  
+
+### Timeline
+- **<Label>:** yyyy-mm-dd to yyyy-mm-dd  
+
+### Resources
+- <role>  
+
+## Measurement
+**Success Metrics:**  
+- <bullet>  
+**Assessment Strategy:**  
+- <bullet>  
+**Data Sources:**  
+- <bullet>  
+
+## Budget
+Notes: <one sentence>  
+- **<Item>:** <low> – <high>  
+
+## Risk Mitigation
+- **Risk:** <text>  
+  **Mitigation:** <text>  
+
+## Next Steps
+1. <short step>  
+2. <short step>  
+
+---
+## Dynamic Stage Questions
+Generate 4–6 precise, role-appropriate discovery questions that arise from your analysis.  
+- They must target **remaining gaps, contradictions, or compliance/strategy dependencies** identified above.  
+- Phrase them as clear stakeholder prompts (e.g., "Which compliance audits require evidence of learner certification?").  
+
+DELIVERABLE
+Return ONLY the Markdown report in the structure above — no preamble or closing remarks.`
+
+      // Generate prelim via async job (ticket + polling) to avoid client timeouts
       const reasoningModel = (env as any).perplexityPrelimModel || 'sonar reasoning'
-      const prelimRes = await withTimeout(
-        perplexityService.research(prelimPrompt, { model: reasoningModel, temperature: 0.2, maxTokens: 2600 }),
-        60000,
-        'Preliminary report generation'
-      )
-      let prelim = (prelimRes.content || '').trim()
+      const idemKey = `prelim:${(stage2Answers as any)?.org_name || 'org'}:${(stage1Answers as any)?.requester_email || 'user'}:${(stage3Answers as any)?.project_timeline?.start || ''}-${(stage3Answers as any)?.project_timeline?.end || ''}`
+      let status_url: string | null = null
+      try {
+        const submitRes = await fetch('/api/reportJobs', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idemKey },
+          body: JSON.stringify({ prompt: prelimPrompt, model: reasoningModel, temperature: 0.2, max_tokens: 2600 })
+        })
+        if (submitRes.ok) {
+          const body = await submitRes.json()
+          status_url = body?.status_url || null
+        } else {
+          console.warn('Preliminary job start failed with status', submitRes.status)
+        }
+      } catch (err) {
+        console.warn('Preliminary job start error (dev environment likely):', err)
+      }
+
+      // Show a quick skeleton prelim immediately while polling
+      {
+        const fmt = (v: any) => (Array.isArray(v) ? v.filter(Boolean).join(', ') : (v ?? ''))
+        const tl = (stage3Answers.project_timeline || {}) as { start?: string; end?: string }
+        const objectives = fmt(stage3Answers.project_objectives) || 'Objectives to be finalized.'
+        const audience = fmt(stage3Answers.target_audience) || 'Primary learners'
+        const budget = fmt(stage3Answers.project_budget_range) || 'TBD'
+        const tlStart = tl.start || 'TBD'
+        const tlEnd = tl.end || 'TBD'
+        const skeleton = `## Executive Summary
+**Problem Statement:** ${objectives}
+
+**Current State:**
+- Based on organization details and research above
+
+**Root Causes:**
+- To be validated with stakeholders
+
+**Objectives:**
+- ${objectives}
+
+## Recommended Solution
+### Delivery Modalities
+- **Blended Learning:** Balance flexibility and impact
+
+**Target Audiences:**
+- ${audience}
+
+**Key Competencies:**
+- Align to business goals
+
+**Content Outline:**
+- High-level modules derived from requirements
+
+## Delivery Plan
+**Discovery & Alignment** (2 weeks)
+Goals:
+- Confirm scope and constraints
+Activities:
+- Stakeholder workshops
+
+### Timeline
+- **Project Window:** ${tlStart} to ${tlEnd}
+
+### Resources
+- Core project team
+
+## Measurement
+**Success Metrics:**
+- Baseline and target metrics TBD
+
+**Assessment Strategy:**
+- Formative and summative checks
+
+**Data Sources:**
+- LMS and operational systems
+
+## Budget
+Notes: ${budget}
+- **Development:** TBD - TBD
+
+## Risk Mitigation
+- **Risk:** Incomplete inputs
+  **Mitigation:** Schedule follow-ups to fill gaps
+
+## Next Steps
+1. Validate requirements with stakeholders
+2. Confirm scope, timeline, and constraints`
+        setPrelimMarkdown(skeleton)
+        setEditedPrelim(skeleton)
+        setActive('prelim')
+      }
+
+      // Poll for completion with backoff, updating loader progress (only if job started)
+      let delayMs = 2000
+      let prelimText = ''
+      const maxPollTime = 60000 // Maximum 60 seconds for polling
+      const pollStartTime = Date.now()
+      
+      if (status_url) {
+        for (let attempt = 0; attempt < 30; attempt++) {
+          // Check if we've exceeded max polling time
+          if (Date.now() - pollStartTime > maxPollTime) {
+            console.warn('Polling timeout reached, falling back to direct generation')
+            break
+          }
+          
+          await new Promise(resolve => setTimeout(resolve, delayMs))
+          
+          try {
+            const statusRes = await fetch(status_url)
+            if (statusRes.ok) {
+              const statusData = await statusRes.json()
+              if (typeof statusData.percent === 'number' || typeof statusData.eta_seconds === 'number') {
+                setLoader(prev => ({ ...prev, message: 'Drafting your preliminary plan…', progress: typeof statusData.percent === 'number' ? statusData.percent : prev.progress, etaSeconds: typeof statusData.eta_seconds === 'number' ? statusData.eta_seconds : prev.etaSeconds }))
+              }
+              if (statusData.status === 'succeeded') { 
+                prelimText = (statusData.result || '').trim()
+                console.log('Preliminary report generated successfully via job')
+                break 
+              }
+              if (statusData.status === 'failed') {
+                console.error('Job failed:', statusData.error)
+                break // Fall back to direct generation
+              }
+            } else {
+              console.warn('Job status check failed:', statusRes.status)
+              break // Fall back to direct generation
+            }
+          } catch (pollError) {
+            console.warn('Polling error:', pollError)
+            break // Fall back to direct generation
+          }
+          
+          delayMs = Math.min(Math.floor(delayMs * 1.3), 5000) // Less aggressive backoff, cap at 5s
+        }
+      }
+      if (!prelimText) {
+        // Fallback: try direct generation to avoid empty prelim in dev or if job router is unavailable
+        try {
+          setLoader(prev => ({ ...prev, message: 'Finalizing preliminary plan…', progress: Math.max(prev.progress, 85) }))
+          const direct = await withTimeout(
+            perplexityService.research(prelimPrompt, { model: reasoningModel, temperature: 0.2, maxTokens: 2600 }),
+            45000, // Reduced timeout for fallback
+            'Preliminary report (fallback)'
+          )
+          prelimText = (direct.content || '').trim()
+          console.log('Preliminary report generated via direct fallback')
+        } catch (e) {
+          console.warn('Preliminary direct generation failed; retaining skeleton.', e)
+          // Keep the skeleton as is
+        }
+      }
+      let prelim = prelimText || editedPrelim || prelimMarkdown
+      
+      // Validate and fix prelim structure
+      prelim = validateAndFixPreliminaryReport(prelim)
       // Ensure viewer-compatible markdown if model returns a plain summary
       const hasExecutive = /(^|\n)##\s+Executive Summary/.test(prelim)
       if (!hasExecutive) {
@@ -564,6 +849,72 @@ Notes: ${budget}
 1. Validate requirements with stakeholders
 2. Confirm scope, timeline, and constraints`
       }
+      {
+        // Enforce Recommended Solution sub-sections if the model omitted or left them empty
+        const fmt = (v: any) => (Array.isArray(v) ? v.filter(Boolean).join(', ') : (v ?? ''))
+        const audienceFallback = fmt(stage3Answers.target_audience) || 'TBD — requires stakeholder input'
+        const defaultModalityLines = [
+          '- **Blended Learning:** Balance flexibility and impact',
+          '- **Virtual Instructor-Led:** Real-time collaboration across time zones'
+        ]
+        const defaultCompetencyLines = ['- Align to business goals']
+        const defaultOutlineLines = ['- Module 1: Foundations', '- Module 2: Application']
+
+        let out = prelim
+
+        // Ensure Recommended Solution section exists
+        if (!/(^|\n)##\s+Recommended Solution/.test(out)) {
+          const insertionIdx = out.indexOf('\n## Delivery Plan') >= 0 ? out.indexOf('\n## Delivery Plan') : out.length
+          const block = `\n## Recommended Solution\n### Delivery Modalities\n${defaultModalityLines.join('\n')}\n\n**Target Audiences:**\n- ${audienceFallback}\n\n**Key Competencies:**\n${defaultCompetencyLines.join('\n')}\n\n**Content Outline:**\n${defaultOutlineLines.join('\n')}\n\n`
+          out = out.slice(0, insertionIdx) + block + out.slice(insertionIdx)
+        }
+
+        // Ensure Delivery Modalities heading and at least one bullet
+        if (!/(^|\n)###\s+Delivery Modalities/.test(out)) {
+          out = out.replace(/(^|\n)##\s+Recommended Solution\s*\n/, `$&### Delivery Modalities\n${defaultModalityLines.join('\n')}\n\n`)
+        } else {
+          const deliveryBlock = /(^|\n)###\s+Delivery Modalities([\s\S]*?)(?=\n\*\*Target Audiences:\*\*|\n##\s+|\n###\s+|$)/
+          const m = out.match(deliveryBlock)
+          if (m && !/\n-\s+/.test(m[2])) {
+            out = out.replace(deliveryBlock, (_all, p1) => `${p1}### Delivery Modalities\n${defaultModalityLines.join('\n')}\n`)
+          }
+        }
+
+        // Ensure Target Audiences with at least one bullet
+        if (!/(^|\n)\*\*Target Audiences:\*\*/.test(out)) {
+          out = out.replace(/(^|\n)###\s+Delivery Modalities[\s\S]*?(?=\n##\s+|$)/, (m) => `${m}\n**Target Audiences:**\n- ${audienceFallback}\n`)
+        } else {
+          const audBlock = /(^|\n)\*\*Target Audiences:\*\*([\s\S]*?)(?=\n\*\*Key Competencies:\*\*|\n\*\*Content Outline:\*\*|\n##\s+|\n###\s+|$)/
+          const m2 = out.match(audBlock)
+          if (m2 && !/\n-\s+/.test(m2[2])) {
+            out = out.replace(audBlock, `$1**Target Audiences:**\n- ${audienceFallback}\n`)
+          }
+        }
+
+        // Ensure Key Competencies with at least one bullet
+        if (!/(^|\n)\*\*Key Competencies:\*\*/.test(out)) {
+          out = out.replace(/(^|\n)\*\*Target Audiences:\*\*[\s\S]*?(?=\n\*\*Content Outline:\*\*|\n##\s+|$)/, (m) => `${m}\n**Key Competencies:**\n${defaultCompetencyLines.join('\\n')}\n`)
+        } else {
+          const compBlock = /(^|\n)\*\*Key Competencies:\*\*([\s\S]*?)(?=\n\*\*Content Outline:\*\*|\n##\s+|\n###\s+|$)/
+          const m3 = out.match(compBlock)
+          if (m3 && !/\n-\s+/.test(m3[2])) {
+            out = out.replace(compBlock, `$1**Key Competencies:**\n${defaultCompetencyLines.join('\\n')}\n`)
+          }
+        }
+
+        // Ensure Content Outline with at least one bullet
+        if (!/(^|\n)\*\*Content Outline:\*\*/.test(out)) {
+          out = out.replace(/(^|\n)\*\*Key Competencies:\*\*[\s\S]*?(?=\n##\s+|$)/, (m) => `${m}\n**Content Outline:**\n${defaultOutlineLines.join('\\n')}\n`)
+        } else {
+          const outlineBlock = /(^|\n)\*\*Content Outline:\*\*([\s\S]*?)(?=\n##\s+|\n###\s+|$)/
+          const m4 = out.match(outlineBlock)
+          if (m4 && !/\n-\s+/.test(m4[2])) {
+            out = out.replace(outlineBlock, `$1**Content Outline:**\n${defaultOutlineLines.join('\\n')}\n`)
+          }
+        }
+
+        prelim = out
+      }
       setPrelimMarkdown(prelim)
       setEditedPrelim(prelim)
       setActive('prelim')
@@ -606,13 +957,11 @@ Notes: ${budget}
         ? `PRELIMINARY MASTER REPORT (user-reviewed):\n${editedPrelim}\n\n(Original research inputs below for reference)\n\nGREETING REPORT:\n${greetingReport}\n\nORGANIZATION REPORT:\n${orgReport}\n\nREQUIREMENTS REPORT:\n${requirementReport}\n`
         : `RESEARCH REPORTS:\n\nGREETING REPORT:\n${greetingReport}\n\nORGANIZATION REPORT:\n${orgReport}\n\nREQUIREMENTS REPORT:\n${requirementReport}\n`
       
-      // Generate 2-4 dynamic stages based on complexity
-      const numStages = Math.min(4, Math.max(2, Math.ceil(Object.keys({...stage1Answers, ...stage2Answers, ...stage3Answers}).length / 10)))
+      // Always begin with up to 3 custom dynamic stages (if provided), then add auto-generated ones
       const stages: typeof dynamicStages = []
-      
-      for (let i = 0; i < numStages; i++) {
-        const stageNum = i + 2 // Dynamic stages start at 2
-        
+
+      // Helper to generate one stage (title + questions) given a base prompt body
+      async function generateOneStage(stageNum: number, extraInstruction?: string) {
         // Collect all previous answers
         const allPreviousAnswers = {
           ...stage1Answers,
@@ -620,43 +969,78 @@ Notes: ${budget}
           ...stage3Answers,
           ...stages.reduce((acc, s) => ({ ...acc, ...s.answers }), {})
         }
-        
-        // Generate title
+
+        // Gather prior questions for context
+        const priorQuestions = stages.flatMap(s => s.questions?.map(q => ({ id: q.id, label: q.label, type: (q as any).type })) || [])
+        const priorAnswers = stages.reduce((acc, s) => ({ ...acc, ...s.answers }), {})
+
+        // Generate title first
         const titlePrompt = `${NA_STAGE_TITLE_PROMPT(experienceLevel!, stageNum as any, allPreviousAnswers)}
         
 RESEARCH CONTEXT:
-${researchContext}`
-        
+${researchContext}
+
+PRIOR QUESTIONS: ${JSON.stringify(priorQuestions)}
+PRIOR ANSWERS: ${JSON.stringify(priorAnswers)}`
+
         const titleRes = await withTimeout(
           callLLM([{ role: 'user', content: titlePrompt }]),
           30000,
           `Dynamic stage ${stageNum} title`
         )
         const stageTitle = titleRes.content.trim()
-        
-        // Generate questions
-        const questionsPrompt = `${NA_QUESTIONNAIRE_PROMPT(experienceLevel!, stageNum as any, 
-          { ...stage1Answers, ...stage2Answers, ...stage3Answers }, 
-          stages.reduce((acc, s) => ({ ...acc, ...s.answers }), {}))}
-        
+
+        // Generate questions JSON
+        const questionsPrompt = `${NA_QUESTIONNAIRE_PROMPT(
+          experienceLevel!,
+          stageNum as any,
+          { ...stage1Answers, ...stage2Answers, ...stage3Answers },
+          stages.reduce((acc, s) => ({ ...acc, ...s.answers }), {})
+        )}
+
 RESEARCH CONTEXT FOR INFORMED QUESTIONS:
 ${researchContext}
 
-Create questions that leverage the research insights to ask more targeted, relevant questions.`
-        
+GATHERED CONTEXT:
+- PRIOR QUESTIONS: ${JSON.stringify(priorQuestions)}
+- PRIOR ANSWERS: ${JSON.stringify(priorAnswers)}
+${extraInstruction ? `
+CUSTOM INSTRUCTION:
+${extraInstruction}
+` : ''}
+`
+
         const res = await withTimeout(
           callLLM([{ role: 'user', content: questionsPrompt }]),
           45000,
           `Dynamic stage ${stageNum} questions`
         )
         const json = JSON.parse(tryExtractJson(res.content))
-        
         stages.push({
           title: json.title || stageTitle,
           questions: json.questions || [],
           answers: {}
         })
       }
+
+      // 1) Up to four custom stages first (will run in order provided)
+      const customCount = Math.min(4, CUSTOM_DYNAMIC_PROMPTS.length)
+      for (let i = 0; i < customCount; i++) {
+        const stageNum = i + 2 // dynamic stages start at 2
+        await generateOneStage(stageNum, CUSTOM_DYNAMIC_PROMPTS[i])
+      }
+
+      // 2) Auto-generated stages to reach 2-4 total based on complexity
+      const targetTotal = Math.min(4, Math.max(2, Math.ceil(Object.keys({
+        ...stage1Answers, ...stage2Answers, ...stage3Answers
+      }).length / 10)))
+      let currentStageNum = customCount + 2
+      while (stages.length < targetTotal) {
+        await generateOneStage(currentStageNum)
+        currentStageNum += 1
+      }
+      
+      // Done building stages
       
       setDynamicStages(stages)
       setActive('dynamic')
@@ -783,7 +1167,7 @@ Create questions that leverage the research insights to ask more targeted, relev
         .join('\n\n')
 
       // Include prelim, dynamic Q&A, research, and stage answers in final generation
-      const enhancedPrompt = `${NA_REPORT_PROMPT(experienceLevel!, allAnswers)}
+      const enhancedPrompt = `${buildFastNAReportPrompt(experienceLevel!, allAnswers)}
 
 PRELIMINARY MASTER REPORT (user-confirmed):
 ${editedPrelim || prelimMarkdown}
@@ -817,26 +1201,348 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
       // Strong system instruction for Claude (Anthropic). We explicitly target Anthropic with fallback to OpenAI.
       const systemPrompt = `You are an expert Learning Experience Designer and Instructional Designer with decades of hands-on industry experience. You have deep knowledge of past, current, and emerging learning technologies, and you apply principles from cognitive psychology, human factors, and behavior change. Produce pragmatic, decision-ready L&D deliverables that align with business outcomes and constraints.`
 
-      // Create final report with Sonar Reasoning via Perplexity
-      const finalModel = (env as any).perplexityFinalModel || 'sonar reasoning'
-      const res = await withTimeout(
-        perplexityService.research(`${systemPrompt}\n\n${enhancedPrompt}`, { model: finalModel, temperature: 0.2, maxTokens: 4000 }),
-        90000,
-        'Final report generation'
-      )
+      // Create final report with job-based approach (like preliminary)
+      const finalModel = (env as any).perplexityFinalModel || 'sonar-reasoning'
+      const fallbackModel = 'sonar-pro' // Faster model for fallback
+      
+      // First, try with job-based approach
+      let finalReportText = ''
+      const jobIdemKey = `final:${(stage2Answers as any)?.org_name || 'org'}:${Date.now()}`
+      let jobStatusUrl: string | null = null
+      
+      try {
+        console.log('Submitting final report job with model:', finalModel)
+        
+        // Try database-backed job system first
+        const useDatabase = true // Set to false to use in-memory system
+        let jobId: string | null = null
+        
+        if (useDatabase) {
+          // Create job in database
+          const { data: job, error } = await createReportJob({
+            job_id: `job_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+            summary_id: lastSavedSummaryId || undefined,
+            status: 'queued',
+            model: finalModel,
+            prompt: `${systemPrompt}\n\n${enhancedPrompt}`.substring(0, 10000),
+            temperature: 0.2,
+            max_tokens: 4000,
+            idempotency_key: jobIdemKey,
+            metadata: { type: 'final_report', stage: 'polaris' }
+          })
+          
+          if (!error && job) {
+            jobId = job.job_id
+            jobStatusUrl = `/api/reportJobsDb?job_id=${job.job_id}`
+            console.log('Final report job created in database:', jobId)
+            
+            // Trigger job execution via API
+            fetch('/api/reportJobsDb', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Idempotency-Key': jobIdemKey },
+              body: JSON.stringify({ 
+                prompt: `${systemPrompt}\n\n${enhancedPrompt}`, 
+                model: finalModel, 
+                temperature: 0.2, 
+                max_tokens: 4000,
+                summary_id: lastSavedSummaryId,
+                user_id: user?.id
+              })
+            }).catch(err => console.warn('Job trigger failed:', err))
+          } else {
+            console.warn('Database job creation failed, falling back to in-memory:', error)
+            // Fall back to in-memory system
+            const submitRes = await fetch('/api/reportJobs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Idempotency-Key': jobIdemKey },
+              body: JSON.stringify({ 
+                prompt: `${systemPrompt}\n\n${enhancedPrompt}`, 
+                model: finalModel, 
+                temperature: 0.2, 
+                max_tokens: 4000 
+              })
+            })
+            if (submitRes.ok) {
+              const body = await submitRes.json()
+              jobStatusUrl = body?.status_url || null
+            }
+          }
+        } else {
+          // Use in-memory system
+          const submitRes = await fetch('/api/reportJobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': jobIdemKey },
+            body: JSON.stringify({ 
+              prompt: `${systemPrompt}\n\n${enhancedPrompt}`, 
+              model: finalModel, 
+              temperature: 0.2, 
+              max_tokens: 4000 
+            })
+          })
+          if (submitRes.ok) {
+            const body = await submitRes.json()
+            jobStatusUrl = body?.status_url || null
+          }
+        }
+        
+        if (jobId || jobStatusUrl) {
+          console.log('Final report job submitted, polling for results...')
+        } else {
+          console.warn('Final report job submission failed')
+        }
+      } catch (err) {
+        console.warn('Final report job submission error:', err)
+      }
+      
+      // Check if using reasoning model (which takes longer)
+      const isReasoningModel = finalModel.toLowerCase().includes('reasoning')
+      
+      // Poll for job completion (extend time for reasoning models)
+      if (jobStatusUrl) {
+        const pollStartTime = Date.now()
+        const maxPollTime = isReasoningModel ? 90000 : 45000 // 90s for reasoning, 45s for others
+        let pollDelay = 2000
+        
+        // Option to enable async mode (don't wait, check later)
+        const asyncMode = isReasoningModel && localStorage.getItem('polaris_async_mode') === 'true'
+        
+        if (asyncMode) {
+          // Store job info and return placeholder
+          console.log('Async mode enabled for reasoning model, will check status later')
+          localStorage.setItem(`polaris_job_${lastSavedSummaryId || 'temp'}`, jobStatusUrl)
+          
+          // Return a placeholder that tells user to check back
+          finalReportText = JSON.stringify({
+            summary: {
+              problem_statement: 'Report is being generated in the background',
+              current_state: ['Your comprehensive report is being created using advanced AI'],
+              root_causes: ['This process typically takes 1-2 minutes'],
+              objectives: ['Check back shortly or refresh the page to see your completed report'],
+              assumptions: [],
+              unknowns: [],
+              confidence: 1.0
+            },
+            _async_job: jobStatusUrl,
+            _message: 'Your report is being generated. This page will auto-refresh when complete.'
+          })
+        } else {
+          // Normal polling mode
+          for (let attempt = 0; attempt < (isReasoningModel ? 45 : 25); attempt++) {
+            if (Date.now() - pollStartTime > maxPollTime) {
+              console.warn('Final report polling timeout, trying fallback')
+              break
+            }
+            
+            await new Promise(resolve => setTimeout(resolve, pollDelay))
+            
+            try {
+              const statusRes = await fetch(jobStatusUrl)
+              if (statusRes.ok) {
+                const statusData = await statusRes.json()
+                if (statusData.status === 'succeeded') {
+                  finalReportText = (statusData.result || '').trim()
+                  console.log('Final report generated via job')
+                  break
+                }
+                if (statusData.status === 'failed') {
+                  console.error('Final report job failed:', statusData.error)
+                  break
+                }
+              }
+            } catch (pollError) {
+              console.warn('Final report polling error:', pollError)
+              break
+            }
+            
+            pollDelay = Math.min(pollDelay * 1.2, 4000) // Cap at 4s
+          }
+        }
+      }
+      
+      // Fallback 1: Try with faster model
+      if (!finalReportText) {
+        try {
+          console.log('Trying fallback with faster model:', fallbackModel)
+          setLoader(prev => ({ ...prev, message: 'Optimizing report generation...', progress: 70 }))
+          
+          const fallbackRes = await withTimeout(
+            perplexityService.research(`${systemPrompt}\n\n${enhancedPrompt}`, { 
+              model: fallbackModel, 
+              temperature: 0.2, 
+              maxTokens: 3500 
+            }),
+            30000, // 30 second timeout for faster model
+            'Final report (fast model)'
+          )
+          finalReportText = (fallbackRes.content || '').trim()
+          console.log('Final report generated with fallback model')
+        } catch (fallbackError) {
+          console.error('Fallback model also failed:', fallbackError)
+        }
+      }
+      
+      // Fallback 2: Use simplified prompt with base model
+      if (!finalReportText) {
+        try {
+          console.log('Using simplified prompt with base model')
+          setLoader(prev => ({ ...prev, message: 'Generating simplified report...', progress: 80 }))
+          
+          // Reduce prompt size by removing some context
+          const simplifiedPrompt = buildFastNAReportPrompt(experienceLevel!, allAnswers)
+          
+          const simpleRes = await withTimeout(
+            perplexityService.research(simplifiedPrompt, { 
+              model: 'sonar', 
+              temperature: 0.3, 
+              maxTokens: 3000 
+            }),
+            20000, // 20 second timeout for base model
+            'Final report (simplified)'
+          )
+          finalReportText = (simpleRes.content || '').trim()
+          console.log('Final report generated with simplified prompt')
+        } catch (simpleError) {
+          console.error('Simplified prompt also failed:', simpleError)
+        }
+      }
+      
+      // Fallback 3: Try with minimal prompt
+      if (!finalReportText) {
+        try {
+          console.log('Using minimal prompt as last resort')
+          setLoader(prev => ({ ...prev, message: 'Creating report with minimal data...', progress: 85 }))
+          
+          // Ultra-minimal prompt with just essentials
+          const minimalPrompt = `Create a brief L&D report JSON for:
+- Organization: ${stage2Answers.org_name || 'Company'}
+- Objective: ${stage3Answers.project_objectives || 'Training initiative'}
+- Audience: ${stage3Answers.target_audience || 'Employees'}
+- Budget: ${stage3Answers.project_budget_range || 'TBD'}
+
+Return ONLY valid JSON matching the NAReport schema with these sections: summary, solution, learner_analysis, technology_talent, delivery_plan, measurement, budget, risks, next_steps.`
+          
+          const minimalRes = await withTimeout(
+            perplexityService.research(minimalPrompt, { 
+              model: 'sonar', 
+              temperature: 0.5, 
+              maxTokens: 2000 
+            }),
+            10000, // 10 second timeout
+            'Final report (minimal)'
+          )
+          finalReportText = (minimalRes.content || '').trim()
+          console.log('Final report generated with minimal prompt')
+        } catch (minimalError) {
+          console.error('Minimal prompt also failed:', minimalError)
+        }
+      }
+      
+      // Fallback 4: Test API connectivity first
+      if (!finalReportText) {
+        try {
+          console.log('Testing API connectivity...')
+          const testRes = await withTimeout(
+            perplexityService.research('Return "OK"', { 
+              model: 'sonar', 
+              temperature: 0, 
+              maxTokens: 10 
+            }),
+            5000,
+            'API connectivity test'
+          )
+          console.log('API test response:', testRes)
+        } catch (testError: any) {
+          console.error('API connectivity test failed:', testError)
+          if (testError.code === 'TIMEOUT') {
+            setError('Perplexity API is not responding. Please check your internet connection or API status.')
+          } else {
+            setError(`API Error: ${testError.message || 'Unknown error'}. Please check your API key and credits.`)
+          }
+        }
+      }
+      
+      // Ultimate fallback: Generate report locally without API
+      if (!finalReportText) {
+        console.warn('All API attempts failed. Generating local report...')
+        setLoader(prev => ({ ...prev, message: 'Generating report locally...', progress: 90 }))
+        
+        // Generate a comprehensive report using only the data we have
+        const localReport = createFallbackReport()
+        
+        // Add dynamic answers to the report
+        if (dynamicStages.length > 0) {
+          const dynamicInsights = dynamicStages.map(stage => 
+            stage.questions.map(q => {
+              const answer = stage.answers[q.id]
+              return answer ? `${q.label}: ${Array.isArray(answer) ? answer.join(', ') : answer}` : null
+            }).filter(Boolean).join('; ')
+          ).filter(Boolean).join(' | ')
+          
+          if (dynamicInsights && localReport.summary) {
+            localReport.summary.current_state.push(`Additional insights: ${dynamicInsights.substring(0, 200)}`)
+          }
+        }
+        
+        finalReportText = JSON.stringify(localReport)
+        console.log('Using locally generated fallback report')
+        setError('Note: Report was generated offline due to API connectivity issues. Some advanced analysis may be limited.')
+      }
+      
+      const res = { content: finalReportText }
       
       let reportJson: NAReport
       try {
-        const extractedJson = tryExtractJson(res.content)
-        reportJson = JSON.parse(extractedJson) as NAReport
+        // Use improved JSON extraction
+        const extractedJson = extractJsonFromText(res.content)
+        console.log('Extracted JSON length:', extractedJson.length)
+        
+        // Try to parse the JSON
+        let parsedJson: any
+        try {
+          parsedJson = JSON.parse(extractedJson)
+        } catch (jsonError) {
+          console.error('JSON parse error:', jsonError)
+          console.log('First 500 chars of extracted:', extractedJson.substring(0, 500))
+          throw new Error('Invalid JSON format')
+        }
         
         // Validate report structure
-        if (!reportJson || typeof reportJson !== 'object' || !reportJson.summary?.problem_statement) {
-          throw new Error('Invalid report structure')
+        if (!parsedJson || typeof parsedJson !== 'object') {
+          throw new Error('Report is not an object')
         }
+        
+        if (!parsedJson.summary) {
+          console.warn('Missing summary section, adding default')
+          parsedJson.summary = {
+            problem_statement: stage3Answers.project_objectives as string || 'Learning initiative',
+            current_state: ['Assessment in progress'],
+            root_causes: ['To be determined'],
+            objectives: ['Improve performance'],
+            assumptions: [],
+            unknowns: [],
+            confidence: 0.5
+          }
+        }
+        
+        if (!parsedJson.summary.problem_statement) {
+          parsedJson.summary.problem_statement = stage3Answers.project_objectives as string || 'Learning initiative required'
+        }
+        
+        // Use the repair function to ensure all required sections
+        reportJson = repairNAReport(parsedJson, {
+          objectives: stage3Answers.project_objectives as string,
+          audience: stage3Answers.target_audience as string,
+          budget: stage3Answers.project_budget_range as string,
+          timeline: stage3Answers.project_timeline as { start?: string; end?: string }
+        })
+        
+        // Additional validation
+        reportJson = ensureMinimumFinalSections(reportJson)
+        console.log('Report successfully parsed, repaired and validated')
       } catch (parseError: any) {
-        console.error('Failed to parse report JSON:', parseError)
-        // Create fallback report
+        console.error('Failed to parse report JSON:', parseError.message)
+        console.warn('Using comprehensive fallback report')
+        // Create fallback report with actual data
         reportJson = createFallbackReport()
       }
       
@@ -915,80 +1621,184 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
   
   // Create fallback report if parsing fails
   function createFallbackReport(): NAReport {
+    const fmt = (v: any) => (Array.isArray(v) ? v.filter(Boolean).join(', ') : (v ?? ''))
+    const tl = (stage3Answers.project_timeline || {}) as { start?: string; end?: string }
+    const objectives = fmt(stage3Answers.project_objectives) || 'Objectives to be defined'
+    const audience = fmt(stage3Answers.target_audience) || 'Target audience to be specified'
+    const budget = fmt(stage3Answers.project_budget_range) || 'Budget to be determined'
+    const orgName = fmt(stage2Answers.org_name) || 'Organization'
+    
     return {
       summary: {
-        problem_statement: 'Analysis in progress',
-        current_state: ['Current state assessment pending'],
-        root_causes: ['Root cause analysis required'],
-        objectives: ['Define clear objectives']
+        problem_statement: objectives || 'Learning initiative to address organizational needs',
+        current_state: [
+          `${orgName} requires learning solution for ${audience}`,
+          'Current capabilities and gaps being assessed'
+        ],
+        root_causes: [
+          'Performance gaps identified in target population',
+          'Skills alignment needed with business objectives'
+        ],
+        objectives: [
+          objectives || 'Improve performance and capability',
+          'Align learning outcomes with business goals'
+        ],
+        assumptions: [
+          'Learners have access to required technology',
+          'Organization supports learning initiative'
+        ],
+        unknowns: [
+          'Specific learner readiness levels',
+          'Integration requirements with existing systems'
+        ],
+        confidence: 0.6,
       },
       solution: {
-        modalities: [{ name: 'Blended Learning', reason: 'Flexible approach' }],
-        scope: {
-          audiences: ['Target audience'],
-          competencies: ['Core competencies'],
-          content_outline: ['Module structure']
-        }
+        delivery_modalities: [
+          { modality: 'Blended Learning', reason: 'Balances flexibility with engagement', priority: 1 },
+          { modality: 'Self-Paced Online', reason: 'Accommodates distributed workforce', priority: 2 }
+        ],
+        target_audiences: [audience || 'Primary learner population'],
+        key_competencies: [
+          'Core job-specific skills',
+          'Professional development capabilities',
+          'Technology proficiency'
+        ],
+        content_outline: [
+          'Module 1: Foundation Concepts',
+          'Module 2: Practical Application',
+          'Module 3: Assessment and Certification'
+        ],
+        accessibility_and_inclusion: {
+          standards: ['WCAG 2.2 AA', 'Section 508'],
+          notes: 'Ensure multi-language support and accessibility features'
+        },
       },
       learner_analysis: {
-        profile: {
-          demographics: ['Demographic analysis'],
-          tech_readiness: 'Assessment needed',
-          learning_style_fit: ['Learning preferences']
-        },
-        engagement_strategy: {
-          motivation_drivers: ['Motivation factors'],
-          potential_barriers: ['Potential challenges'],
-          support_mechanisms: ['Support systems']
-        },
-        design_implications: {
-          content_adaptations: ['Content adjustments'],
-          delivery_adjustments: ['Delivery modifications'],
-          accessibility_requirements: ['Accessibility needs'],
-          language_considerations: ['Language requirements']
-        }
+        profiles: [
+          {
+            segment: 'Primary Learners',
+            roles: [audience || 'Target roles'],
+            context: 'Professional development context',
+            motivators: ['Career advancement', 'Skill development', 'Performance improvement'],
+            constraints: ['Time availability', 'Technology access', 'Work schedule']
+          },
+        ],
+        readiness_risks: [
+          'Variable technology proficiency levels',
+          'Competing work priorities',
+          'Change resistance'
+        ],
       },
       technology_talent: {
-        tech_enablers: {
-          available: ['Existing technology'],
-          required: ['Required technology'],
-          integration_needs: ['Integration requirements']
+        technology: {
+          current_stack: fmt(stage3Answers.available_software)?.split(',').map((s: string) => s.trim()) || ['LMS', 'Collaboration tools'],
+          gaps: ['Advanced analytics', 'Mobile learning platform', 'AI-powered personalization'],
+          recommendations: [
+            { capability: 'Modern LMS/LXP', fit: 'Scalable learning delivery', constraints: ['Budget', 'IT approval'] },
+            { capability: 'Analytics platform', fit: 'Performance tracking', constraints: ['Integration complexity'] }
+          ],
+          data_plan: {
+            standards: ['xAPI', 'SCORM 2004'],
+            integrations: ['HRIS', 'Performance management', 'SSO']
+          },
         },
-        talent_requirements: {
-          internal_roles: ['Internal resources'],
-          external_support: ['External support'],
-          development_needs: ['Development requirements']
+        talent: {
+          available_roles: ['Subject Matter Experts', 'Instructional Designers', 'Project Manager'],
+          gaps: ['Technical developers', 'QA specialists', 'Data analysts'],
+          recommendations: [
+            'Augment team with contract IDs for peak development',
+            'Establish SME advisory board',
+            'Allocate PM resources for coordination'
+          ],
         },
-        limitations_impact: {
-          tech_constraints: ['Technology limitations'],
-          talent_gaps_impact: ['Resource gaps'],
-          mitigation_strategies: ['Mitigation approaches']
-        }
       },
       delivery_plan: {
         phases: [
-          {
-            name: 'Discovery',
-            duration_weeks: 2,
-            goals: ['Requirements gathering'],
-            activities: ['Stakeholder interviews']
-          }
+          { name: 'Discovery & Planning', duration_weeks: 2, goals: ['Finalize requirements', 'Stakeholder alignment'], activities: ['Interviews', 'Current state analysis', 'Gap assessment'] },
+          { name: 'Design & Development', duration_weeks: 8, goals: ['Content creation', 'Platform setup'], activities: ['Curriculum design', 'Content development', 'System configuration'] },
+          { name: 'Pilot & Refinement', duration_weeks: 4, goals: ['Test and optimize'], activities: ['Pilot delivery', 'Feedback collection', 'Content refinement'] },
+          { name: 'Full Deployment', duration_weeks: 2, goals: ['Launch at scale'], activities: ['Rollout', 'Support setup', 'Performance monitoring'] }
         ],
-        timeline: [{ label: 'Phase 1', start: '2025-01-01', end: '2025-02-01' }],
-        resources: ['Project team']
+        timeline: [
+          { label: 'Project kickoff', start: tl.start || null, end: null },
+          { label: 'Pilot launch', start: null, end: null },
+          { label: 'Full deployment', start: null, end: tl.end || null }
+        ],
+        resources: ['Project Manager', 'Instructional Designer', 'SMEs', 'Technical support'],
       },
       measurement: {
-        success_metrics: ['Success indicators'],
-        assessment_strategy: ['Assessment methods'],
-        data_sources: ['Data collection']
+        success_metrics: [
+          { metric: 'Completion rate', baseline: null, target: '85%', timeframe: tl.end || '2025-12-31' },
+          { metric: 'Knowledge transfer', baseline: null, target: '80% pass rate', timeframe: tl.end || '2025-12-31' },
+          { metric: 'Performance improvement', baseline: null, target: '15% increase', timeframe: '2026-03-31' }
+        ],
+        assessment_strategy: ['Pre/post assessments', 'Performance observations', 'Manager evaluations', '360-degree feedback'],
+        data_sources: ['LMS', 'HRIS', 'Performance management system', 'Survey platform'],
+        learning_analytics: {
+          levels: ['Kirkpatrick Level 1-4', 'Phillips ROI'],
+          reporting_cadence: 'monthly'
+        },
       },
       budget: {
-        notes: 'Budget analysis required',
-        ranges: [{ item: 'Development', low: 'TBD', high: 'TBD' }]
+        currency: 'USD',
+        notes: budget ? `Budget range: ${budget}` : 'Budget allocation pending approval',
+        items: [
+          { item: 'Development', low: 50000, high: 150000 },
+          { item: 'Technology', low: 20000, high: 50000 },
+          { item: 'Resources', low: 30000, high: 80000 }
+        ],
       },
-      risks: [{ risk: 'Implementation risk', mitigation: 'Risk mitigation strategy' }],
-      next_steps: ['Review requirements', 'Finalize approach']
+      risks: [
+        { risk: 'Stakeholder alignment', mitigation: 'Regular communication and feedback loops', severity: 'medium', likelihood: 'medium' },
+        { risk: 'Technology integration', mitigation: 'Phased implementation with testing', severity: 'high', likelihood: 'low' },
+        { risk: 'Learner engagement', mitigation: 'Incentives and manager support', severity: 'medium', likelihood: 'medium' }
+      ],
+      next_steps: [
+        'Validate requirements with key stakeholders',
+        'Finalize budget and resource allocation',
+        'Establish project governance structure',
+        'Begin detailed design phase'
+      ],
     }
+  }
+
+  // Ensure minimum viable sections for the final JSON prior to formatting
+  function ensureMinimumFinalSections(input: NAReport): NAReport {
+    const clone: NAReport = JSON.parse(JSON.stringify(input || {}))
+    // Ensure solution recommendations
+    if (!clone.solution) (clone as any).solution = {} as any
+    if (!Array.isArray((clone as any).solution.delivery_modalities) || (clone as any).solution.delivery_modalities.length === 0) {
+      ;(clone as any).solution.delivery_modalities = [
+        { modality: 'Blended Learning', reason: 'Balances flexibility and impact', priority: 1 }
+      ]
+    }
+    if (!Array.isArray((clone as any).solution.target_audiences) || (clone as any).solution.target_audiences.length === 0) {
+      const fmt = (v: any) => (Array.isArray(v) ? v.filter(Boolean).join(', ') : (v ?? ''))
+      const audience = fmt((stage3Answers as any)?.target_audience) || 'Primary learners'
+      ;(clone as any).solution.target_audiences = [audience]
+    }
+    if (!Array.isArray((clone as any).solution.key_competencies) || (clone as any).solution.key_competencies.length === 0) {
+      ;(clone as any).solution.key_competencies = ['Core competencies aligned to objectives']
+    }
+    if (!Array.isArray((clone as any).solution.content_outline) || (clone as any).solution.content_outline.length === 0) {
+      ;(clone as any).solution.content_outline = ['Module 1: Foundations', 'Module 2: Application', 'Module 3: Assessment']
+    }
+    // Ensure measurement metrics structure
+    if (!clone.measurement || !Array.isArray((clone as any).measurement.success_metrics)) {
+      (clone as any).measurement = (clone as any).measurement || {}
+      ;(clone as any).measurement.success_metrics = []
+    }
+    (clone as any).measurement.success_metrics = (clone as any).measurement.success_metrics.map((m: any) => {
+      if (m && typeof m === 'object' && 'metric' in m) return m
+      return { metric: String(m || 'Completion rate'), baseline: null, target: '85%', timeframe: '2025-12-31' }
+    })
+    if ((clone as any).measurement.success_metrics.length === 0) {
+      ;(clone as any).measurement.success_metrics = [
+        { metric: 'Completion rate', baseline: null, target: '85%', timeframe: '2025-12-31' }
+      ]
+    }
+    return clone
   }
   
   // Format report as markdown
@@ -1013,141 +1823,114 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
         md += '\n**Objectives:**\n'
         report.summary.objectives.forEach(item => md += `- ${item}\n`)
       }
+      if (report.summary.assumptions?.length) {
+        md += '\n**Assumptions:**\n'
+        report.summary.assumptions.forEach(item => md += `- ${item}\n`)
+      }
+      if (report.summary.unknowns?.length) {
+        md += '\n**Unknowns:**\n'
+        report.summary.unknowns.forEach(item => md += `- ${item}\n`)
+      }
+      md += `\n**Confidence:** ${typeof report.summary.confidence === 'number' ? report.summary.confidence.toFixed(2) : '0.00'}\n`
     }
     
     // Solution Recommendations
     if (report.solution) {
       md += '\n## Recommended Solution\n\n'
-      if (report.solution.modalities?.length) {
+      if (report.solution.delivery_modalities?.length) {
         md += '### Delivery Modalities\n'
-        report.solution.modalities.forEach(m => {
-          if (m?.name && m?.reason) {
-            md += `- **${m.name}:** ${m.reason}\n`
+        report.solution.delivery_modalities.forEach(m => {
+          if (m?.modality && m?.reason) {
+            md += `- **${m.modality} (P${m.priority ?? 1})**: ${m.reason}\n`
           }
         })
       }
-      if (report.solution.scope) {
-        md += '\n### Scope\n'
-        if (report.solution.scope.audiences?.length) {
-          md += '**Target Audiences:**\n'
-          report.solution.scope.audiences.forEach(a => md += `- ${a}\n`)
+      if (report.solution.target_audiences?.length) {
+        md += '\n**Target Audiences:**\n'
+        report.solution.target_audiences.forEach(a => md += `- ${a}\n`)
+      }
+      if (report.solution.key_competencies?.length) {
+        md += '\n**Key Competencies:**\n'
+        report.solution.key_competencies.forEach(c => md += `- ${c}\n`)
+      }
+      if (report.solution.content_outline?.length) {
+        md += '\n**Content Outline:**\n'
+        report.solution.content_outline.forEach(c => md += `- ${c}\n`)
+      }
+      if (report.solution.accessibility_and_inclusion) {
+        md += '\n### Accessibility & Inclusion\n'
+        if (report.solution.accessibility_and_inclusion.standards?.length) {
+          md += '**Standards:**\n'
+          report.solution.accessibility_and_inclusion.standards.forEach(s => md += `- ${s}\n`)
         }
-        if (report.solution.scope.competencies?.length) {
-          md += '\n**Key Competencies:**\n'
-          report.solution.scope.competencies.forEach(c => md += `- ${c}\n`)
-        }
-        if (report.solution.scope.content_outline?.length) {
-          md += '\n**Content Outline:**\n'
-          report.solution.scope.content_outline.forEach(c => md += `- ${c}\n`)
+        if (report.solution.accessibility_and_inclusion.notes) {
+          md += `\n**Notes:** ${report.solution.accessibility_and_inclusion.notes}\n`
         }
       }
     }
     
-    // Learner Analysis - similar to existing implementation
+    // Learner Analysis (new schema)
     if (report.learner_analysis) {
       md += '\n## Learner Analysis\n\n'
-      
-      if (report.learner_analysis.profile) {
-        md += '### Learner Profile\n'
-        if (report.learner_analysis.profile.demographics?.length) {
-          md += '**Demographics:**\n'
-          report.learner_analysis.profile.demographics.forEach(d => md += `- ${d}\n`)
-        }
-        if (report.learner_analysis.profile.tech_readiness) {
-          md += `\n**Technology Readiness:** ${report.learner_analysis.profile.tech_readiness}\n`
-        }
-        if (report.learner_analysis.profile.learning_style_fit?.length) {
-          md += '\n**Learning Style Preferences:**\n'
-          report.learner_analysis.profile.learning_style_fit.forEach(l => md += `- ${l}\n`)
-        }
+      if (report.learner_analysis.profiles?.length) {
+        md += '### Learner Profiles\n'
+        report.learner_analysis.profiles.forEach(p => {
+          md += `- **${p.segment}:** Roles: ${p.roles.join(', ')}${p.context ? ` | Context: ${p.context}` : ''}\n`
+          if (p.motivators?.length) md += `  Motivators: ${p.motivators.join(', ')}\n`
+          if (p.constraints?.length) md += `  Constraints: ${p.constraints.join(', ')}\n`
+        })
       }
-      
-      if (report.learner_analysis.engagement_strategy) {
-        md += '\n### Engagement Strategy\n'
-        if (report.learner_analysis.engagement_strategy.motivation_drivers?.length) {
-          md += '**Motivation Drivers:**\n'
-          report.learner_analysis.engagement_strategy.motivation_drivers.forEach(m => md += `- ${m}\n`)
-        }
-        if (report.learner_analysis.engagement_strategy.potential_barriers?.length) {
-          md += '\n**Potential Barriers:**\n'
-          report.learner_analysis.engagement_strategy.potential_barriers.forEach(b => md += `- ${b}\n`)
-        }
-        if (report.learner_analysis.engagement_strategy.support_mechanisms?.length) {
-          md += '\n**Support Mechanisms:**\n'
-          report.learner_analysis.engagement_strategy.support_mechanisms.forEach(s => md += `- ${s}\n`)
-        }
-      }
-      
-      if (report.learner_analysis.design_implications) {
-        md += '\n### Design Implications\n'
-        if (report.learner_analysis.design_implications.content_adaptations?.length) {
-          md += '**Content Adaptations:**\n'
-          report.learner_analysis.design_implications.content_adaptations.forEach(c => md += `- ${c}\n`)
-        }
-        if (report.learner_analysis.design_implications.delivery_adjustments?.length) {
-          md += '\n**Delivery Adjustments:**\n'
-          report.learner_analysis.design_implications.delivery_adjustments.forEach(d => md += `- ${d}\n`)
-        }
-        if (report.learner_analysis.design_implications.accessibility_requirements?.length) {
-          md += '\n**Accessibility Requirements:**\n'
-          report.learner_analysis.design_implications.accessibility_requirements.forEach(a => md += `- ${a}\n`)
-        }
-        if (report.learner_analysis.design_implications.language_considerations?.length) {
-          md += '\n**Language Considerations:**\n'
-          report.learner_analysis.design_implications.language_considerations.forEach(l => md += `- ${l}\n`)
-        }
+      if (report.learner_analysis.readiness_risks?.length) {
+        md += '\n**Readiness Risks:**\n'
+        report.learner_analysis.readiness_risks.forEach(r => md += `- ${r}\n`)
       }
     }
     
-    // Technology & Talent
+    // Technology & Talent (new schema)
     if (report.technology_talent) {
       md += '\n## Technology & Talent Analysis\n\n'
       
-      if (report.technology_talent.tech_enablers) {
-        md += '### Technology Enablers\n'
-        if (report.technology_talent.tech_enablers.available?.length) {
-          md += '**Available Technologies:**\n'
-          report.technology_talent.tech_enablers.available.forEach(t => md += `- ${t}\n`)
+      // Technology
+      if (report.technology_talent.technology) {
+        md += '### Technology\n'
+        if (report.technology_talent.technology.current_stack?.length) {
+          md += '**Current Stack:**\n'
+          report.technology_talent.technology.current_stack.forEach(t => md += `- ${t}\n`)
         }
-        if (report.technology_talent.tech_enablers.required?.length) {
-          md += '\n**Required Technologies:**\n'
-          report.technology_talent.tech_enablers.required.forEach(t => md += `- ${t}\n`)
+        if (report.technology_talent.technology.gaps?.length) {
+          md += '\n**Gaps:**\n'
+          report.technology_talent.technology.gaps.forEach(t => md += `- ${t}\n`)
         }
-        if (report.technology_talent.tech_enablers.integration_needs?.length) {
-          md += '\n**Integration Requirements:**\n'
-          report.technology_talent.tech_enablers.integration_needs.forEach(i => md += `- ${i}\n`)
+        if (report.technology_talent.technology.recommendations?.length) {
+          md += '\n**Recommendations:**\n'
+          report.technology_talent.technology.recommendations.forEach(r => md += `- ${r.capability} — ${r.fit}${r.constraints?.length ? ` (Constraints: ${r.constraints.join(', ')})` : ''}\n`)
         }
-      }
-      
-      if (report.technology_talent.talent_requirements) {
-        md += '\n### Talent Requirements\n'
-        if (report.technology_talent.talent_requirements.internal_roles?.length) {
-          md += '**Internal Roles Needed:**\n'
-          report.technology_talent.talent_requirements.internal_roles.forEach(r => md += `- ${r}\n`)
-        }
-        if (report.technology_talent.talent_requirements.external_support?.length) {
-          md += '\n**External Support Required:**\n'
-          report.technology_talent.talent_requirements.external_support.forEach(e => md += `- ${e}\n`)
-        }
-        if (report.technology_talent.talent_requirements.development_needs?.length) {
-          md += '\n**Skills Development Needs:**\n'
-          report.technology_talent.talent_requirements.development_needs.forEach(d => md += `- ${d}\n`)
+        if (report.technology_talent.technology.data_plan) {
+          if (report.technology_talent.technology.data_plan.standards?.length) {
+            md += '\n**Data Standards:**\n'
+            report.technology_talent.technology.data_plan.standards.forEach(s => md += `- ${s}\n`)
+          }
+          if (report.technology_talent.technology.data_plan.integrations?.length) {
+            md += '\n**Integrations:**\n'
+            report.technology_talent.technology.data_plan.integrations.forEach(i => md += `- ${i}\n`)
+          }
         }
       }
       
-      if (report.technology_talent.limitations_impact) {
-        md += '\n### Limitations & Mitigation\n'
-        if (report.technology_talent.limitations_impact.tech_constraints?.length) {
-          md += '**Technology Constraints:**\n'
-          report.technology_talent.limitations_impact.tech_constraints.forEach(c => md += `- ${c}\n`)
+      // Talent
+      if (report.technology_talent.talent) {
+        md += '\n### Talent\n'
+        if (report.technology_talent.talent.available_roles?.length) {
+          md += '**Available Roles:**\n'
+          report.technology_talent.talent.available_roles.forEach(r => md += `- ${r}\n`)
         }
-        if (report.technology_talent.limitations_impact.talent_gaps_impact?.length) {
-          md += '\n**Talent Gaps Impact:**\n'
-          report.technology_talent.limitations_impact.talent_gaps_impact.forEach(g => md += `- ${g}\n`)
+        if (report.technology_talent.talent.gaps?.length) {
+          md += '\n**Gaps:**\n'
+          report.technology_talent.talent.gaps.forEach(g => md += `- ${g}\n`)
         }
-        if (report.technology_talent.limitations_impact.mitigation_strategies?.length) {
-          md += '\n**Mitigation Strategies:**\n'
-          report.technology_talent.limitations_impact.mitigation_strategies.forEach(m => md += `- ${m}\n`)
+        if (report.technology_talent.talent.recommendations?.length) {
+          md += '\n**Recommendations:**\n'
+          report.technology_talent.talent.recommendations.forEach(rec => md += `- ${rec}\n`)
         }
       }
     }
@@ -1187,34 +1970,45 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
       }
     }
     
-    // Measurement
+    // Measurement & Analytics (new schema)
     if (report.measurement) {
-      md += '\n## Measurement & Success\n\n'
+      md += '\n## Measurement\n\n'
       if (report.measurement.success_metrics?.length) {
-        md += '**Success Metrics:**\n'
-        report.measurement.success_metrics.forEach(m => md += `- ${m}\n`)
+        md += '### Success Metrics\n'
+        report.measurement.success_metrics.forEach(m => {
+          md += `- ${m.metric}${m.baseline ? ` (Baseline: ${m.baseline})` : ''} → Target: ${m.target} by ${m.timeframe}\n`
+        })
       }
       if (report.measurement.assessment_strategy?.length) {
-        md += '\n**Assessment Strategy:**\n'
+        md += '\n### Assessment Strategy\n'
         report.measurement.assessment_strategy.forEach(a => md += `- ${a}\n`)
       }
       if (report.measurement.data_sources?.length) {
-        md += '\n**Data Sources:**\n'
+        md += '\n### Data Sources\n'
         report.measurement.data_sources.forEach(d => md += `- ${d}\n`)
+      }
+      if (report.measurement.learning_analytics) {
+        md += '\n### Learning Analytics\n'
+        if (report.measurement.learning_analytics.levels?.length) {
+          md += '**Levels:**\n'
+          report.measurement.learning_analytics.levels.forEach(l => md += `- ${l}\n`)
+        }
+        if (typeof report.measurement.learning_analytics.reporting_cadence === 'string') {
+          md += `\n**Reporting Cadence:** ${report.measurement.learning_analytics.reporting_cadence}\n`
+        }
       }
     }
     
-    // Budget
+    // Budget (new schema)
     if (report.budget) {
-      md += '\n## Budget Considerations\n\n'
+      md += '\n## Budget\n\n'
+      md += `**Currency:** ${report.budget.currency || 'USD'}\n`
       if (report.budget.notes) {
-        md += `${report.budget.notes}\n\n`
+        md += `\nNotes: ${report.budget.notes}\n`
       }
-      if (report.budget.ranges?.length) {
-        report.budget.ranges.forEach(r => {
-          if (r?.item && r?.low && r?.high) {
-            md += `- **${r.item}:** ${r.low} - ${r.high}\n`
-          }
+      if (report.budget.items?.length) {
+        report.budget.items.forEach(b => {
+          md += `- **${b.item}:** ${b.low} - ${b.high}\n`
         })
       }
     }
@@ -1232,28 +2026,28 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
     // Next Steps
     if (report.next_steps?.length) {
       md += '\n## Next Steps\n\n'
-      report.next_steps.forEach((s, i) => md += `${i + 1}. ${s}\n`)
+      report.next_steps.forEach((s: string, i: number) => md += `${i + 1}. ${s}\n`)
     }
     
     return md
   }
   
-  // Save edited content
-  async function saveEditedContent() {
-    if (!lastSavedSummaryId) return
-    
-    try {
-      setSavingEdit(true)
-      const { error } = await updateSummaryEditedContent(lastSavedSummaryId, editedContent)
-      if (error) {
-        setError('Failed to save edits')
-      } else {
-        setIsEditMode(false)
-      }
-    } finally {
-      setSavingEdit(false)
-    }
-  }
+  // Save edited content (currently not used but may be needed for future editing features)
+  // async function saveEditedContent() {
+  //   if (!lastSavedSummaryId) return
+  //   
+  //   try {
+  //     setSavingEdit(true)
+  //     const { error } = await updateSummaryEditedContent(lastSavedSummaryId, editedContent)
+  //     if (error) {
+  //       setError('Failed to save edits')
+  //     } else {
+  //       setIsEditMode(false)
+  //     }
+  //   } finally {
+  //     setSavingEdit(false)
+  //   }
+  // }
   
   // Render stepper for progress
   function Stepper() {
@@ -1725,7 +2519,7 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
             <button
               type="button"
               className="btn-ghost"
-              onClick={() => window.location.href = '/portal/starmaps'}
+              onClick={() => window.location.href = '/starmaps'}
             >
               View All Starmaps
             </button>

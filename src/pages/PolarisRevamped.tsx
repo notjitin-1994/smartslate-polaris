@@ -622,24 +622,26 @@ Generate 4–6 precise, role-appropriate discovery questions that arise from you
 DELIVERABLE
 Return ONLY the Markdown report in the structure above — no preamble or closing remarks.`
 
-      // Generate prelim via async job (ticket + polling) to avoid client timeouts
+      // Generate prelim via async job (ticket + polling) to avoid client timeouts (only in production)
       const reasoningModel = (env as any).perplexityPrelimModel || 'sonar reasoning'
       const idemKey = `prelim:${(stage2Answers as any)?.org_name || 'org'}:${(stage1Answers as any)?.requester_email || 'user'}:${(stage3Answers as any)?.project_timeline?.start || ''}-${(stage3Answers as any)?.project_timeline?.end || ''}`
       let status_url: string | null = null
-      try {
-        const submitRes = await fetch('/api/reportJobs', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idemKey },
-          body: JSON.stringify({ prompt: prelimPrompt, model: reasoningModel, temperature: 0.2, max_tokens: 2600 })
-        })
-        if (submitRes.ok) {
-          const body = await submitRes.json()
-          status_url = body?.status_url || null
-        } else {
-          console.warn('Preliminary job start failed with status', submitRes.status)
+      if (import.meta.env.PROD) {
+        try {
+          const submitRes = await fetch('/api/reportJobs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idemKey },
+            body: JSON.stringify({ prompt: prelimPrompt, model: reasoningModel, temperature: 0.2, max_tokens: 2600 })
+          })
+          if (submitRes.ok) {
+            const body = await submitRes.json()
+            status_url = body?.status_url || null
+          } else {
+            console.warn('Preliminary job start failed with status', submitRes.status)
+          }
+        } catch (err) {
+          console.warn('Preliminary job start error (dev environment likely):', err)
         }
-      } catch (err) {
-        console.warn('Preliminary job start error (dev environment likely):', err)
       }
 
       // Show a quick skeleton prelim immediately while polling
@@ -1213,8 +1215,8 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
       try {
         console.log('Submitting final report job with model:', finalModel)
         
-        // Try database-backed job system first
-        const useDatabase = true // Set to false to use in-memory system
+        // Try database-backed job system first (prod only; dev falls back to direct API calls)
+        const useDatabase = import.meta.env.PROD
         let jobId: string | null = null
         
         if (useDatabase) {
@@ -1237,52 +1239,36 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
             console.log('Final report job created in database:', jobId)
             
             // Trigger job execution via API
-            fetch('/api/reportJobsDb', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Idempotency-Key': jobIdemKey },
-              body: JSON.stringify({ 
-                prompt: `${systemPrompt}\n\n${enhancedPrompt}`, 
-                model: finalModel, 
-                temperature: 0.2, 
-                max_tokens: 4000,
-                summary_id: lastSavedSummaryId,
-                user_id: user?.id
+            try {
+              const startRes = await fetch('/api/reportJobsDb', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Idempotency-Key': jobIdemKey },
+                body: JSON.stringify({ 
+                  prompt: `${systemPrompt}\n\n${enhancedPrompt}`, 
+                  model: finalModel, 
+                  temperature: 0.2, 
+                  max_tokens: 4000,
+                  summary_id: lastSavedSummaryId,
+                  user_id: user?.id
+                })
               })
-            }).catch(err => console.warn('Job trigger failed:', err))
+              if (startRes.ok) {
+                const body = await startRes.json()
+                if (body?.status_url) {
+                  jobStatusUrl = body.status_url
+                }
+              } else {
+                console.warn('DB job start returned non-OK status', startRes.status)
+              }
+            } catch (e) {
+              console.warn('Job trigger failed:', e)
+            }
           } else {
             console.warn('Database job creation failed, falling back to in-memory:', error)
-            // Fall back to in-memory system
-            const submitRes = await fetch('/api/reportJobs', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Idempotency-Key': jobIdemKey },
-              body: JSON.stringify({ 
-                prompt: `${systemPrompt}\n\n${enhancedPrompt}`, 
-                model: finalModel, 
-                temperature: 0.2, 
-                max_tokens: 4000 
-              })
-            })
-            if (submitRes.ok) {
-              const body = await submitRes.json()
-              jobStatusUrl = body?.status_url || null
-            }
+            // In dev, skip job route and rely on direct generation fallbacks below
           }
         } else {
-          // Use in-memory system
-          const submitRes = await fetch('/api/reportJobs', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': jobIdemKey },
-            body: JSON.stringify({ 
-              prompt: `${systemPrompt}\n\n${enhancedPrompt}`, 
-              model: finalModel, 
-              temperature: 0.2, 
-              max_tokens: 4000 
-            })
-          })
-          if (submitRes.ok) {
-            const body = await submitRes.json()
-            jobStatusUrl = body?.status_url || null
-          }
+          // Dev: no job route available; proceed to direct generation fallbacks
         }
         
         if (jobId || jobStatusUrl) {

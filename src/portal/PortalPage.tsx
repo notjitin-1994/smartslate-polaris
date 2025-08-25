@@ -47,7 +47,7 @@ function NavSection({ title, items, defaultOpen = true }: NavSectionProps) {
         <span className={`inline-block text-xs text-primary-500/70 transition-transform ${open ? 'rotate-90' : ''}`}>▶</span>
       </button>
       <div id={`section-${title.replace(/\s+/g, '-')}`} className={`${open ? 'block' : 'hidden'} mt-1 pl-2`}>
-        <ul className="space-y-0.5">
+        <ul className="space-y-0.5 list-none">
           {items.map((item) => {
             const { label, tagText, tagTone, href } =
               typeof item === 'string' ? { label: item } : item
@@ -717,7 +717,7 @@ export function PortalPage() {
                   <span className={`inline-block text-xs text-primary-400/80 transition-transform ${solaraOpen ? 'rotate-90' : ''}`}>▶</span>
                 </button>
                 <div id="section-solara" className={`${solaraOpen ? 'block' : 'hidden'} mt-1 pl-2`}>
-                  <ul className="space-y-0.5">
+                  <ul className="space-y-0.5 list-none">
                     <li>
                       <a
                         href={typeof window !== 'undefined' ? `${window.location.protocol}//polaris.smartslate.io` : 'https://polaris.smartslate.io'}
@@ -751,7 +751,7 @@ export function PortalPage() {
                 <h4 className="px-3 text-xs font-semibold text-primary-400 mb-2">Recent Starmaps</h4>
                 <div className="mt-1 pl-2">
                   {recentSummaries.length > 0 ? (
-                    <ul className="space-y-0.5">
+                    <ul className="space-y-0.5 list-none">
                       {recentSummaries.map((summary) => (
                         <li key={summary.id}>
                           <button
@@ -943,28 +943,12 @@ export function PortalPage() {
                 ) : (
                   <>
                     <h1 className="mt-2 text-2xl sm:text-3xl md:text-4xl font-bold tracking-tight text-white animate-fade-in-up">
-                      {(() => {
-                        const rawName = (user?.user_metadata?.first_name as string) ||
-                          (user?.user_metadata?.name as string) ||
-                          (user?.user_metadata?.full_name as string) ||
-                          (user?.email as string) ||
-                          ''
-                        const firstName = rawName.toString().trim().split(' ')[0]
-                        return user && firstName ? (
-                          <>
-                            <span>Polaris: Guided Discovery</span>
-                          </>
-                        ) : (
-                          <>Polaris: Guided Discovery</>
-                        )
-                      })()}
+                      <span className="block">Illuminating the Path of Discovery:</span>
+                      <span className="block text-brand-accent">Polaris</span>
                     </h1>
-                    <p className="mt-2 text-sm sm:text-base text-white/70 max-w-3xl animate-fade-in-up animate-delay-150">
-                      Answer a few focused questions to scope your needs and generate a tailored Smartslate solution roadmap.
-                    </p>
                   </>
                 )}
-                <div aria-hidden="true" className="mt-3 h-px w-16 bg-gradient-to-r from-white/40 to-transparent" />
+                
               </div>
             </div>
           </header>
@@ -1312,7 +1296,7 @@ export function PortalPage() {
                     <h4 className="px-3 text-xs font-semibold text-primary-400 mb-2">Recent Starmaps</h4>
                     <div className="mt-1 pl-2">
                       {recentSummaries.length > 0 ? (
-                        <ul className="space-y-0.5">
+                        <ul className="space-y-0.5 list-none">
                           {recentSummaries.map((summary) => (
                             <li key={summary.id}>
                               <button

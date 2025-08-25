@@ -397,7 +397,7 @@ export function PortalPage() {
   const location = useLocation()
   const isSettings = location.pathname.endsWith('/settings')
   const isStarmaps = location.pathname.endsWith('/starmaps')
-  const isPortalRoot = location.pathname === '/portal'
+  const isPortalRoot = location.pathname === '/'
   const { user: userParam } = useParams()
   const outlet = useOutlet()
   const viewingProfile = Boolean(userParam)
@@ -489,7 +489,7 @@ export function PortalPage() {
 
   // Reload summaries when returning from Polaris page
   useEffect(() => {
-    if (location.pathname === '/portal' || location.pathname === '/portal/starmaps') {
+    if (location.pathname === '/' || location.pathname === '/starmaps') {
       loadRecentSummaries()
     }
   }, [location.pathname])
@@ -632,7 +632,7 @@ export function PortalPage() {
 
   function goToProfile() {
     closeProfileMenu()
-    window.location.href = 'http://app.smartslate.io/portal/notjitin'
+    window.location.href = 'http://app.smartslate.io/notjitin'
   }
 
 
@@ -756,7 +756,7 @@ export function PortalPage() {
                         <li key={summary.id}>
                           <button
                             type="button"
-                            onClick={() => navigate(`/portal/starmaps/${summary.id}`)}
+                            onClick={() => navigate(`/starmaps/${summary.id}`)}
                             className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/85 hover:text-white hover:bg-white/5 rounded-lg transition pressable"
                           >
                             <span className="truncate text-white/85">
@@ -771,7 +771,7 @@ export function PortalPage() {
                       <li>
                         <button
                           type="button"
-                          onClick={() => navigate('/portal/starmaps')}
+                          onClick={() => navigate('/starmaps')}
                           className="w-full text-left px-3 py-1.5 text-xs text-white/80 hover:text-white hover:bg-white/5 rounded-lg transition pressable underline-accent"
                         >
                           View all starmaps →
@@ -810,7 +810,7 @@ export function PortalPage() {
                 <button
                   type="button"
                   title="Settings"
-                  onClick={() => (window.location.href = 'http://app.smartslate.io/portal/settings')}
+                  onClick={() => (window.location.href = 'http://app.smartslate.io/settings')}
                   className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
                 >
                   <SettingsIconImg className="w-5 h-5" />
@@ -857,7 +857,7 @@ export function PortalPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => (window.location.href = 'http://app.smartslate.io/portal/settings')}
+                  onClick={() => (window.location.href = 'http://app.smartslate.io/settings')}
                   className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
                   title="Settings"
                 >
@@ -1319,7 +1319,7 @@ export function PortalPage() {
                                 type="button"
                                 onClick={() => {
                                   setMobileMenuOpen(false)
-                                  navigate(`/portal/starmaps/${summary.id}`)
+                                  navigate(`/starmaps/${summary.id}`)
                                 }}
                                 className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/85 hover:text-white hover:bg-white/5 rounded-lg transition pressable"
                               >
@@ -1337,7 +1337,7 @@ export function PortalPage() {
                               type="button"
                               onClick={() => {
                                 setMobileMenuOpen(false)
-                                navigate('/portal/starmaps')
+                                navigate('/starmaps')
                               }}
                               className="w-full text-left px-3 py-1.5 text-xs text-white/80 hover:text-white hover:bg-white/5 rounded-lg transition pressable underline-accent"
                             >
@@ -1383,7 +1383,7 @@ export function PortalPage() {
                         <button
                           type="button"
                           title="Settings"
-                          onClick={() => (window.location.href = 'http://app.smartslate.io/portal/settings')}
+                          onClick={() => (window.location.href = 'http://app.smartslate.io/settings')}
                           className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
                         >
                           <SettingsIconImg className="w-10 h-10" />

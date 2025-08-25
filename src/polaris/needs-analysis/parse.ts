@@ -10,48 +10,32 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
         current_state: [],
         root_causes: [],
         objectives: [],
+        assumptions: [],
+        unknowns: [],
+        confidence: 0.5,
       },
       solution: {
-        modalities: [],
-        scope: {
-          audiences: [],
-          competencies: [],
-          content_outline: [],
-        },
+        delivery_modalities: [],
+        target_audiences: [],
+        key_competencies: [],
+        content_outline: [],
+        accessibility_and_inclusion: { standards: [], notes: null },
       },
       learner_analysis: {
-        profile: {
-          demographics: [],
-          tech_readiness: '',
-          learning_style_fit: [],
-        },
-        engagement_strategy: {
-          motivation_drivers: [],
-          potential_barriers: [],
-          support_mechanisms: [],
-        },
-        design_implications: {
-          content_adaptations: [],
-          delivery_adjustments: [],
-          accessibility_requirements: [],
-          language_considerations: [],
-        },
+        profiles: [],
+        readiness_risks: [],
       },
       technology_talent: {
-        tech_enablers: {
-          available: [],
-          required: [],
-          integration_needs: [],
+        technology: {
+          current_stack: [],
+          gaps: [],
+          recommendations: [],
+          data_plan: { standards: [], integrations: [] },
         },
-        talent_requirements: {
-          internal_roles: [],
-          external_support: [],
-          development_needs: [],
-        },
-        limitations_impact: {
-          tech_constraints: [],
-          talent_gaps_impact: [],
-          mitigation_strategies: [],
+        talent: {
+          available_roles: [],
+          gaps: [],
+          recommendations: [],
         },
       },
       delivery_plan: {
@@ -63,10 +47,12 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
         success_metrics: [],
         assessment_strategy: [],
         data_sources: [],
+        learning_analytics: { levels: [], reporting_cadence: null },
       },
       budget: {
-        notes: '',
-        ranges: [],
+        currency: 'USD',
+        notes: null,
+        items: [],
       },
       risks: [],
       next_steps: [],
@@ -103,18 +89,20 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
       }
 
       if (currentSection === 'solution') {
-        if (line.startsWith('### Delivery Modalities')) currentSubSection = 'modalities'
-        else if (line.startsWith('**Target Audiences:**')) currentSubSection = 'audiences'
-        else if (line.startsWith('**Key Competencies:**')) currentSubSection = 'competencies'
-        else if (line.startsWith('**Content Outline:**')) currentSubSection = 'content_outline'
+        if (line.startsWith('### Delivery Modalities')) currentSubSection = 'delivery_modalities'
+        else if (/^\*\*Target Audience(s)?:\*\*/i.test(line)) currentSubSection = 'target_audiences'
+        else if (/^\*\*Key Competenc(y|ies):\*\*/i.test(line)) currentSubSection = 'key_competencies'
+        else if (/^\*\*Content Outline:\*\*/i.test(line)) currentSubSection = 'content_outline'
         else if (line.startsWith('- ')) {
           const item = line.substring(2)
-          if (currentSubSection === 'modalities' && item.includes(':')) {
-            const [name, reason] = item.split(':').map(s => s.replace(/\*\*/g, '').trim())
-            report.solution.modalities.push({ name, reason })
-          } else if (currentSubSection === 'audiences') report.solution.scope.audiences.push(item)
-          else if (currentSubSection === 'competencies') report.solution.scope.competencies.push(item)
-          else if (currentSubSection === 'content_outline') report.solution.scope.content_outline.push(item)
+          if (currentSubSection === 'delivery_modalities' && item.includes(':')) {
+            const [modality, reasonRaw] = item.split(':')
+            const modalityClean = modality.replace(/\*\*/g, '').trim()
+            const reason = reasonRaw?.replace(/\*\*/g, '').trim() || ''
+            report.solution.delivery_modalities.push({ modality: modalityClean, reason, priority: report.solution.delivery_modalities.length + 1 })
+          } else if (currentSubSection === 'target_audiences') report.solution.target_audiences.push(item)
+          else if (currentSubSection === 'key_competencies') report.solution.key_competencies.push(item)
+          else if (currentSubSection === 'content_outline') report.solution.content_outline.push(item)
         }
       }
 
@@ -152,7 +140,7 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
         else if (line.startsWith('**Data Sources:**')) currentSubSection = 'data_sources'
         else if (line.startsWith('- ')) {
           const item = line.substring(2)
-          if (currentSubSection === 'success_metrics') report.measurement.success_metrics.push(item)
+          if (currentSubSection === 'success_metrics') report.measurement.success_metrics.push({ metric: item, baseline: null, target: '', timeframe: '' })
           else if (currentSubSection === 'assessment_strategy') report.measurement.assessment_strategy.push(item)
           else if (currentSubSection === 'data_sources') report.measurement.data_sources.push(item)
         }
@@ -167,7 +155,7 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
         const riskMatch = line.match(/\*\*Risk:\*\*\s*(.*?)$/)
         const mitigationLine = lines[i + 1]?.trim()
         const mitigationMatch = mitigationLine?.match(/\*\*Mitigation:\*\*\s*(.*?)$/)
-        if (riskMatch && mitigationMatch) report.risks.push({ risk: riskMatch[1], mitigation: mitigationMatch[1] })
+        if (riskMatch && mitigationMatch) report.risks.push({ risk: riskMatch[1], mitigation: mitigationMatch[1], severity: 'medium', likelihood: 'medium' })
       }
     }
 
@@ -197,14 +185,14 @@ export function extractInThisReportInfo(markdown: string): InThisReportInfo | nu
   const sections: string[] = ['Executive Summary', 'Recommended Solution']
   if (report.delivery_plan.phases.length > 0 || report.delivery_plan.timeline.length > 0) sections.push('Delivery Plan')
   if (report.measurement.success_metrics.length > 0) sections.push('Measurement')
-  if (report.budget.ranges.length > 0 || report.budget.notes) sections.push('Budget')
+  if (report.budget.items.length > 0 || report.budget.notes) sections.push('Budget')
   if (report.risks.length > 0) sections.push('Risks')
   if (report.next_steps.length > 0) sections.push('Next Steps')
 
   return {
     sections,
     counts: {
-      modalities: report.solution.modalities.length,
+      modalities: report.solution.delivery_modalities.length,
       objectives: report.summary.objectives.length,
       phases: report.delivery_plan.phases.length,
       metrics: report.measurement.success_metrics.length,

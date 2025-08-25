@@ -6,7 +6,7 @@ import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
 import { EXPERIENCE_LEVELS } from '@/polaris/needs-analysis/experience'
 import { NA_STATIC_FIELDS } from '@/polaris/needs-analysis/static'
 import { NA_STAGE_TITLE_PROMPT, NA_QUESTIONNAIRE_PROMPT } from '@/polaris/needs-analysis/prompts'
-import { NA_REPORT_PROMPT, type NAReport } from '@/polaris/needs-analysis/report'
+import { buildFastNAJSONPrompt, type NAReport } from '@/polaris/needs-analysis/report'
 import { tryExtractJson } from '@/polaris/needs-analysis/json'
 import type { NAField, NAResponseMap } from '@/polaris/needs-analysis/types'
 
@@ -399,8 +399,8 @@ export default function Polaris() {
         stage5: stage5Answers,
       }
       
-      // Generate structured report
-      const reportPrompt = NA_REPORT_PROMPT(experienceLevel!, allAnswers)
+      // Generate structured report (fast prompt)
+      const reportPrompt = buildFastNAJSONPrompt(experienceLevel!, allAnswers)
       console.log('Generating report with prompt...', reportPrompt.substring(0, 200))
       
       const res = await callLLM([{ role: 'user', content: reportPrompt }])
@@ -435,51 +435,43 @@ export default function Polaris() {
             problem_statement: 'Unable to generate detailed analysis. Please ensure all required fields are filled.',
             current_state: ['Current analysis incomplete'],
             root_causes: ['Insufficient data provided'],
-            objectives: ['Complete needs assessment', 'Generate actionable recommendations']
+            objectives: ['Complete needs assessment', 'Generate actionable recommendations'],
+            assumptions: [],
+            unknowns: [],
+            confidence: 0.3
           },
           solution: {
-            modalities: [
-              { name: 'Blended Learning', reason: 'Combines flexibility with engagement' }
+            delivery_modalities: [
+              { modality: 'Blended Learning', reason: 'Combines flexibility with engagement', priority: 1 }
             ],
-            scope: {
-              audiences: [staticAnswers.audience_role as string || 'Target audience'],
-              competencies: ['To be determined based on complete assessment'],
-              content_outline: ['Module 1: Foundation', 'Module 2: Application', 'Module 3: Assessment']
-            }
+            target_audiences: [staticAnswers.audience_role as string || 'Target audience'],
+            key_competencies: ['To be determined based on complete assessment'],
+            content_outline: ['Module 1: Foundation', 'Module 2: Application', 'Module 3: Assessment'],
+            accessibility_and_inclusion: { standards: [], notes: null }
           },
           learner_analysis: {
-            profile: {
-              demographics: [staticAnswers.learner_age_range as string || 'Age range to be assessed', staticAnswers.learner_education_level as string || 'Education level to be assessed'],
-              tech_readiness: staticAnswers.learner_tech_savviness ? `Tech savviness level: ${staticAnswers.learner_tech_savviness}/10` : 'Tech readiness to be evaluated',
-              learning_style_fit: staticAnswers.learning_preferences as string[] || ['Learning preferences to be identified']
-            },
-            engagement_strategy: {
-              motivation_drivers: ['Motivation factors to be determined'],
-              potential_barriers: staticAnswers.accessibility_needs as string[] || ['Barriers to be identified'],
-              support_mechanisms: ['Support needs to be assessed']
-            },
-            design_implications: {
-              content_adaptations: ['Content adaptation requirements pending'],
-              delivery_adjustments: ['Delivery adjustments to be determined'],
-              accessibility_requirements: staticAnswers.accessibility_needs as string[] || ['Accessibility needs to be confirmed'],
-              language_considerations: staticAnswers.learner_language_diversity ? [staticAnswers.learner_language_diversity as string] : ['Language requirements to be specified']
-            }
+            profiles: [
+              {
+                segment: 'Primary',
+                roles: ['Learner'],
+                context: null,
+                motivators: [],
+                constraints: []
+              }
+            ],
+            readiness_risks: []
           },
           technology_talent: {
-            tech_enablers: {
-              available: ['Existing infrastructure to be assessed'],
-              required: ['Additional tools to be identified'],
-              integration_needs: ['Integration requirements pending']
+            technology: {
+              current_stack: ['LMS'],
+              gaps: [],
+              recommendations: [],
+              data_plan: { standards: [], integrations: [] }
             },
-            talent_requirements: {
-              internal_roles: ['Team structure to be defined'],
-              external_support: ['External resources to be evaluated'],
-              development_needs: ['Skills gaps to be identified']
-            },
-            limitations_impact: {
-              tech_constraints: ['Technology constraints to be assessed'],
-              talent_gaps_impact: ['Resource impacts to be evaluated'],
-              mitigation_strategies: ['Mitigation approaches to be developed']
+            talent: {
+              available_roles: ['SME'],
+              gaps: [],
+              recommendations: []
             }
           },
           delivery_plan: {
@@ -497,18 +489,22 @@ export default function Polaris() {
             resources: ['Project manager', 'Instructional designer']
           },
           measurement: {
-            success_metrics: ['Completion rate', 'Knowledge transfer', 'Performance improvement'],
+            success_metrics: [
+              { metric: 'Completion rate', baseline: null, target: 'TBD', timeframe: '' },
+              { metric: 'Knowledge transfer', baseline: null, target: 'TBD', timeframe: '' },
+              { metric: 'Performance improvement', baseline: null, target: 'TBD', timeframe: '' }
+            ],
             assessment_strategy: ['Pre/post assessments', 'Manager observations'],
-            data_sources: ['LMS', 'Performance data']
+            data_sources: ['LMS', 'Performance data'],
+            learning_analytics: { levels: [], reporting_cadence: null }
           },
           budget: {
+            currency: 'USD',
             notes: 'Budget to be determined based on scope',
-            ranges: [
-              { item: 'Development', low: 'TBD', high: 'TBD' }
-            ]
+            items: []
           },
           risks: [
-            { risk: 'Incomplete data', mitigation: 'Conduct follow-up discovery session' }
+            { risk: 'Incomplete data', mitigation: 'Conduct follow-up discovery session', severity: 'medium', likelihood: 'medium' }
           ],
           next_steps: ['Review and validate requirements', 'Schedule stakeholder alignment']
         }
@@ -592,27 +588,34 @@ export default function Polaris() {
     // Solution
     if (report.solution) {
       md += '\n## Recommended Solution\n\n'
-      if (report.solution.modalities && Array.isArray(report.solution.modalities)) {
+      if (report.solution.delivery_modalities && Array.isArray(report.solution.delivery_modalities)) {
         md += '### Delivery Modalities\n'
-        report.solution.modalities.forEach(m => {
-          if (m && m.name && m.reason) {
-            md += `- **${m.name}:** ${m.reason}\n`
+        report.solution.delivery_modalities.forEach(m => {
+          if (m && m.modality && m.reason !== undefined) {
+            md += `- **${m.modality}:** ${m.reason}\n`
           }
         })
       }
-      if (report.solution.scope) {
-        md += '\n### Scope\n'
-        if (report.solution.scope.audiences && Array.isArray(report.solution.scope.audiences)) {
-          md += '**Target Audiences:**\n'
-          report.solution.scope.audiences.forEach(a => md += `- ${a}\n`)
+      if (Array.isArray(report.solution.target_audiences)) {
+        md += '\n**Target Audiences:**\n'
+        report.solution.target_audiences.forEach(a => md += `- ${a}\n`)
+      }
+      if (Array.isArray(report.solution.key_competencies)) {
+        md += '\n**Key Competencies:**\n'
+        report.solution.key_competencies.forEach(c => md += `- ${c}\n`)
+      }
+      if (Array.isArray(report.solution.content_outline)) {
+        md += '\n**Content Outline:**\n'
+        report.solution.content_outline.forEach(c => md += `- ${c}\n`)
+      }
+      if (report.solution.accessibility_and_inclusion) {
+        const a11y = report.solution.accessibility_and_inclusion
+        if (Array.isArray(a11y.standards) && a11y.standards.length > 0) {
+          md += '\n**Accessibility & Inclusion Standards:**\n'
+          a11y.standards.forEach(s => md += `- ${s}\n`)
         }
-        if (report.solution.scope.competencies && Array.isArray(report.solution.scope.competencies)) {
-          md += '\n**Key Competencies:**\n'
-          report.solution.scope.competencies.forEach(c => md += `- ${c}\n`)
-        }
-        if (report.solution.scope.content_outline && Array.isArray(report.solution.scope.content_outline)) {
-          md += '\n**Content Outline:**\n'
-          report.solution.scope.content_outline.forEach(c => md += `- ${c}\n`)
+        if (a11y.notes) {
+          md += `\n**Accessibility Notes:** ${a11y.notes}\n`
         }
       }
     }
@@ -620,114 +623,67 @@ export default function Polaris() {
     // Learner Analysis
     if (report.learner_analysis) {
       md += '\n## Learner Analysis\n\n'
-      
-      // Learner Profile
-      if (report.learner_analysis.profile) {
-        md += '### Learner Profile\n'
-        if (report.learner_analysis.profile.demographics && Array.isArray(report.learner_analysis.profile.demographics)) {
-          md += '**Demographics:**\n'
-          report.learner_analysis.profile.demographics.forEach(d => md += `- ${d}\n`)
-        }
-        if (report.learner_analysis.profile.tech_readiness) {
-          md += `\n**Technology Readiness:** ${report.learner_analysis.profile.tech_readiness}\n`
-        }
-        if (report.learner_analysis.profile.learning_style_fit && Array.isArray(report.learner_analysis.profile.learning_style_fit)) {
-          md += '\n**Learning Style Preferences:**\n'
-          report.learner_analysis.profile.learning_style_fit.forEach(l => md += `- ${l}\n`)
-        }
+      if (Array.isArray(report.learner_analysis.profiles) && report.learner_analysis.profiles.length > 0) {
+        md += '### Learner Profiles\n'
+        report.learner_analysis.profiles.forEach(p => {
+          md += `- Segment: ${p.segment}\n`
+          if (Array.isArray(p.roles) && p.roles.length) md += `  - Roles: ${p.roles.join(', ')}\n`
+          if (p.context) md += `  - Context: ${p.context}\n`
+          if (Array.isArray(p.motivators) && p.motivators.length) md += `  - Motivators: ${p.motivators.join(', ')}\n`
+          if (Array.isArray(p.constraints) && p.constraints.length) md += `  - Constraints: ${p.constraints.join(', ')}\n`
+        })
       }
-      
-      // Engagement Strategy
-      if (report.learner_analysis.engagement_strategy) {
-        md += '\n### Engagement Strategy\n'
-        if (report.learner_analysis.engagement_strategy.motivation_drivers && Array.isArray(report.learner_analysis.engagement_strategy.motivation_drivers)) {
-          md += '**Motivation Drivers:**\n'
-          report.learner_analysis.engagement_strategy.motivation_drivers.forEach(m => md += `- ${m}\n`)
-        }
-        if (report.learner_analysis.engagement_strategy.potential_barriers && Array.isArray(report.learner_analysis.engagement_strategy.potential_barriers)) {
-          md += '\n**Potential Barriers:**\n'
-          report.learner_analysis.engagement_strategy.potential_barriers.forEach(b => md += `- ${b}\n`)
-        }
-        if (report.learner_analysis.engagement_strategy.support_mechanisms && Array.isArray(report.learner_analysis.engagement_strategy.support_mechanisms)) {
-          md += '\n**Support Mechanisms:**\n'
-          report.learner_analysis.engagement_strategy.support_mechanisms.forEach(s => md += `- ${s}\n`)
-        }
-      }
-      
-      // Design Implications
-      if (report.learner_analysis.design_implications) {
-        md += '\n### Design Implications\n'
-        if (report.learner_analysis.design_implications.content_adaptations && Array.isArray(report.learner_analysis.design_implications.content_adaptations)) {
-          md += '**Content Adaptations:**\n'
-          report.learner_analysis.design_implications.content_adaptations.forEach(c => md += `- ${c}\n`)
-        }
-        if (report.learner_analysis.design_implications.delivery_adjustments && Array.isArray(report.learner_analysis.design_implications.delivery_adjustments)) {
-          md += '\n**Delivery Adjustments:**\n'
-          report.learner_analysis.design_implications.delivery_adjustments.forEach(d => md += `- ${d}\n`)
-        }
-        if (report.learner_analysis.design_implications.accessibility_requirements && Array.isArray(report.learner_analysis.design_implications.accessibility_requirements)) {
-          md += '\n**Accessibility Requirements:**\n'
-          report.learner_analysis.design_implications.accessibility_requirements.forEach(a => md += `- ${a}\n`)
-        }
-        if (report.learner_analysis.design_implications.language_considerations && Array.isArray(report.learner_analysis.design_implications.language_considerations)) {
-          md += '\n**Language Considerations:**\n'
-          report.learner_analysis.design_implications.language_considerations.forEach(l => md += `- ${l}\n`)
-        }
+      if (Array.isArray(report.learner_analysis.readiness_risks) && report.learner_analysis.readiness_risks.length > 0) {
+        md += '\n**Readiness Risks:**\n'
+        report.learner_analysis.readiness_risks.forEach(r => md += `- ${r}\n`)
       }
     }
     
     // Technology & Talent Analysis
     if (report.technology_talent) {
       md += '\n## Technology & Talent Analysis\n\n'
-      
-      // Tech Enablers
-      if (report.technology_talent.tech_enablers) {
-        md += '### Technology Enablers\n'
-        if (report.technology_talent.tech_enablers.available && Array.isArray(report.technology_talent.tech_enablers.available)) {
-          md += '**Available Technologies:**\n'
-          report.technology_talent.tech_enablers.available.forEach(t => md += `- ${t}\n`)
+      // Technology
+      if (report.technology_talent.technology) {
+        md += '### Technology\n'
+        const tech = report.technology_talent.technology
+        if (Array.isArray(tech.current_stack) && tech.current_stack.length > 0) {
+          md += '**Current Stack:**\n'
+          tech.current_stack.forEach(t => md += `- ${t}\n`)
         }
-        if (report.technology_talent.tech_enablers.required && Array.isArray(report.technology_talent.tech_enablers.required)) {
-          md += '\n**Required Technologies:**\n'
-          report.technology_talent.tech_enablers.required.forEach(t => md += `- ${t}\n`)
+        if (Array.isArray(tech.gaps) && tech.gaps.length > 0) {
+          md += '\n**Gaps:**\n'
+          tech.gaps.forEach(g => md += `- ${g}\n`)
         }
-        if (report.technology_talent.tech_enablers.integration_needs && Array.isArray(report.technology_talent.tech_enablers.integration_needs)) {
-          md += '\n**Integration Requirements:**\n'
-          report.technology_talent.tech_enablers.integration_needs.forEach(i => md += `- ${i}\n`)
+        if (Array.isArray(tech.recommendations) && tech.recommendations.length > 0) {
+          md += '\n**Recommendations:**\n'
+          tech.recommendations.forEach(r => md += `- ${r.capability} — ${r.fit}\n`)
         }
-      }
-      
-      // Talent Requirements
-      if (report.technology_talent.talent_requirements) {
-        md += '\n### Talent Requirements\n'
-        if (report.technology_talent.talent_requirements.internal_roles && Array.isArray(report.technology_talent.talent_requirements.internal_roles)) {
-          md += '**Internal Roles Needed:**\n'
-          report.technology_talent.talent_requirements.internal_roles.forEach(r => md += `- ${r}\n`)
-        }
-        if (report.technology_talent.talent_requirements.external_support && Array.isArray(report.technology_talent.talent_requirements.external_support)) {
-          md += '\n**External Support Required:**\n'
-          report.technology_talent.talent_requirements.external_support.forEach(e => md += `- ${e}\n`)
-        }
-        if (report.technology_talent.talent_requirements.development_needs && Array.isArray(report.technology_talent.talent_requirements.development_needs)) {
-          md += '\n**Skills Development Needs:**\n'
-          report.technology_talent.talent_requirements.development_needs.forEach(d => md += `- ${d}\n`)
+        if (tech.data_plan) {
+          if (Array.isArray(tech.data_plan.standards) && tech.data_plan.standards.length > 0) {
+            md += '\n**Data Standards:**\n'
+            tech.data_plan.standards.forEach(s => md += `- ${s}\n`)
+          }
+          if (Array.isArray(tech.data_plan.integrations) && tech.data_plan.integrations.length > 0) {
+            md += '\n**Integrations:**\n'
+            tech.data_plan.integrations.forEach(i => md += `- ${i}\n`)
+          }
         }
       }
-      
-      // Limitations & Impact
-      if (report.technology_talent.limitations_impact) {
-        md += '\n### Limitations & Mitigation\n'
-        if (report.technology_talent.limitations_impact.tech_constraints && Array.isArray(report.technology_talent.limitations_impact.tech_constraints)) {
-          md += '**Technology Constraints:**\n'
-          report.technology_talent.limitations_impact.tech_constraints.forEach(c => md += `- ${c}\n`)
+      // Talent
+      if (report.technology_talent.talent) {
+        md += '\n### Talent\n'
+        const talent = report.technology_talent.talent
+        if (Array.isArray(talent.available_roles) && talent.available_roles.length > 0) {
+          md += '**Available Roles:**\n'
+          talent.available_roles.forEach(r => md += `- ${r}\n`)
         }
-        if (report.technology_talent.limitations_impact.talent_gaps_impact && Array.isArray(report.technology_talent.limitations_impact.talent_gaps_impact)) {
-          md += '\n**Talent Gaps Impact:**\n'
-          report.technology_talent.limitations_impact.talent_gaps_impact.forEach(g => md += `- ${g}\n`)
+        if (Array.isArray(talent.gaps) && talent.gaps.length > 0) {
+          md += '\n**Gaps:**\n'
+          talent.gaps.forEach(g => md += `- ${g}\n`)
         }
-        if (report.technology_talent.limitations_impact.mitigation_strategies && Array.isArray(report.technology_talent.limitations_impact.mitigation_strategies)) {
-          md += '\n**Mitigation Strategies:**\n'
-          report.technology_talent.limitations_impact.mitigation_strategies.forEach(m => md += `- ${m}\n`)
+        if (Array.isArray(talent.recommendations) && talent.recommendations.length > 0) {
+          md += '\n**Recommendations:**\n'
+          talent.recommendations.forEach(rec => md += `- ${rec}\n`)
         }
       }
     }
@@ -772,7 +728,10 @@ export default function Polaris() {
       md += '\n## Measurement & Success\n\n'
       if (report.measurement.success_metrics && Array.isArray(report.measurement.success_metrics)) {
         md += '**Success Metrics:**\n'
-        report.measurement.success_metrics.forEach(m => md += `- ${m}\n`)
+        report.measurement.success_metrics.forEach((m: any) => {
+          if (typeof m === 'string') md += `- ${m}\n`
+          else if (m && m.metric) md += `- ${m.metric}${m.target ? ` (Target: ${m.target})` : ''}${m.timeframe ? ` by ${m.timeframe}` : ''}\n`
+        })
       }
       if (report.measurement.assessment_strategy && Array.isArray(report.measurement.assessment_strategy)) {
         md += '\n**Assessment Strategy:**\n'
@@ -782,6 +741,16 @@ export default function Polaris() {
         md += '\n**Data Sources:**\n'
         report.measurement.data_sources.forEach(d => md += `- ${d}\n`)
       }
+      if (report.measurement.learning_analytics) {
+        const la = report.measurement.learning_analytics
+        if (Array.isArray(la.levels) && la.levels.length > 0) {
+          md += '\n**Learning Analytics Levels:**\n'
+          la.levels.forEach(l => md += `- ${l}\n`)
+        }
+        if (la.reporting_cadence) {
+          md += `\n**Reporting Cadence:** ${la.reporting_cadence}\n`
+        }
+      }
     }
     
     // Budget
@@ -790,10 +759,10 @@ export default function Polaris() {
       if (report.budget.notes) {
         md += `${report.budget.notes}\n\n`
       }
-      if (report.budget.ranges && Array.isArray(report.budget.ranges)) {
-        report.budget.ranges.forEach(r => {
-          if (r && r.item && r.low && r.high) {
-            md += `- **${r.item}:** ${r.low} - ${r.high}\n`
+      if (report.budget.items && Array.isArray(report.budget.items)) {
+        report.budget.items.forEach(r => {
+          if (r && r.item && (typeof r.low === 'number') && (typeof r.high === 'number')) {
+            md += `- **${r.item}:** ${r.low} - ${r.high} ${report.budget.currency ? `(${report.budget.currency})` : ''}\n`
           }
         })
       }
@@ -1501,7 +1470,7 @@ export default function Polaris() {
             <button
               type="button"
               className="icon-btn"
-              onClick={() => (window.history.length > 1 ? window.history.back() : (window.location.href = '/portal'))}
+              onClick={() => (window.history.length > 1 ? window.history.back() : (window.location.href = '/'))}
               aria-label="Back"
               title="Back"
             >
@@ -1513,7 +1482,7 @@ export default function Polaris() {
               <button 
                 type="button" 
                 className="icon-btn" 
-                onClick={() => window.location.href = '/portal/starmaps'}
+                onClick={() => window.location.href = '/starmaps'}
                 aria-label="View all starmaps"
                 title="View all starmaps"
               >

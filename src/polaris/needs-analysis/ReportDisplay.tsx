@@ -199,10 +199,10 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
   // Memoize timeline items to prevent unnecessary re-renders
   const timelineItems = useMemo(() => 
     report?.delivery_plan?.timeline?.map((t, i) => {
-      const startDate = new Date(t.start)
-      const endDate = new Date(t.end)
-      const isValid = !isNaN(startDate.getTime()) && !isNaN(endDate.getTime())
-      const duration = isValid ? Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 7)) : 0
+      const startDate = t.start ? new Date(t.start) : null
+      const endDate = t.end ? new Date(t.end) : null
+      const isValid = !!(startDate && endDate && !isNaN(startDate.getTime()) && !isNaN(endDate.getTime()))
+      const duration = isValid && startDate && endDate ? Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 7)) : 0
       
       return (
         <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
@@ -213,9 +213,9 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
             )}
           </div>
           <div className="text-xs text-white/60">
-            <span>{isValid ? startDate.toLocaleDateString() : t.start}</span>
+            <span>{isValid && startDate ? startDate.toLocaleDateString() : (t.start || '')}</span>
             <span className="mx-1">→</span>
-            <span>{isValid ? endDate.toLocaleDateString() : t.end}</span>
+            <span>{isValid && endDate ? endDate.toLocaleDateString() : (t.end || '')}</span>
           </div>
           <div className="mt-2 h-1 rounded-full bg-white/10 overflow-hidden">
             <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-400" style={{ width: '100%' }} />
@@ -226,12 +226,12 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
 
   // Memoize solution items to prevent unnecessary re-renders
   const solutionItems = useMemo(() => 
-    report?.solution?.modalities?.map((s: { name: string; reason: string }, i: number) => (
+    report?.solution?.delivery_modalities?.map((s: any, i: number) => (
       <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
-        <div className="font-medium text-white/90 text-sm mb-2">{s.name}</div>
-        <div className="text-xs text-white/70 leading-relaxed">{s.reason}</div>
+        <div className="font-medium text-white/90 text-sm mb-2">{(s?.modality || 'Modality')} {(s?.priority ?? i + 1) ? `(P${s?.priority ?? i + 1})` : ''}</div>
+        <div className="text-xs text-white/70 leading-relaxed">{s?.reason || ''}</div>
       </div>
-    )) || [], [report?.solution?.modalities])
+    )) || [], [report?.solution?.delivery_modalities])
 
   // Memoize delivery plan items to prevent unnecessary re-renders
   const deliveryPlanItems = useMemo(() => 
@@ -259,41 +259,41 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
 
   // Memoize metrics items to prevent unnecessary re-renders
   const metricsItems = useMemo(() => 
-    report?.measurement?.success_metrics?.map((m: string, i: number) => (
+    report?.measurement?.success_metrics?.map((m: any, i: number) => (
       <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
         <div className="flex items-center justify-between mb-2">
           <span className="font-medium text-white/90 text-sm">Metric {i + 1}</span>
         </div>
-        <div className="text-xs text-white/70 leading-relaxed">{m}</div>
+        <div className="text-xs text-white/70 leading-relaxed">{typeof m === 'string' ? m : (m?.metric || '')}</div>
       </div>
     )) || [], [report?.measurement?.success_metrics])
 
   // Memoize audience items to prevent unnecessary re-renders
   const audienceItems = useMemo(() => 
-    report?.solution?.scope?.audiences?.map((a: string, i: number) => (
+    report?.solution?.target_audiences?.map((a: string, i: number) => (
       <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
         <div className="font-medium text-white/90 text-sm mb-2">Audience {i + 1}</div>
         <div className="text-xs text-white/70 leading-relaxed">{a}</div>
       </div>
-    )) || [], [report?.solution?.scope?.audiences])
+    )) || [], [report?.solution?.target_audiences])
 
   // Memoize modality items to prevent unnecessary re-renders
   const modalityItems = useMemo(() => 
-    report?.solution?.modalities?.map((m: { name: string; reason: string }, i: number) => (
+    report?.solution?.delivery_modalities?.map((m: any, i: number) => (
       <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
-        <div className="font-medium text-white/90 text-sm mb-2">{m.name}</div>
-        <div className="text-xs text-white/70 leading-relaxed">{m.reason}</div>
+        <div className="font-medium text-white/90 text-sm mb-2">{(m?.modality || 'Modality')} {(m?.priority ?? i + 1) ? `(P${m?.priority ?? i + 1})` : ''}</div>
+        <div className="text-xs text-white/70 leading-relaxed">{m?.reason || ''}</div>
       </div>
-    )) || [], [report?.solution?.modalities])
+    )) || [], [report?.solution?.delivery_modalities])
 
   // Memoize technology items to prevent unnecessary re-renders
   const technologyItems = useMemo(() => 
-    report?.technology_talent?.tech_enablers?.available?.map((t: string, i: number) => (
+    report?.technology_talent?.technology?.current_stack?.map((t: string, i: number) => (
       <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
         <div className="font-medium text-white/90 text-sm mb-2">Technology {i + 1}</div>
         <div className="text-xs text-white/70 leading-relaxed">{t}</div>
       </div>
-    )) || [], [report?.technology_talent?.tech_enablers?.available])
+    )) || [], [report?.technology_talent?.technology?.current_stack])
 
   // Memoize assessment items to prevent unnecessary re-renders
   const assessmentItems = useMemo(() => 
@@ -435,7 +435,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
           )}
 
           {/* Solutions */}
-          {report.solution?.modalities && report.solution.modalities.length > 0 && (
+          {report.solution?.delivery_modalities && report.solution.delivery_modalities.length > 0 && (
             <div className="glass-card p-5">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-1 rounded bg-secondary-500/20">
@@ -523,7 +523,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Target Audience */}
-          {report.solution?.scope?.audiences && report.solution.scope.audiences.length > 0 && (
+          {report.solution?.target_audiences && report.solution.target_audiences.length > 0 && (
             <div className="glass-card p-5">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-1 rounded bg-purple-500/20">
@@ -538,7 +538,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
           )}
 
           {/* Learning Modalities */}
-          {report.solution?.modalities && report.solution.modalities.length > 0 && (
+          {report.solution?.delivery_modalities && report.solution.delivery_modalities.length > 0 && (
             <div className="glass-card p-5">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-1 rounded bg-indigo-500/20">
@@ -553,7 +553,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
           )}
 
           {/* Technology Stack */}
-          {report.technology_talent?.tech_enablers?.available && report.technology_talent.tech_enablers.available.length > 0 && (
+          {report.technology_talent?.technology?.current_stack && report.technology_talent.technology.current_stack.length > 0 && (
             <div className="glass-card p-5">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-1 rounded bg-cyan-500/20">

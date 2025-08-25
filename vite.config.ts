@@ -94,6 +94,8 @@ export default defineConfig(({ mode }) => {
           rewrite: () => '/chat/completions',
           headers: PERPLEXITY_API_KEY ? { Authorization: `Bearer ${PERPLEXITY_API_KEY}` } : {},
         },
+        // Note: /api/reportJobs is served by serverless functions in production.
+        // In Vite dev, we do not proxy this path; the UI falls back to direct generation.
       },
       // Enable HMR optimizations
       hmr: {

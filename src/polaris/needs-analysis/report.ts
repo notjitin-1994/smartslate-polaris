@@ -1,102 +1,338 @@
 // src/polaris/needs-analysis/report.ts
 export interface NAReport {
   summary: {
-    problem_statement: string;
-    current_state: string[];                 // bullets
-    root_causes: string[];                   // bullets
-    objectives: string[];                    // measurable
+    problem_statement: string | null;
+    current_state: string[];
+    root_causes: string[];
+    objectives: string[];
+    assumptions: string[];
+    unknowns: string[];
+    confidence: number;
   };
   solution: {
-    modalities: Array<{ name: string; reason: string; }>;   // Live, eLearning, Blended, Coaching, Toolkits
-    scope: {
-      audiences: string[];
-      competencies: string[];                // e.g., consultative selling, coaching, compliance
-      content_outline: string[];             // module-level bullets
+    delivery_modalities: Array<{ modality: string; reason: string; priority: number }>;
+    target_audiences: string[];
+    key_competencies: string[];
+    content_outline: string[];
+    accessibility_and_inclusion: {
+      standards: string[];
+      notes: string | null;
     };
   };
   learner_analysis: {
-    profile: {
-      demographics: string[];                 // Age range, education level, etc.
-      tech_readiness: string;                // Overall tech savviness assessment
-      learning_style_fit: string[];          // Preferred learning approaches based on profile
-    };
-    engagement_strategy: {
-      motivation_drivers: string[];           // What will motivate these learners
-      potential_barriers: string[];           // Obstacles to engagement
-      support_mechanisms: string[];           // Help and support approaches
-    };
-    design_implications: {
-      content_adaptations: string[];          // How content should be adapted for learners
-      delivery_adjustments: string[];         // Delivery method modifications
-      accessibility_requirements: string[];   // Specific accessibility needs to address
-      language_considerations: string[];      // Language/localization needs
-    };
+    profiles: Array<{
+      segment: string;
+      roles: string[];
+      context: string | null;
+      motivators: string[];
+      constraints: string[];
+    }>;
+    readiness_risks: string[];
   };
   technology_talent: {
-    tech_enablers: {
-      available: string[];                    // Technologies that can be leveraged
-      required: string[];                     // New tech needed for success
-      integration_needs: string[];            // Systems that need to be connected
+    technology: {
+      current_stack: string[];
+      gaps: string[];
+      recommendations: Array<{ capability: string; fit: string; constraints: string[] }>;
+      data_plan: {
+        standards: string[];
+        integrations: string[];
+      };
     };
-    talent_requirements: {
-      internal_roles: string[];               // Internal roles/skills needed
-      external_support: string[];             // External expertise required
-      development_needs: string[];            // Skills to be developed internally
-    };
-    limitations_impact: {
-      tech_constraints: string[];             // How tech limitations affect the solution
-      talent_gaps_impact: string[];           // How talent gaps affect delivery
-      mitigation_strategies: string[];        // Strategies to work around limitations
+    talent: {
+      available_roles: string[];
+      gaps: string[];
+      recommendations: string[];
     };
   };
   delivery_plan: {
-    phases: Array<{
-      name: string; duration_weeks: number; goals: string[]; activities: string[];
-    }>;
-    timeline: Array<{ label: string; start: string; end: string }>;   // ISO dates (align with calendar inputs)
-    resources: string[];                      // roles + counts suggested
+    phases: Array<{ name: string; duration_weeks: number; goals: string[]; activities: string[] }>;
+    timeline: Array<{ label: string; start: string | null; end: string | null }>;
+    resources: string[];
   };
   measurement: {
-    success_metrics: string[];                // leading + lagging
-    assessment_strategy: string[];            // quizzes, observations, projects
-    data_sources: string[];                   // LMS, CRM, HRIS
+    success_metrics: Array<{ metric: string; baseline: string | null; target: string; timeframe: string }>;
+    assessment_strategy: string[];
+    data_sources: string[];
+    learning_analytics: { levels: string[]; reporting_cadence: string | null };
   };
   budget: {
-    notes: string;
-    ranges: Array<{ item: string; low: string; high: string }>; // descriptive ranges; currency left as string for flexibility
+    currency: string;
+    notes: string | null;
+    items: Array<{ item: string; low: number; high: number }>;
   };
-  risks: Array<{ risk: string; mitigation: string }>;
-  next_steps: string[];                        // immediate actions
+  risks: Array<{ risk: string; mitigation: string; severity: 'low' | 'medium' | 'high'; likelihood: 'low' | 'medium' | 'high' }>;
+  next_steps: string[];
 }
 
-export const NA_REPORT_PROMPT = (
+export const NA_REPORT_PROMPT = (experienceLevel: string, allAnswers: Record<string, unknown>) => `
+SYSTEM / ROLE
+You are a **principal L&D consultant** and expert Instructional Designer. You produce a **concise, decision-ready** needs-analysis report as **valid JSON only** (no markdown, no prose outside JSON).
+
+CONTEXT
+- USER_EXPERIENCE_LEVEL: ${experienceLevel}
+- ALL_ANSWERS (authoritative; may include earlier stage reports/summaries, org/role context, constraints, goals, compliance notes, tech stack, audiences, timeline, budget, risks, Q&A, etc. Do not normalize keys; read as-is):
+${JSON.stringify(allAnswers)}
+
+OBJECTIVE
+Synthesize ALL_ANSWERS into a single **action-oriented** recommendations artifact for executives and project owners. Resolve contradictions where possible; otherwise flag them. Never copy/paste long passages—summarize what matters for decisions.
+
+STRICT RULES
+1) **Output JSON ONLY** that matches the schema below—no extra keys, comments, or trailing commas.
+2) **Grounded claims only.** If a detail is missing/unclear, set the corresponding field to **null** or an empty array and add an entry to \`summary.unknowns\`. Do **not** fabricate.
+3) **Prioritization.** Keep each list to the most important 3–6 items unless the input forces more.
+4) **Clarity & linkage.** Every recommendation must tie to stated objectives, audience, constraints, timeline, or budget.
+5) **Standards.**
+   - Dates: ISO 8601 \`YYYY-MM-DD\`.
+   - Currency: ISO 4217 code (e.g., "USD"), amounts as numbers (not strings).
+   - Accessibility & compliance: include if implied by inputs; otherwise leave null and add to \`unknowns\`.
+6) **Role-awareness.** Adapt rigor and questions to the requester profile present in ALL_ANSWERS (e.g., enterprise ID vs. freelance developer).
+7) **No vendor hype.** Recommend tech by **capability** and fit; name tools only if ALL_ANSWERS mentions them or if they are ubiquitous categories (e.g., “SCORM-compliant LMS”, “xAPI LRS”).
+
+OUTPUT
+Return **ONLY** valid JSON with this **EXACT** structure (keys and nesting). Omit no keys; use nulls/empty arrays if unknown.
+
+{
+  "summary": {
+    "problem_statement": "<one sentence or null>",
+    "current_state": ["<bullet>", "<bullet>"],
+    "root_causes": ["<bullet>", "<bullet>"],
+    "objectives": ["<bullet>", "<bullet>"],
+    "assumptions": ["<assumption>", "..."],
+    "unknowns": ["<what’s missing and why it matters>", "..."],
+    "confidence": 0.0
+  },
+  "solution": {
+    "delivery_modalities": [
+      { "modality": "<e.g., Blended Cohort>", "reason": "<why fit>", "priority": 1 }
+    ],
+    "target_audiences": ["<segment>", "..."],
+    "key_competencies": ["<competency>", "..."],
+    "content_outline": ["<module/topic>", "..."],
+    "accessibility_and_inclusion": {
+      "standards": ["<e.g., WCAG 2.2 AA>", "..."],
+      "notes": "<concise guidance or null>"
+    }
+  },
+  "learner_analysis": {
+    "profiles": [
+      {
+        "segment": "<name>",
+        "roles": ["<role>", "..."],
+        "context": "<work conditions/devices/shifts/languages or null>",
+        "motivators": ["<intrinsic/extrinsic>", "..."],
+        "constraints": ["<time, access, culture, bandwidth>", "..."]
+      }
+    ],
+    "readiness_risks": ["<risk>", "..."]
+  },
+  "technology_talent": {
+    "technology": {
+      "current_stack": ["<from ALL_ANSWERS if known>", "..."],
+      "gaps": ["<gap>", "..."],
+      "recommendations": [
+        { "capability": "<e.g., SCORM/xAPI LMS>", "fit": "<why>", "constraints": ["<constraint>", "..."] }
+      ],
+      "data_plan": {
+        "standards": ["<e.g., xAPI>", "..."],
+        "integrations": ["<e.g., HRIS, SSO>", "..."]
+      }
+    },
+    "talent": {
+      "available_roles": ["<SME, ID, QA, PM>", "..."],
+      "gaps": ["<capacity/skill gap>", "..."],
+      "recommendations": ["<staffing or upskilling rec>", "..."]
+    }
+  },
+  "delivery_plan": {
+    "phases": [
+      {
+        "name": "<e.g., Discover>",
+        "duration_weeks": 0,
+        "goals": ["<goal>", "..."],
+        "activities": ["<activity>", "..."]
+      }
+    ],
+    "timeline": [
+      { "label": "<milestone>", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" }
+    ],
+    "resources": ["<role>", "..."]
+  },
+  "measurement": {
+    "success_metrics": [
+      { "metric": "<name>", "baseline": "<value or null>", "target": "<value>", "timeframe": "YYYY-MM-DD" }
+    ],
+    "assessment_strategy": ["<method>", "..."],
+    "data_sources": ["<LMS, HRIS, survey, CRM>", "..."],
+    "learning_analytics": {
+      "levels": ["<Kirkpatrick/Roque, etc.>", "..."],
+      "reporting_cadence": "<e.g., monthly or null>"
+    }
+  },
+  "budget": {
+    "currency": "<ISO e.g., USD>",
+    "notes": "<one sentence or null>",
+    "items": [
+      { "item": "<name>", "low": 0, "high": 0 }
+    ]
+  },
+  "risks": [
+    { "risk": "<text>", "mitigation": "<text>", "severity": "low|medium|high", "likelihood": "low|medium|high" }
+  ],
+  "next_steps": [
+    "<short step>", "<short step>"
+  ]
+}
+
+VALIDATION HINTS (for the model)
+- If dates cannot be inferred, set both \`start\` and \`end\` to null and add a matching entry in \`summary.unknowns\`.
+- If budget is a range in ALL_ANSWERS, reflect it under \`budget.items\` and keep currency consistent.
+- Keep \`confidence\` between 0 and 1, where 1 = fully grounded by inputs.
+- Keep each list concise (3–6 items) unless ALL_ANSWERS clearly provides more.
+`;
+
+export const buildFastNAReportPrompt = (
   experienceLevel: string,
   allAnswers: Record<string, unknown>
-) => `ROLE: You are a principal L&D consultant. Produce a decision-ready Needs Analysis Report.
-USER EXPERIENCE: ${experienceLevel}
-ALL ANSWERS: ${JSON.stringify(allAnswers)}
+) => `
+SYSTEM / ROLE
+You are a principal L&D consultant. Output VALID JSON ONLY (no markdown, no extra text).
 
-REQUIREMENTS:
-- Be specific and action-oriented. Avoid fluff.
-- Tie recommendations to business objectives, constraints, and systems provided.
-- CRITICAL: Analyze learner characteristics (learner_age_range, learner_tech_savviness, learner_education_level, learning_preferences, prior_training_experience, learner_motivation_level, accessibility_needs, learner_time_availability, learner_device_access, learner_work_environment, learner_language_diversity, learner_cultural_factors) to tailor the solution.
-- ESSENTIAL: Analyze technology capabilities (available_technologies, tech_expertise_level, tech_limitations, tech_investment_appetite) and talent resources (talent_availability, talent_gaps, talent_constraints) from the answers.
-- Consider how learner profiles affect content design, delivery methods, and support needs.
-- Address accessibility requirements and language/cultural considerations explicitly.
-- Consider how tech/talent limitations impact solution design and delivery approach.
-- Recommend engagement strategies based on learner motivation levels and preferences.
-- Prefer modalities that match learner tech savviness, device access, and time availability.
-- Include phases with durations, a simple timeline, and clear next steps.
-- Provide pragmatic success metrics and data sources.
-- Budget ranges should be realistic bands (as text), not exact quotes.
-\nANIMATED DATA & INFOGRAPHICS REQUIREMENTS (for UI visualizations):
-- Use quantifiable targets wherever reasonable so the UI can render bars/gauges:
-  - Put numeric percentages in success_metrics (e.g., "Completion rate: 85%" or "Time-to-productivity: 30% faster").
-  - Express technology readiness as an integer format "N/10" (e.g., "7/10").
-  - Prefer adding simple fractions or percentages in assessment_strategy items when applicable (e.g., "Observation checklists – 40%").
-- For risks, include severity words in the risk text such as "High", "Medium", or "Low" so the UI can badge them.
-- Ensure delivery_plan.timeline contains realistic ISO dates (yyyy-mm-dd) so the UI can draw the timeline bars.
-- Keep all values concise and human-readable (no markdown in fields, plain text only).
+PERFORMANCE MODE
+- Keep analysis internal; output JSON only.
+- Lists: 3–6 items max (truncate rather than elaborate).
+- Free-text fields: ≤50 words.
+- If unknown/unclear: use null or [] and add to summary.unknowns.
+- Do NOT browse the web. Use only ALL_ANSWERS.
+
+USER EXPERIENCE: ${experienceLevel}
+
+ALL_ANSWERS (authoritative; may contain role/org/project, constraints, tech, audience, timelines, budgets, dynamic stages 1–4):
+${JSON.stringify(allAnswers)}
+
+OBJECTIVE
+Synthesize ALL_ANSWERS into a decision-ready Needs Analysis JSON. Tie each recommendation to objectives, audience, constraints, timeline, or budget. Be specific and action-oriented.
+
+CRITICAL ANALYSIS REQUIREMENTS
+- Learners: analyze age range, tech savviness, education, preferences, prior training, motivation, accessibility needs, time availability, device access, work environment, language diversity, cultural factors.
+- Tech & Talent: analyze available technologies, expertise, limitations, investment appetite; talent availability, gaps, constraints.
+- Accessibility & Language: address explicitly when present; otherwise set null and note in unknowns.
+- Engagement: align strategies to motivation/preferences and constraints.
+- Do not fabricate; if data is missing, set null/[] and capture in unknowns.
+
+OUTPUT JSON SCHEMA (exact keys, no extras; use nulls/[] if unknown)
+{
+  "summary": {
+    "problem_statement": "<one sentence or null>",
+    "current_state": ["<bullet>", "..."],
+    "root_causes": ["<bullet>", "..."],
+    "objectives": ["<bullet>", "..."],
+    "assumptions": ["<assumption>", "..."],
+    "unknowns": ["<what’s missing>", "..."],
+    "confidence": 0.0
+  },
+  "solution": {
+    "delivery_modalities": [
+      { "modality": "<e.g., Blended Cohort>", "reason": "<why fit>", "priority": 1 }
+    ],
+    "target_audiences": ["<segment>", "..."],
+    "key_competencies": ["<competency>", "..."],
+    "content_outline": ["<module/topic>", "..."],
+    "accessibility_and_inclusion": {
+      "standards": ["<e.g., WCAG 2.1 AA>", "..."],
+      "notes": "<concise guidance or null>"
+    }
+  },
+  "learner_analysis": {
+    "profiles": [
+      {
+        "segment": "<name>",
+        "roles": ["<role>", "..."],
+        "context": "<work/device/shifts/language or null>",
+        "motivators": ["<intrinsic/extrinsic>", "..."],
+        "constraints": ["<time, access, culture>", "..."]
+      }
+    ],
+    "readiness_risks": ["<risk>", "..."]
+  },
+  "technology_talent": {
+    "technology": {
+      "current_stack": ["<from ALL_ANSWERS if known>", "..."],
+      "gaps": ["<gap>", "..."],
+      "recommendations": [
+        { "capability": "<e.g., SCORM/xAPI LMS>", "fit": "<why>", "constraints": ["<constraint>", "..."] }
+      ],
+      "data_plan": {
+        "standards": ["<e.g., xAPI>", "..."],
+        "integrations": ["<e.g., HRIS, SSO>", "..."]
+      }
+    },
+    "talent": {
+      "available_roles": ["<SME, ID, QA, PM>", "..."],
+      "gaps": ["<capacity/skill gap>", "..."],
+      "recommendations": ["<staffing or upskilling rec>", "..."]
+    }
+  },
+  "delivery_plan": {
+    "phases": [
+      { "name": "<e.g., Discover>", "duration_weeks": 0, "goals": ["<goal>", "..."], "activities": ["<activity>", "..."] }
+    ],
+    "timeline": [ { "label": "<milestone>", "start": "YYYY-MM-DD", "end": "YYYY-MM-DD" } ],
+    "resources": ["<role>", "..."]
+  },
+  "measurement": {
+    "success_metrics": [
+      { "metric": "<name>", "baseline": "<value or null>", "target": "<value>", "timeframe": "YYYY-MM-DD" }
+    ],
+    "assessment_strategy": ["<method>", "..."],
+    "data_sources": ["<LMS, HRIS, survey>", "..."],
+    "learning_analytics": {
+      "levels": ["<Kirkpatrick, etc.>", "..."],
+      "reporting_cadence": "<e.g., monthly or null>"
+    }
+  },
+  "budget": {
+    "currency": "<ISO e.g., USD>",
+    "notes": "<one sentence or null>",
+    "items": [ { "item": "<name>", "low": 0, "high": 0 } ]
+  },
+  "risks": [
+    { "risk": "<text>", "mitigation": "<text>", "severity": "low|medium|high", "likelihood": "low|medium|high" }
+  ],
+  "next_steps": ["<short step>", "<short step>"]
+}
+
+VALIDATION HINTS
+- If dates cannot be inferred, set null and add to summary.unknowns.
+- Confidence must be 0–1.
+- Enforce item caps. If inputs contain long lists, keep the top 3–6 by relevance to objectives/constraints.
+`;
+
+export const buildFastNAJSONPrompt = (
+  experienceLevel: string,
+  allAnswers: Record<string, unknown>
+) => `
+SYSTEM / ROLE
+You are a principal L&D consultant. Output VALID JSON ONLY (no markdown, no extra text).
+
+PERFORMANCE MODE
+- Do your reasoning silently; output JSON only.
+- Lists: 3–6 items max. Free-text fields: ≤40 words.
+- If a detail is unknown, write "TBD — requires stakeholder input" (strings) or use the smallest sensible placeholder.
+- DO NOT browse the web. Use only ALL ANSWERS.
+
+USER EXPERIENCE: ${experienceLevel}
+
+ALL ANSWERS (authoritative; includes role/org/project data, constraints, tech, audience, timelines, budgets, dynamic stages 1–4):
+${JSON.stringify(allAnswers)}
+
+OBJECTIVE
+Synthesize ALL ANSWERS into a decision-ready Needs Analysis. Tie every recommendation to objectives, audience, constraints, timeline, or budget. Be specific and action-oriented. Address learner characteristics, technology capabilities, talent resources, accessibility, language/culture, engagement, and measurement.
+
+ANIMATED DATA & INFOGRAPHICS HINTS (for UI)
+- Put numeric targets in success_metrics strings (e.g., "Completion rate: 85%").
+- Express tech readiness as "N/10" when relevant.
+- Use ISO dates (yyyy-mm-dd) in delivery_plan.timeline.
 
 OUTPUT: Return ONLY valid JSON with this EXACT structure (no markdown, no extra text):
 {
@@ -152,27 +388,14 @@ OUTPUT: Return ONLY valid JSON with this EXACT structure (no markdown, no extra 
     }
   },
   "delivery_plan": {
-    "phases": [
-      {"name": "string", "duration_weeks": number, "goals": ["string"], "activities": ["string"]}
-    ],
     "timeline": [
       {"label": "string", "start": "yyyy-mm-dd", "end": "yyyy-mm-dd"}
     ],
     "resources": ["string"]
   },
   "measurement": {
-    "success_metrics": ["string"],
-    "assessment_strategy": ["string"],
-    "data_sources": ["string"]
+    "success_metrics": ["string"]
   },
-  "budget": {
-    "notes": "string",
-    "ranges": [
-      {"item": "string", "low": "string", "high": "string"}
-    ]
-  },
-  "risks": [
-    {"risk": "string", "mitigation": "string"}
-  ],
+  "risks": ["string"],
   "next_steps": ["string"]
 }`;

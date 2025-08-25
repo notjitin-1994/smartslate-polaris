@@ -102,13 +102,13 @@ export function PortalDashboard() {
           title="View all Starmaps"
           description="Browse, manage, and open your Polaris discovery starmaps."
           icon={IconStarmap}
-          onClick={() => navigate('/portal/starmaps')}
+          onClick={() => navigate('/starmaps')}
         />
         <ActionCard
           title="Discover"
           description="Start a new guided discovery to scope your needs."
           icon={IconCompass}
-          onClick={() => navigate('/portal/discover')}
+          onClick={() => navigate('/discover')}
         />
       </div>
     </section>

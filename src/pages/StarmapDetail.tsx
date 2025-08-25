@@ -83,7 +83,7 @@ export default function StarmapDetail() {
           <button
             type="button"
             className="icon-btn"
-            onClick={() => navigate('/portal/starmaps')}
+            onClick={() => navigate('/starmaps')}
             aria-label="Back"
             title="Back"
           >

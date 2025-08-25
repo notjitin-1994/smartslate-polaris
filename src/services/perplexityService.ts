@@ -22,7 +22,7 @@ class PerplexityService {
   constructor() {
     this.client = new BaseApiClient({
       baseUrl: '/api', // Always use API routes for consistent behavior
-      timeout: 50000, // keep below Vercel 60s limit
+      timeout: 58000, // keep below Vercel 60s limit
       retries: 1,
       retryDelay: 800,
     })
@@ -64,7 +64,7 @@ ${prompt}`
         console.log('Using model:', model)
       }
       
-      const response = await this.client.post<any>('/perplexity', requestPayload, { timeout: env.isDev ? 75000 : 50000, retries: 1 })
+      const response = await this.client.post<any>('/perplexity', requestPayload, { timeout: env.isDev ? 75000 : 58000, retries: 1 })
       
       const content = response.data?.choices?.[0]?.message?.content
       

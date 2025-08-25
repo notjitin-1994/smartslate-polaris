@@ -35,7 +35,7 @@ class PerplexityService {
     prompt: string,
     config: PerplexityConfig = {}
   ): Promise<{ content: string; model?: string }> {
-    const model = config.model || env.perplexityModel || 'llama-3.1-sonar-small-128k-online'
+    const model = config.model || env.perplexityModel || 'sonar'
     const temperature = config.temperature ?? 0.1
     const maxTokens = config.maxTokens || 800
     
@@ -152,7 +152,7 @@ ${prompt}`
     8. A set of practical, role-appropriate questions the requester can ask their legal and compliance teams about L&D initiatives in this organization
     
     Focus on actionable insights for L&D planning.`
-    const result = await this.researchWithRetry(prompt, { model: (env as any).perplexityOrgModel || 'sonar pro', maxTokens: 1800 })
+    const result = await this.researchWithRetry(prompt, { model: (env as any).perplexityOrgModel || 'sonar-pro', maxTokens: 1800 })
     return result.content
   }
   
@@ -193,7 +193,7 @@ ${prompt}`
     8. Innovation opportunities within the constraints
     
     Provide specific, actionable recommendations.`
-    const result = await this.researchWithRetry(prompt, { model: (env as any).perplexityRequirementModel || 'sonar reasoning', maxTokens: 2000 })
+    const result = await this.researchWithRetry(prompt, { model: (env as any).perplexityRequirementModel || 'sonar-reasoning', maxTokens: 2000 })
     return result.content
   }
   

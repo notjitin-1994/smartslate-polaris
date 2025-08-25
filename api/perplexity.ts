@@ -3,21 +3,23 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 // Get Perplexity configuration from environment
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || process.env.VITE_PERPLEXITY_API_KEY || ''
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || process.env.VITE_PERPLEXITY_BASE_URL || 'https://api.perplexity.ai'
-const PERPLEXITY_MODEL = process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'llama-3.1-sonar-small-128k-online'
+const PERPLEXITY_MODEL = process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar'
 
 function normalizePerplexityModel(input?: string): string {
   const requested = (input || '').trim().toLowerCase()
 
-  // Friendly aliases from docs → API model ids
-  // Search
-  if (!requested || requested === 'sonar' || requested === 'sonar-small' || requested === 'sonar-small-online') {
-    return 'llama-3.1-sonar-small-128k-online'
-  }
-  if (requested === 'sonar pro' || requested === 'sonar-pro' || requested === 'sonar-large' || requested === 'sonar-medium' || requested === 'sonar-medium-online' || requested === 'sonar-large-online') {
-    return 'llama-3.1-sonar-large-128k-online'
-  }
+  // Accept canonical current model ids as-is
+  const canonical = new Set(['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'])
+  if (canonical.has(requested)) return requested
 
-  // Reasoning
+  // Normalize common variants (spaces/underscores → hyphens)
+  const normalized = requested.replace(/\s+/g, '-').replace(/_/g, '-')
+  if (canonical.has(normalized)) return normalized
+
+  // Map legacy or alias names to current ids
+  if (requested === 'sonar pro' || requested === 'sonar-large' || requested === 'sonar medium' || requested === 'sonar-medium') {
+    return 'sonar-pro'
+  }
   if (requested === 'sonar reasoning' || requested === 'sonar-reasoning') {
     return 'sonar-reasoning'
   }
@@ -25,16 +27,12 @@ function normalizePerplexityModel(input?: string): string {
     return 'sonar-reasoning-pro'
   }
 
-  // Direct passthroughs
-  if (requested.startsWith('llama-3.1-sonar')) {
-    return requested
-  }
-  if (requested.startsWith('sonar-')) {
-    return requested
-  }
+  // Map deprecated llama-3.1 sonar ids to current equivalents
+  if (requested.startsWith('llama-3.1-sonar-small')) return 'sonar'
+  if (requested.startsWith('llama-3.1-sonar-large')) return 'sonar-pro'
 
-  // Fallback to a safe default
-  return 'llama-3.1-sonar-small-128k-online'
+  // Fallback to safe default
+  return 'sonar'
 }
 
 // Temporary hardcoded key - this should be removed in production

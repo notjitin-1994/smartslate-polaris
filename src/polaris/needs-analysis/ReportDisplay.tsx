@@ -140,6 +140,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
   const report = useMemo(() => parseMarkdownToReport(reportMarkdown), [reportMarkdown])
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false)
   const [titleInput, setTitleInput] = useState<string>(reportTitle || 'Needs Analysis Report')
+  const [showAllRisks, setShowAllRisks] = useState<boolean>(false)
   
   // removed legacy HTML sanitizer; summary now renders via structured JSX
 
@@ -178,7 +179,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
 
   // Memoize risk items to prevent unnecessary re-renders
   const riskItems = useMemo(() => 
-    report?.risks?.slice(0, 3).map((r, i) => {
+    (showAllRisks ? (report?.risks || []) : (report?.risks || []).slice(0, 3)).map((r, i) => {
       const sev = detectRiskSeverity(r.risk)
       const color = sev === 'high' ? 'border-red-400/40 bg-red-500/10' : sev === 'low' ? 'border-emerald-400/30 bg-emerald-500/10' : 'border-amber-400/30 bg-amber-500/10'
       
@@ -193,7 +194,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
           </div>
         </div>
       )
-    }) || [], [report?.risks])
+    }) || [], [report?.risks, showAllRisks])
 
   // Memoize timeline items to prevent unnecessary re-renders
   const timelineItems = useMemo(() => 
@@ -504,8 +505,11 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
                 {riskItems}
                 {report.risks.length > 3 && (
                   <div className="text-center">
-                    <button className="text-xs text-red-400 hover:text-red-300 underline">
-                      View all {report.risks.length} risk factors
+                    <button
+                      className="text-xs text-red-400 hover:text-red-300 underline"
+                      onClick={() => setShowAllRisks(v => !v)}
+                    >
+                      {showAllRisks ? 'Hide extra risk factors' : `View all ${report.risks.length} risk factors`}
                     </button>
                   </div>
                 )}

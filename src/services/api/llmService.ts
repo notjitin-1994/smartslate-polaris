@@ -99,10 +99,12 @@ class LLMService {
   ): Promise<{ content: string; model?: string }> {
     const model = config.model || env.anthropicModel || 'claude-3-5-sonnet-latest'
     const temperature = config.temperature ?? 0.2
-    // Fix operator precedence bug that could send NaN and cause 400s
-    const maxTokens = typeof config.maxTokens === 'number'
+    // Determine requested max, then clamp to model's allowed output tokens
+    const requestedMax = typeof config.maxTokens === 'number'
       ? config.maxTokens
       : (env.anthropicMaxTokens ? Number(env.anthropicMaxTokens) : 4096)
+    const modelMax = getAnthropicModelOutputLimit(model)
+    const maxTokens = Math.min(Number.isFinite(requestedMax) ? requestedMax : 4096, modelMax)
     
     // Convert OpenAI-style messages to Anthropic format
     const systemParts = messages
@@ -188,6 +190,22 @@ class LLMService {
       }
     }
   }
+
+  /**
+   * Utility: Max output tokens per Anthropic model (conservative defaults)
+   */
+}
+
+function getAnthropicModelOutputLimit(model: string): number {
+  const m = (model || '').toLowerCase()
+  // Claude Sonnet 3.5 current output cap ~8192
+  if (m.includes('sonnet')) return 8192
+  // Haiku is typically lower; set to 4096 conservatively
+  if (m.includes('haiku')) return 4096
+  // Opus can be similar to Sonnet for output; keep 8192 conservative
+  if (m.includes('opus')) return 8192
+  // Default conservative cap
+  return 8192
 }
 
 // Export singleton instance

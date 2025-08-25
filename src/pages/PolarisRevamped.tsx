@@ -686,7 +686,7 @@ Create questions that leverage the research insights to ask more targeted, relev
         const { data: saved, error: saveError } = await saveSummary({
           company_name: (stage2Answers.org_name as string) || null,
           report_title: null,
-          summary_content: editedPrelim,
+          summary_content: '# Draft – Starmap in progress',
           prelim_report: editedPrelim,
           stage1_answers: { ...experienceAnswer, ...stage1Answers },
           stage2_answers: stage2Answers,
@@ -696,6 +696,7 @@ Create questions that leverage the research insights to ask more targeted, relev
           greeting_report: greetingReport,
           org_report: orgReport,
           requirement_report: requirementReport,
+          dynamic_questionnaire_report: null,
         })
         if (saveError) {
           console.error('[Polaris] Prelim save failed', saveError)
@@ -764,11 +765,32 @@ Create questions that leverage the research insights to ask more targeted, relev
       const stage2Summary = `Organization: ${fmt(stage2Answers.org_name)}\nIndustry: ${fmt(stage2Answers.org_industry)}\nSize: ${fmt(stage2Answers.org_size)}\nHeadquarters: ${fmt(stage2Answers.org_headquarters)}\nWebsite: ${fmt(stage2Answers.org_website)}\nMission: ${fmt(stage2Answers.org_mission)}\nCompliance: ${fmt(stage2Answers.org_compliance)}\nStakeholders: ${fmt(stage2Answers.org_stakeholders)}`
       const stage3Summary = `Objectives: ${fmt(stage3Answers.project_objectives)}\nConstraints: ${fmt(stage3Answers.project_constraints)}\nAudience: ${fmt(stage3Answers.target_audience)}\nTimeline: ${(tl.start || 'TBD')} to ${(tl.end || 'TBD')}\nBudget: ${fmt(stage3Answers.project_budget_range)}\nHardware: ${fmt(stage3Answers.available_hardware)}\nSoftware: ${fmt(stage3Answers.available_software)}\nSMEs: ${fmt(stage3Answers.subject_matter_experts)}\nOther: ${fmt(stage3Answers.additional_context)}`
 
-      // Include prelim, research, and stage answers in final generation
+      // Build dynamic questionnaire report (Q&A transcript)
+      const dynamicQuestionnaireReport = dynamicStages
+        .map((stage, idx) => {
+          const qa = stage.questions
+            .map(q => {
+              const val = (stage.answers as any)[q.id]
+              const answer = Array.isArray(val)
+                ? val.filter(Boolean).join(', ')
+                : typeof val === 'object' && val !== null
+                ? JSON.stringify(val)
+                : (val ?? '')
+              return `- ${q.label}: ${String(answer)}`
+            })
+            .join('\n')
+          return `### Dynamic Stage ${idx + 1}: ${stage.title || 'Additional Questions'}\n${qa}`
+        })
+        .join('\n\n')
+
+      // Include prelim, dynamic Q&A, research, and stage answers in final generation
       const enhancedPrompt = `${NA_REPORT_PROMPT(experienceLevel!, allAnswers)}
 
 PRELIMINARY MASTER REPORT (user-confirmed):
 ${editedPrelim || prelimMarkdown}
+
+DYNAMIC QUESTIONNAIRE REPORT (user answers to follow-up questions):
+${dynamicQuestionnaireReport}
 
 ADDITIONAL RESEARCH INSIGHTS:
 
@@ -832,6 +854,11 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
             {
               stage2_questions: dynamicStages.slice(0, Math.ceil(dynamicStages.length / 2)).flatMap(s => s.questions),
               stage3_questions: dynamicStages.slice(Math.ceil(dynamicStages.length / 2)).flatMap(s => s.questions),
+              stage3_answers_merge: {
+                ...stage3Answers,
+                ...dynamicStages.reduce((acc, s) => ({ ...acc, ...s.answers }), {})
+              },
+              dynamic_questionnaire_report: dynamicQuestionnaireReport || null,
             }
           )
           if (error) {
@@ -855,7 +882,8 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
               .flatMap(s => s.questions),
             greeting_report: greetingReport,
             org_report: orgReport,
-            requirement_report: requirementReport
+            requirement_report: requirementReport,
+            dynamic_questionnaire_report: dynamicQuestionnaireReport || null,
           })
           if (saveError) {
             console.error('Failed to save summary:', saveError)

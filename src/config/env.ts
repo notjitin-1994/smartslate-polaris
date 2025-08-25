@@ -20,6 +20,8 @@ type AppEnv = {
   VITE_PERPLEXITY_REQUIREMENT_MODEL?: string
   VITE_PERPLEXITY_PRELIM_MODEL?: string
   VITE_PERPLEXITY_FINAL_MODEL?: string
+  VITE_UNLIMITED_STARMAPS_USER_IDS?: string
+  VITE_UNLIMITED_STARMAPS_USER_EMAILS?: string
   MODE: string
   DEV: boolean
   PROD: boolean
@@ -54,6 +56,8 @@ export const env = {
   perplexityRequirementModel: (read('VITE_PERPLEXITY_REQUIREMENT_MODEL') || 'sonar reasoning'),
   perplexityPrelimModel: (read('VITE_PERPLEXITY_PRELIM_MODEL') || 'sonar reasoning'),
   perplexityFinalModel: (read('VITE_PERPLEXITY_FINAL_MODEL') || 'sonar reasoning'),
+  unlimitedUserIds: read('VITE_UNLIMITED_STARMAPS_USER_IDS'),
+  unlimitedUserEmails: read('VITE_UNLIMITED_STARMAPS_USER_EMAILS'),
   mode: raw.MODE,
   isDev: raw.DEV,
   isProd: raw.PROD,

@@ -841,7 +841,8 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
         reportJson = createFallbackReport()
       }
       
-      const markdown = formatReportAsMarkdown(reportJson)
+      const baseMarkdown = formatReportAsMarkdown(reportJson)
+      const markdown = `${baseMarkdown}\n\n## Appendix – Discovery Q&A\n${dynamicQuestionnaireReport || '_No additional Q&A_'}\n`
       setReportMarkdown(markdown)
       setEditedContent(markdown)
       

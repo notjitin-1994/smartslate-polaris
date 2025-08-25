@@ -1,4 +1,5 @@
 import { getSupabase } from '@/services/supabase'
+import { env } from '@/config/env'
 import type { Database } from '@/types/database.types'
 
 export type PolarisSummary = Database['public']['Tables']['polaris_summaries']['Row']
@@ -85,23 +86,28 @@ export async function saveSummary(data: {
     return { data: null, error: new Error('User not authenticated') }
   }
 
-  // Check saved summaries limit (concurrent saved)
-  const { count: savedCount, error: savedErr } = await getUserSummaryCount()
-  if (savedErr) return { data: null, error: savedErr }
-  if (savedCount !== null && savedCount >= SAVED_LIMIT) {
-    return {
-      data: null,
-      error: new Error(`You have reached the saved starmaps limit of ${SAVED_LIMIT}. Delete some or upgrade to save more.`)
+  // Check saved summaries limit (skip for unlimited users)
+  const isUnlimited = isUnlimitedUser(user.id, user.email)
+  if (!isUnlimited) {
+    const { count: savedCount, error: savedErr } = await getUserSummaryCount()
+    if (savedErr) return { data: null, error: savedErr }
+    if (savedCount !== null && savedCount >= SAVED_LIMIT) {
+      return {
+        data: null,
+        error: new Error(`You have reached the saved starmaps limit of ${SAVED_LIMIT}. Delete some or upgrade to save more.`)
+      }
     }
   }
 
-  // Check creation limit (lifetime)
-  const { count: createdCount, error: createdErr } = await getUserCreatedCount()
-  if (createdErr) return { data: null, error: createdErr }
-  if (createdCount !== null && createdCount >= CREATION_LIMIT) {
-    return {
-      data: null,
-      error: new Error(`You have reached the creation limit of ${CREATION_LIMIT} starmaps. Please upgrade to create more.`)
+  // Check creation limit (lifetime) — skip for unlimited users
+  if (!isUnlimited) {
+    const { count: createdCount, error: createdErr } = await getUserCreatedCount()
+    if (createdErr) return { data: null, error: createdErr }
+    if (createdCount !== null && createdCount >= CREATION_LIMIT) {
+      return {
+        data: null,
+        error: new Error(`You have reached the creation limit of ${CREATION_LIMIT} starmaps. Please upgrade to create more.`)
+      }
     }
   }
 
@@ -129,8 +135,10 @@ export async function saveSummary(data: {
     .single()
 
   if (!error && savedSummary) {
-    // Increment lifetime creation counter
-    await incrementUserCreatedCount()
+    // Increment lifetime creation counter unless unlimited user (optional)
+    if (!isUnlimited) {
+      await incrementUserCreatedCount()
+    }
   }
 
   return { data: savedSummary, error }
@@ -229,6 +237,11 @@ export async function getUserSummaryCount(): Promise<{ count: number | null; err
   
   if (!user) {
     return { count: null, error: new Error('User not authenticated') }
+  }
+
+  // Unlimited users are exempt from saved count checks
+  if (isUnlimitedUser(user.id, user.email)) {
+    return { count: 0, error: null }
   }
 
   const { count, error } = await supabase
@@ -348,4 +361,23 @@ export async function updateSummaryReports(
 export function getDisplayContent(summary: PolarisSummary): string {
   // Return edited content if available, otherwise original content
   return summary.edited_content || summary.summary_content
+}
+
+// ------------------------
+// Helpers
+// ------------------------
+function parseCsv(input?: string): string[] {
+  if (!input) return []
+  return input
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+function isUnlimitedUser(userId?: string | null, email?: string | null): boolean {
+  const ids = parseCsv(env.unlimitedUserIds)
+  const emails = parseCsv(env.unlimitedUserEmails)
+  if (userId && ids.includes(userId)) return true
+  if (email && emails.includes(email.toLowerCase())) return true
+  return false
 }

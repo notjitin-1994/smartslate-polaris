@@ -101,7 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Make request to Perplexity API with a server-side timeout below platform max
     const controller = new AbortController()
-    const SERVER_TIMEOUT_MS = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 50000)
+    const SERVER_TIMEOUT_MS = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 58000)
     const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
 
     const requestPayload = {
@@ -145,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(200).json(data)
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error('Perplexity API handler timeout:', `Exceeded ${Number(process.env.PPLX_SERVER_TIMEOUT_MS || 50000)}ms`)
+      console.error('Perplexity API handler timeout:', `Exceeded ${Number(process.env.PPLX_SERVER_TIMEOUT_MS || 58000)}ms`)
       return res.status(504).json({ 
         error: 'Upstream timeout',
         details: 'Perplexity request exceeded server timeout'

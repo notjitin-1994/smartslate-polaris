@@ -15,6 +15,7 @@ const SettingsContent = withLazyLoad(() => import('@/portal/SettingsContent').th
 const PortalDashboard = withLazyLoad(() => import('@/portal/PortalDashboard').then(m => ({ default: m.PortalDashboard })))
 const PublicProfile = withLazyLoad(() => import('@/pages/PublicProfile').then(m => ({ default: m.PublicProfile })))
 const PolarisRevamped = withLazyLoad(() => import('@/pages/PolarisRevamped'))
+const PolarisNova = withLazyLoad(() => import('@/pages/PolarisNova'))
 const AllStarmaps = withLazyLoad(() => import('@/pages/AllBriefings'))
 const StarmapDetail = withLazyLoad(() => import('@/pages/StarmapDetail'))
 const Pricing = withLazyLoad(() => import('@/pages/Pricing'))
@@ -57,6 +58,7 @@ export function OptimizedAppRouter() {
                 <Route path="starmaps" element={<AllStarmaps />} />
                 <Route path="starmaps/:id" element={<StarmapDetail />} />
                 <Route path="discover" element={<PolarisRevamped />} />
+                <Route path="discover/new" element={<PolarisNova />} />
                 <Route path="seed/jitin" element={<SeedJitinStarmap />} />
                 <Route path="briefings" element={<Navigate to="/starmaps" replace />} />
                 <Route path="summaries" element={<Navigate to="/starmaps" replace />} />

@@ -35,24 +35,24 @@ const personalPlans: PersonalPlan[] = [
     id: 'personal-starter',
     name: 'Explorer',
     tagline: 'Begin your cosmic journey',
-    priceMonthly: 19,
-    maxConstellationsPerMonth: 20,
-    maxStarmaps: 20,
+    priceMonthly: 9,
+    maxConstellationsPerMonth: 10,
+    maxStarmaps: 5,
     features: [
       'AI-powered report creation',
-      'Export to Markdown format', 
+      'Solara Lodestar AI Editor', 
       'Standard processing speed',
       'Community support'
     ],
-    highlighted: ['20 Constellations/month']
+    highlighted: ['10 Starmaps/month']
   },
   {
     id: 'personal-pro',
     name: 'Navigator',
     tagline: 'Chart deeper territories',
-    priceMonthly: 39,
-    maxConstellationsPerMonth: 100,
-    maxStarmaps: 100,
+    priceMonthly: 19,
+    maxConstellationsPerMonth: 30,
+    maxStarmaps: 20,
     features: [
       'Everything in Explorer',
       '5x faster AI processing',
@@ -61,16 +61,16 @@ const personalPlans: PersonalPlan[] = [
       'Version history (30 days)',
       'Custom templates'
     ],
-    highlighted: ['100 Constellations/month', '5x faster processing'],
+    highlighted: ['30 Starmaps/month', '5x faster processing'],
     popular: true
   },
   {
     id: 'personal-power',
     name: 'Voyager',
     tagline: 'Unlimited exploration',
-    priceMonthly: 79,
+    priceMonthly: 49,
     maxConstellationsPerMonth: 500,
-    maxStarmaps: 300,
+    maxStarmaps: 75,
     features: [
       'Everything in Navigator',
       'Advanced research suite',
@@ -79,7 +79,7 @@ const personalPlans: PersonalPlan[] = [
       'White-glove onboarding',
       'Unlimited version history'
     ],
-    highlighted: ['500 Constellations/month', 'Advanced research']
+    highlighted: ['Unlimited Starmaps/month (fair usage)', 'Advanced research']
   },
 ]
 
@@ -88,12 +88,12 @@ const teamPlans: TeamPlan[] = [
     id: 'team-starter',
     name: 'Crew',
     tagline: 'Collaborate across the cosmos',
-    pricePerSeatMonthly: 29,
+    pricePerSeatMonthly: 12,
     seatRange: '2–5 seats',
     minSeats: 2,
     maxSeats: 5,
-    maxConstellationsPerUserPerMonth: 100,
-    maxStarmapsPerUser: 100,
+    maxConstellationsPerUserPerMonth: 50,
+    maxStarmapsPerUser: 20,
     features: [
       'Shared team workspace',
       'Real-time collaboration',
@@ -107,12 +107,12 @@ const teamPlans: TeamPlan[] = [
     id: 'team-growth',
     name: 'Fleet',
     tagline: 'Scale your operations',
-    pricePerSeatMonthly: 24,
+    pricePerSeatMonthly: 19,
     seatRange: '6–10 seats',
     minSeats: 6,
     maxSeats: 10,
-    maxConstellationsPerUserPerMonth: 200,
-    maxStarmapsPerUser: 200,
+    maxConstellationsPerUserPerMonth: 100,
+    maxStarmapsPerUser: 50,
     features: [
       'Everything in Crew',
       'SSO with OAuth/SAML',
@@ -126,12 +126,12 @@ const teamPlans: TeamPlan[] = [
     id: 'team-scale',
     name: 'Armada',
     tagline: 'Enterprise-grade exploration',
-    pricePerSeatMonthly: 20,
+    pricePerSeatMonthly: 29,
     seatRange: '11–20 seats',
     minSeats: 11,
     maxSeats: 20,
     maxConstellationsPerUserPerMonth: 500,
-    maxStarmapsPerUser: 500,
+    maxStarmapsPerUser: 200,
     features: [
       'Everything in Fleet',
       'Custom usage alerts',
@@ -146,10 +146,45 @@ const teamPlans: TeamPlan[] = [
 export default function Pricing() {
   const navigate = useNavigate()
   useDocumentTitle('Smartslate | Pricing')
-  const [billing, setBilling] = useState<BillingCycle>('annual')
+  const [billing, setBilling] = useState<BillingCycle>('monthly')
   const [teamSeats, setTeamSeats] = useState<number>(5)
   const annualMultiplier = 0.8 // 20% discount
   const annualSavings = 0.2 // 20% savings
+
+  // Volume discount logic to encourage 5 seats (Crew), 10 seats (Fleet), and >10 (Armada)
+  function computePerSeatWithVolume(plan: TeamPlan, seats: number, cycle: BillingCycle) {
+    const base = plan.pricePerSeatMonthly
+    let discountPct = 0
+
+    if (plan.id === 'team-starter') {
+      // Peak discount at 5 seats (max of range)
+      const maxDiscount = 0.12
+      const span = Math.max(1, plan.maxSeats - plan.minSeats) // avoid div by 0
+      const normalized = Math.max(0, Math.min(plan.maxSeats, seats) - plan.minSeats) / span
+      discountPct = normalized * maxDiscount
+    } else if (plan.id === 'team-growth') {
+      // Peak discount at 6 seats (min of range)
+      const maxDiscount = 0.15
+      const span = Math.max(1, plan.maxSeats - plan.minSeats)
+      const normalized = Math.max(0, Math.min(plan.maxSeats, seats) - plan.minSeats) / span
+      discountPct = (1 - normalized) * maxDiscount
+    } else if (plan.id === 'team-scale') {
+      // Peak discount at 11 seats (min of range)
+      const maxDiscount = 0.2
+      const span = Math.max(1, plan.maxSeats - plan.minSeats)
+      const normalized = Math.max(0, Math.min(plan.maxSeats, seats) - plan.minSeats) / span
+      discountPct = (1 - normalized) * maxDiscount
+    }
+
+    // Apply out-of-range penalty so off-range plans are less favorable
+    let penaltyMultiplier = 1
+    if (seats < plan.minSeats) penaltyMultiplier = 1.5
+    if (seats > plan.maxSeats) penaltyMultiplier = 2.5
+
+    const monthlyPerSeat = Math.max(1, Math.ceil(base * (1 - discountPct) * penaltyMultiplier))
+    const perSeat = cycle === 'monthly' ? monthlyPerSeat : Math.ceil(monthlyPerSeat * annualMultiplier)
+    return { perSeat, discountPct }
+  }
 
   const personalPriced = useMemo(() => {
     return personalPlans.map((p) => ({
@@ -185,7 +220,7 @@ export default function Pricing() {
             Launch Your Ideas Into Orbit
           </h1>
           <p className="text-lg md:text-xl text-white/80 mt-4 max-w-2xl mx-auto">
-            Transform your thoughts into powerful <span className="text-primary-400 font-medium">Constellations</span> with AI-powered intelligence
+            Transform your thoughts into powerful <span className="text-primary-400 font-medium">Starmaps</span> with AI-powered intelligence
           </p>
           
           {/* Billing Toggle - Material Design Inspired */}
@@ -314,8 +349,8 @@ export default function Pricing() {
                         </svg>
                       </div>
                       <div className="text-sm">
-                        <span className="font-bold text-white">{p.maxConstellationsPerMonth}</span>
-                        <span className="text-white/70"> Constellations/mo</span>
+                        <span className="font-bold text-white">{p.id === 'personal-power' ? 'Unlimited' : p.maxConstellationsPerMonth}</span>
+                        <span className="text-white/70"> Starmaps/mo{p.id === 'personal-power' ? ' (fair usage)' : ''}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -403,7 +438,7 @@ export default function Pricing() {
           <div className="grid md:grid-cols-3 gap-6">
             {teamPlans.map((t, index) => {
               const active = teamSeats >= t.minSeats && teamSeats <= t.maxSeats
-              const perSeat = billing === 'monthly' ? t.pricePerSeatMonthly : Math.ceil(t.pricePerSeatMonthly * annualMultiplier)
+              const { perSeat, discountPct } = computePerSeatWithVolume(t, teamSeats, billing)
               const total = Math.ceil(perSeat * teamSeats)
               const savings = billing === 'annual' ? Math.ceil(total * 0.2 * 12) : 0
               
@@ -444,6 +479,9 @@ export default function Pricing() {
                         <span className="text-3xl font-bold">${perSeat}</span>
                         <span className="text-white/60 text-sm">/seat/month</span>
                       </div>
+                      {discountPct > 0 && (
+                        <div className="text-xs text-green-400">-{Math.round(discountPct * 100)}% volume discount</div>
+                      )}
                       
                       <div className="mt-3 p-3 rounded-lg bg-white/5">
                         {billing === 'annual' ? (
@@ -485,13 +523,13 @@ export default function Pricing() {
                         <svg className="w-4 h-4 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                         </svg>
-                        <span className="text-white/80">{t.maxConstellationsPerUserPerMonth} Constellations/user/mo</span>
+                        <span className="text-white/80">{t.id === 'team-scale' ? 'Unlimited Starmaps/user/mo (fair usage)' : `${t.maxConstellationsPerUserPerMonth} Starmaps/user/mo`}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <svg className="w-4 h-4 text-secondary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
                         </svg>
-                        <span className="text-white/80">{t.maxStarmapsPerUser} Starmaps/user</span>
+                        <span className="text-white/80">{t.maxStarmapsPerUser} Saved starmaps/user</span>
                       </div>
                     </div>
                     
@@ -561,7 +599,7 @@ export default function Pricing() {
                       </div>
                       <div>
                         <h4 className="font-semibold text-white mb-1">Unlimited Everything</h4>
-                        <p className="text-sm text-white/70">No limits on constellations, starmaps, or team members</p>
+                        <p className="text-sm text-white/70">No limits on starmaps or team members</p>
                       </div>
                     </div>
                     
@@ -597,7 +635,7 @@ export default function Pricing() {
                     <div className="mb-4">
                       <span className="text-white/60 text-sm">Starting at</span>
                       <div className="flex items-baseline justify-center gap-1 mt-2">
-                        <span className="text-5xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">$1049</span>
+                        <span className="text-5xl font-bold bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">$199/year</span>
                       </div>
                       <p className="text-sm text-white/60 mt-2">Tailored to your needs</p>
                     </div>
@@ -651,13 +689,13 @@ export default function Pricing() {
           <div className="max-w-3xl mx-auto grid gap-4">
             <details className="group glass-card p-6 border border-white/10 cursor-pointer">
               <summary className="flex items-center justify-between font-medium text-white list-none">
-                What is a Constellation?
+                What is a Starmap?
                 <svg className="w-5 h-5 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                 </svg>
               </summary>
               <p className="mt-4 text-white/70 text-sm">
-                A Constellation is a completed AI-powered report or document creation. Each time you generate a new report, analysis, or document using our AI tools, it counts as one Constellation. Think of it as connecting the dots between your ideas to form a complete picture.
+                A Starmap is a completed AI-powered report or document creation. Each time you generate a new report, analysis, or document using our AI tools, it counts as one Starmap. Think of it as connecting the dots between your ideas to form a complete picture.
               </p>
             </details>
             
@@ -681,7 +719,7 @@ export default function Pricing() {
                 </svg>
               </summary>
               <p className="mt-4 text-white/70 text-sm">
-                We'll notify you when you're approaching your monthly limits. You can either upgrade to a higher plan or purchase additional Constellations as needed. Your saved Starmaps are always accessible.
+                We'll notify you when you're approaching your monthly limits. You can either upgrade to a higher plan or purchase additional Starmaps as needed. Your saved Starmaps are always accessible.
               </p>
             </details>
             

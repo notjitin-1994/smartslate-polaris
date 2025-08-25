@@ -24,13 +24,13 @@ class LLMService {
     // Initialize API clients for different providers
     this.openaiClient = new BaseApiClient({
       baseUrl: '/api',
-      timeout: 60000, // 60 seconds for LLM calls
+      timeout: 115000, // keep below Vercel 120s limit
       retries: 2,
     })
     
     this.anthropicClient = new BaseApiClient({
       baseUrl: '/api',
-      timeout: 60000,
+      timeout: 115000,
       retries: 2,
     })
   }

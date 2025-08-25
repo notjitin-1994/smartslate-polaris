@@ -54,6 +54,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       max_tokens: typeof body.max_tokens === 'number' ? body.max_tokens : defaultMax,
     }
 
+    // Server-side timeout below platform max
+    const controller = new AbortController()
+    const SERVER_TIMEOUT_MS = Number(process.env.ANTHROPIC_SERVER_TIMEOUT_MS || 115000)
+    const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
+
     const upstream = await fetch(`${baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
@@ -62,13 +67,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         'anthropic-version': version,
       },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     })
+
+    clearTimeout(timeoutId)
 
     const text = await upstream.text()
     res.status(upstream.status)
     res.setHeader('Content-Type', 'application/json')
     res.send(text)
   } catch (err: any) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      // eslint-disable-next-line no-console
+      console.error('Anthropic proxy timeout:', `Exceeded ${Number(process.env.ANTHROPIC_SERVER_TIMEOUT_MS || 115000)}ms`)
+      res.status(504).json({ error: 'Upstream timeout', detail: 'Anthropic request exceeded server timeout' })
+      return
+    }
     // eslint-disable-next-line no-console
     console.error('Anthropic proxy error', err)
     res.status(500).json({ error: 'Anthropic proxy error', detail: err?.message || String(err) })

@@ -3,7 +3,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 // Get Perplexity configuration from environment
 const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || process.env.VITE_PERPLEXITY_API_KEY || ''
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || process.env.VITE_PERPLEXITY_BASE_URL || 'https://api.perplexity.ai'
-const PERPLEXITY_MODEL = process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar'
+const PERPLEXITY_MODEL = process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar-pro'
 
 function normalizePerplexityModel(input?: string): string {
   const requested = (input || '').trim().toLowerCase()
@@ -32,7 +32,7 @@ function normalizePerplexityModel(input?: string): string {
   if (requested.startsWith('llama-3.1-sonar-large')) return 'sonar-pro'
 
   // Fallback to safe default
-  return 'sonar'
+  return 'sonar-pro'
 }
 
 // Temporary hardcoded key - this should be removed in production
@@ -101,7 +101,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Make request to Perplexity API with a server-side timeout below platform max
     const controller = new AbortController()
-    const SERVER_TIMEOUT_MS = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 115000)
+    const SERVER_TIMEOUT_MS = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 75000)
     const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
 
     const requestPayload = {
@@ -145,7 +145,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     res.status(200).json(data)
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error('Perplexity API handler timeout:', `Exceeded ${Number(process.env.PPLX_SERVER_TIMEOUT_MS || 115000)}ms`)
+      console.error('Perplexity API handler timeout:', `Exceeded ${Number(process.env.PPLX_SERVER_TIMEOUT_MS || 75000)}ms`)
       return res.status(504).json({ 
         error: 'Upstream timeout',
         details: 'Perplexity request exceeded server timeout'

@@ -1,4 +1,4 @@
-import { NetworkError, AppError } from '@/lib/errors'
+import { NetworkError, AppError, TimeoutError, ApiError } from '@/lib/errors'
 
 export interface RequestConfig extends RequestInit {
   timeout?: number
@@ -73,10 +73,32 @@ export class BaseApiClient {
         
         if (!response.ok) {
           const errorData = await this.parseErrorResponse(response)
-          throw new NetworkError(
-            errorData.message || `Request failed with status ${response.status}`,
-            { status: response.status, data: errorData }
-          )
+          // Use specific error types based on status code
+          if (response.status === 401) {
+            throw new ApiError(
+              errorData.message || 'Unauthorized - check your API key',
+              401,
+              { status: response.status, data: errorData }
+            )
+          } else if (response.status === 429) {
+            throw new ApiError(
+              errorData.message || 'Rate limit exceeded',
+              429,
+              { status: response.status, data: errorData }
+            )
+          } else if (response.status >= 500) {
+            throw new ApiError(
+              errorData.message || `Server error: ${response.statusText}`,
+              response.status,
+              { status: response.status, data: errorData }
+            )
+          } else {
+            throw new ApiError(
+              errorData.message || `Request failed: ${response.statusText}`,
+              response.status,
+              { status: response.status, data: errorData }
+            )
+          }
         }
         
         const data = await this.parseResponse<T>(response)
@@ -90,13 +112,13 @@ export class BaseApiClient {
         lastError = error
         
         // Don't retry on client errors (4xx)
-        if (error instanceof NetworkError && error.details?.status >= 400 && error.details?.status < 500) {
+        if (error instanceof ApiError && (error.statusCode ?? 0) >= 400 && (error.statusCode ?? 0) < 500) {
           throw error
         }
         
-        // Don't retry if aborted
+        // Don't retry if aborted (timeout)
         if (error.name === 'AbortError') {
-          throw new NetworkError('Request timeout', { timeout })
+          throw new TimeoutError(`Request timed out after ${timeout}ms`, { timeout })
         }
         
         // If it's the last attempt, throw the error

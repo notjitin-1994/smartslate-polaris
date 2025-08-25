@@ -264,7 +264,20 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
         <div className="flex items-center justify-between mb-2">
           <span className="font-medium text-white/90 text-sm">Metric {i + 1}</span>
         </div>
-        <div className="text-xs text-white/70 leading-relaxed">{typeof m === 'string' ? m : (m?.metric || '')}</div>
+        {typeof m === 'string' ? (
+          <div className="text-xs text-white/70 leading-relaxed">{m}</div>
+        ) : (
+          <div className="text-xs text-white/70 leading-relaxed">
+            <div className="font-medium text-white/80">{m?.metric || ''}</div>
+            {(m?.baseline || m?.target || m?.timeframe) && (
+              <div>
+                {m?.baseline ? `Baseline: ${m.baseline} ` : ''}
+                {m?.target ? `Target: ${m.target}` : ''}
+                {m?.timeframe ? ` by ${m.timeframe}` : ''}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     )) || [], [report?.measurement?.success_metrics])
 

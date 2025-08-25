@@ -50,7 +50,7 @@ function normalizePerplexityModel(input?: string): string {
   if (requested === 'sonar reasoning pro' || requested === 'sonar-reasoning-pro') return 'sonar-reasoning-pro'
   if (requested.startsWith('llama-3.1-sonar-small')) return 'sonar'
   if (requested.startsWith('llama-3.1-sonar-large')) return 'sonar-pro'
-  return 'sonar'
+  return 'sonar-pro'
 }
 
 async function runJob(jobId: string, prompt: string, model?: string, temperature: number = 0.2, max_tokens: number = 2600) {
@@ -68,7 +68,7 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
   try {
     const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || process.env.VITE_PERPLEXITY_API_KEY || ''
     const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || process.env.VITE_PERPLEXITY_BASE_URL || 'https://api.perplexity.ai'
-    const mdl = normalizePerplexityModel(model || process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar')
+    const mdl = normalizePerplexityModel(model || process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar-pro')
 
     if (!PERPLEXITY_API_KEY) throw new Error('Perplexity API key not configured')
 
@@ -76,10 +76,10 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
     const contextualPrompt = `You are a helpful research assistant. Provide comprehensive, accurate information based on current web sources. Focus on facts and cite sources when possible.\n\n${prompt}`
 
     const controller = new AbortController()
-    // Extended timeout for sonar-reasoning model
+    // Extended timeout for models
     const isReasoningModel = (model || '').toLowerCase().includes('reasoning')
-    const baseTimeout = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 60000)
-    const SERVER_TIMEOUT_MS = isReasoningModel ? Math.min(110000, baseTimeout * 2) : baseTimeout
+    const baseTimeout = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 75000)
+    const SERVER_TIMEOUT_MS = isReasoningModel ? Math.min(110000, baseTimeout * 1.5) : baseTimeout
     const timeoutId = setTimeout(() => {
       console.warn(`Job ${jobId} timing out after ${SERVER_TIMEOUT_MS}ms`)
       controller.abort()
@@ -147,6 +147,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(200).end()
 
   const store = getStore()
+  const requestUrl = (req.url || '') as string
+  const basePath = requestUrl.includes('reportJobsDb') ? '/api/reportJobsDb' : '/api/reportJobs'
 
   if (req.method === 'POST') {
     try {
@@ -165,7 +167,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (idempotencyKey) {
         for (const [, j] of store) {
           if ((j as any).idempotency_key === idempotencyKey) {
-            return res.status(202).json({ job_id: j.id, status_url: `/api/reportJobs?job_id=${j.id}` })
+            return res.status(202).json({ job_id: j.id, status_url: `${basePath}?job_id=${j.id}` })
           }
         }
       }
@@ -197,7 +199,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ;(job as any).model = model
       store.set(jobId, job)
 
-      return res.status(202).json({ job_id: jobId, status_url: `/api/reportJobs?job_id=${jobId}` })
+      return res.status(202).json({ job_id: jobId, status_url: `${basePath}?job_id=${jobId}` })
     } catch (e: any) {
       return res.status(500).json({ error: e?.message || 'Failed to create job' })
     }

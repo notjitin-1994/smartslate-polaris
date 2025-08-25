@@ -42,6 +42,20 @@ export class NetworkError extends AppError {
   }
 }
 
+export class TimeoutError extends AppError {
+  constructor(message: string, details?: any) {
+    super(message, 'TIMEOUT_ERROR', 504, details)
+    this.name = 'TimeoutError'
+  }
+}
+
+export class ApiError extends AppError {
+  constructor(message: string, statusCode: number, details?: any) {
+    super(message, 'API_ERROR', statusCode, details)
+    this.name = 'ApiError'
+  }
+}
+
 export class NotFoundError extends AppError {
   constructor(message: string, details?: any) {
     super(message, 'NOT_FOUND', 404, details)
@@ -84,7 +98,39 @@ export function formatErrorMessage(error: unknown): string {
     case 'VALIDATION_ERROR':
       return appError.message || 'Please check your input and try again.'
     case 'NETWORK_ERROR':
+      // Check for specific network error types
+      if (appError.details?.timeout) {
+        return 'Request timed out. The server is taking too long to respond. Please try again later.'
+      }
+      if (appError.details?.status === 401) {
+        return 'API authentication failed. Please check your API key configuration.'
+      }
+      if (appError.details?.status === 429) {
+        return 'API rate limit exceeded. Please wait a moment and try again.'
+      }
+      if (appError.details?.status >= 500) {
+        return 'Server error. The API service may be experiencing issues. Please try again later.'
+      }
       return 'Network error. Please check your connection and try again.'
+    case 'TIMEOUT_ERROR':
+      return 'Request timed out. Please try again with a simpler query or wait a moment and retry.'
+    case 'API_ERROR':
+      if (appError.statusCode === 401) {
+        return 'API authentication failed. Please check your API key.'
+      }
+      if (appError.statusCode === 429) {
+        return 'Too many requests. Please wait a moment and try again.'
+      }
+      if (appError.statusCode === 403) {
+        return 'Access denied. You may not have permission to access this resource.'
+      }
+      if (appError.statusCode === 404) {
+        return 'API endpoint not found. Please contact support.'
+      }
+      if ((appError.statusCode ?? 0) >= 500) {
+        return `Server error (${appError.statusCode}). The service may be temporarily unavailable.`
+      }
+      return appError.message || 'API request failed. Please try again.'
     case 'NOT_FOUND':
       return 'The requested resource was not found.'
     case 'RATE_LIMIT':

@@ -472,7 +472,7 @@ export default function PolarisRevamped() {
           // Use Promise.allSettled with timeout wrapper instead of race
           const settled = await withTimeout(
             Promise.allSettled(pending),
-            10000, // Give 10 seconds for research to complete
+            15000, // Give 15 seconds for research to complete
             'Research promises'
           ).catch(() => [])
           
@@ -622,26 +622,24 @@ Generate 4–6 precise, role-appropriate discovery questions that arise from you
 DELIVERABLE
 Return ONLY the Markdown report in the structure above — no preamble or closing remarks.`
 
-      // Generate prelim via async job (ticket + polling) to avoid client timeouts (only in production)
-      const reasoningModel = (env as any).perplexityPrelimModel || 'sonar reasoning'
+      // Generate prelim via async job (ticket + polling) to avoid client timeouts
+      const reasoningModel = (env as any).perplexityPrelimModel || 'sonar-pro'
       const idemKey = `prelim:${(stage2Answers as any)?.org_name || 'org'}:${(stage1Answers as any)?.requester_email || 'user'}:${(stage3Answers as any)?.project_timeline?.start || ''}-${(stage3Answers as any)?.project_timeline?.end || ''}`
       let status_url: string | null = null
-      if (import.meta.env.PROD) {
-        try {
-          const submitRes = await fetch('/api/reportJobs', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idemKey },
-            body: JSON.stringify({ prompt: prelimPrompt, model: reasoningModel, temperature: 0.2, max_tokens: 2600 })
-          })
-          if (submitRes.ok) {
-            const body = await submitRes.json()
-            status_url = body?.status_url || null
-          } else {
-            console.warn('Preliminary job start failed with status', submitRes.status)
-          }
-        } catch (err) {
-          console.warn('Preliminary job start error (dev environment likely):', err)
+      try {
+        const submitRes = await fetch('/api/reportJobsDb', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idemKey },
+          body: JSON.stringify({ prompt: prelimPrompt, model: reasoningModel, temperature: 0.2, max_tokens: 2600 })
+        })
+        if (submitRes.ok) {
+          const body = await submitRes.json()
+          status_url = body?.status_url || null
+        } else {
+          console.warn('Preliminary job start failed with status', submitRes.status)
         }
+      } catch (err) {
+        console.warn('Preliminary job start error:', err)
       }
 
       // Show a quick skeleton prelim immediately while polling
@@ -767,7 +765,7 @@ Notes: ${budget}
           setLoader(prev => ({ ...prev, message: 'Finalizing preliminary plan…', progress: Math.max(prev.progress, 85) }))
           const direct = await withTimeout(
             perplexityService.research(prelimPrompt, { model: reasoningModel, temperature: 0.2, maxTokens: 2600 }),
-            45000, // Reduced timeout for fallback
+            60000, // Extended timeout for reliable generation
             'Preliminary report (fallback)'
           )
           prelimText = (direct.content || '').trim()
@@ -987,7 +985,7 @@ PRIOR ANSWERS: ${JSON.stringify(priorAnswers)}`
 
         const titleRes = await withTimeout(
           callLLM([{ role: 'user', content: titlePrompt }]),
-          30000,
+          45000,
           `Dynamic stage ${stageNum} title`
         )
         const stageTitle = titleRes.content.trim()
@@ -1014,7 +1012,7 @@ ${extraInstruction}
 
         const res = await withTimeout(
           callLLM([{ role: 'user', content: questionsPrompt }]),
-          45000,
+          60000,
           `Dynamic stage ${stageNum} questions`
         )
         const json = JSON.parse(tryExtractJson(res.content))
@@ -1204,7 +1202,7 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
       const systemPrompt = `You are an expert Learning Experience Designer and Instructional Designer with decades of hands-on industry experience. You have deep knowledge of past, current, and emerging learning technologies, and you apply principles from cognitive psychology, human factors, and behavior change. Produce pragmatic, decision-ready L&D deliverables that align with business outcomes and constraints.`
 
       // Create final report with job-based approach (like preliminary)
-      const finalModel = (env as any).perplexityFinalModel || 'sonar-reasoning'
+      const finalModel = (env as any).perplexityFinalModel || 'sonar-pro'
       const fallbackModel = 'sonar-pro' // Faster model for fallback
       
       // First, try with job-based approach
@@ -1215,8 +1213,8 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
       try {
         console.log('Submitting final report job with model:', finalModel)
         
-        // Try database-backed job system first (prod only; dev falls back to direct API calls)
-        const useDatabase = import.meta.env.PROD
+        // Use database-backed job system in all environments
+        const useDatabase = true
         let jobId: string | null = null
         
         if (useDatabase) {
@@ -1286,7 +1284,7 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
       // Poll for job completion (extend time for reasoning models)
       if (jobStatusUrl) {
         const pollStartTime = Date.now()
-        const maxPollTime = isReasoningModel ? 90000 : 45000 // 90s for reasoning, 45s for others
+        const maxPollTime = isReasoningModel ? 90000 : 75000 // 90s for reasoning, 75s for others
         let pollDelay = 2000
         
         // Option to enable async mode (don't wait, check later)
@@ -1357,7 +1355,7 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
               temperature: 0.2, 
               maxTokens: 3500 
             }),
-            30000, // 30 second timeout for faster model
+            45000, // 45 second timeout for faster model
             'Final report (fast model)'
           )
           finalReportText = (fallbackRes.content || '').trim()
@@ -1382,7 +1380,7 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
               temperature: 0.3, 
               maxTokens: 3000 
             }),
-            20000, // 20 second timeout for base model
+            30000, // 30 second timeout for base model
             'Final report (simplified)'
           )
           finalReportText = (simpleRes.content || '').trim()
@@ -1413,7 +1411,7 @@ Return ONLY valid JSON matching the NAReport schema with these sections: summary
               temperature: 0.5, 
               maxTokens: 2000 
             }),
-            10000, // 10 second timeout
+            20000, // 20 second timeout
             'Final report (minimal)'
           )
           finalReportText = (minimalRes.content || '').trim()
@@ -1433,17 +1431,15 @@ Return ONLY valid JSON matching the NAReport schema with these sections: summary
               temperature: 0, 
               maxTokens: 10 
             }),
-            5000,
+            10000,
             'API connectivity test'
           )
           console.log('API test response:', testRes)
         } catch (testError: any) {
           console.error('API connectivity test failed:', testError)
-          if (testError.code === 'TIMEOUT') {
-            setError('Perplexity API is not responding. Please check your internet connection or API status.')
-          } else {
-            setError(`API Error: ${testError.message || 'Unknown error'}. Please check your API key and credits.`)
-          }
+          // Use formatErrorMessage for consistent error messages
+          const errorMessage = formatErrorMessage(testError)
+          setError(errorMessage)
         }
       }
       

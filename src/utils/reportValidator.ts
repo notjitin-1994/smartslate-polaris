@@ -201,26 +201,31 @@ export function repairNAReport(report: any, fallbackData?: {
  * Safely extracts JSON from a string that may contain markdown or other text
  */
 export function extractJsonFromText(text: string): string {
-  // Try to find JSON object boundaries
+  // Remove hidden reasoning or preambles like <think>...</think>, <analysis>...</analysis>
+  let cleaned = text.replace(/<think>[\s\S]*?<\/think>/gmi, '')
+  cleaned = cleaned.replace(/<analysis>[\s\S]*?<\/analysis>/gmi, '')
+  // Then try to find JSON object boundaries
   const patterns = [
     /```json\s*([\s\S]*?)```/i,
     /```\s*([\s\S]*?)```/,
     /(\{[\s\S]*\})/
   ]
-  
   for (const pattern of patterns) {
-    const match = text.match(pattern)
+    const match = cleaned.match(pattern)
     if (match) {
-      const candidate = match[1] || match[0]
-      // Validate it looks like JSON
+      const candidate = (match[1] || match[0]).trim()
       if (candidate.includes('{') && candidate.includes('}')) {
-        return candidate.trim()
+        return candidate
       }
     }
   }
-  
-  // If no patterns match, try to clean the entire text
-  return text.trim()
+  // Fallback: strip everything before first '{' and after last '}'
+  const start = cleaned.indexOf('{')
+  const end = cleaned.lastIndexOf('}')
+  if (start !== -1 && end !== -1 && end > start) {
+    return cleaned.slice(start, end + 1)
+  }
+  return cleaned.trim()
 }
 
 /**
@@ -270,3 +275,4 @@ export function validatePreliminaryMarkdown(markdown: string): {
     missingSections
   }
 }
+

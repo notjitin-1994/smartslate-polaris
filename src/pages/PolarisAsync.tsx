@@ -37,7 +37,7 @@ export function AsyncReportGenerator({
       setStatus('submitted')
       setError(null)
       
-      const response = await fetch('/api/reportJobs', {
+      const response = await fetch('/api/reportJobsDb', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -53,13 +53,19 @@ export function AsyncReportGenerator({
       }
       
       const data = await response.json()
-      setJobId(data.job_id)
+      // Prefer DB-backed status URL if provided
+      const statusUrl: string | undefined = data?.status_url
+      const createdJobId: string | undefined = data?.job_id
+      setJobId(createdJobId || null)
       setStatus('processing')
       
       // Store job ID in localStorage for persistence
-      if (summaryId) {
+      if (summaryId && createdJobId) {
         const jobs = JSON.parse(localStorage.getItem('polaris_jobs') || '{}')
-        jobs[summaryId] = data.job_id
+        jobs[summaryId] = createdJobId
+        if (statusUrl) {
+          jobs[`${summaryId}_status_url`] = statusUrl
+        }
         localStorage.setItem('polaris_jobs', JSON.stringify(jobs))
       }
       
@@ -82,7 +88,10 @@ export function AsyncReportGenerator({
 
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/reportJobs?job_id=${jobId}`)
+        // Prefer stored status URL (DB route) if available
+        const jobs = JSON.parse(localStorage.getItem('polaris_jobs') || '{}')
+        const statusUrl = summaryId ? jobs[`${summaryId}_status_url`] : undefined
+        const response = await fetch(statusUrl || `/api/reportJobsDb?job_id=${jobId}`)
         if (!response.ok) {
           throw new Error('Failed to check job status')
         }
@@ -254,7 +263,9 @@ export function useAsyncReport(summaryId?: string) {
   
   async function checkStatus(id: string) {
     try {
-      const response = await fetch(`/api/reportJobs?job_id=${id}`)
+      const jobs = JSON.parse(localStorage.getItem('polaris_jobs') || '{}')
+      const statusUrl = summaryId ? jobs[`${summaryId}_status_url`] : undefined
+      const response = await fetch(statusUrl || `/api/reportJobsDb?job_id=${id}`)
       const data = await response.json()
       
       if (data.status === 'succeeded') {

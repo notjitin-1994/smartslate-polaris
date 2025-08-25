@@ -55,7 +55,7 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
 
     const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || process.env.VITE_PERPLEXITY_API_KEY || ''
     const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || process.env.VITE_PERPLEXITY_BASE_URL || 'https://api.perplexity.ai'
-    const mdl = normalizePerplexityModel(model || process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar')
+    const mdl = normalizePerplexityModel(model || process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar-pro')
 
     if (!PERPLEXITY_API_KEY) throw new Error('Perplexity API key not configured')
 
@@ -64,8 +64,8 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
 
     const controller = new AbortController()
     const isReasoningModel = mdl.includes('reasoning')
-    const baseTimeout = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 60000)
-    const SERVER_TIMEOUT_MS = isReasoningModel ? Math.min(110000, baseTimeout * 2) : baseTimeout
+    const baseTimeout = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 75000)
+    const SERVER_TIMEOUT_MS = isReasoningModel ? Math.min(110000, Math.floor(baseTimeout * 1.5)) : baseTimeout
     const timeoutId = setTimeout(() => {
       console.warn(`Job ${jobId} timing out after ${SERVER_TIMEOUT_MS}ms`)
       controller.abort()

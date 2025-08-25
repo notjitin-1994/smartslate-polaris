@@ -135,14 +135,50 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
       }
 
       if (currentSection === 'measurement') {
-        if (line.startsWith('**Success Metrics:**')) currentSubSection = 'success_metrics'
-        else if (line.startsWith('**Assessment Strategy:**')) currentSubSection = 'assessment_strategy'
-        else if (line.startsWith('**Data Sources:**')) currentSubSection = 'data_sources'
-        else if (line.startsWith('- ')) {
-          const item = line.substring(2)
-          if (currentSubSection === 'success_metrics') report.measurement.success_metrics.push({ metric: item, baseline: null, target: '', timeframe: '' })
-          else if (currentSubSection === 'assessment_strategy') report.measurement.assessment_strategy.push(item)
-          else if (currentSubSection === 'data_sources') report.measurement.data_sources.push(item)
+        // Support both legacy bold labels and newer subheadings
+        if (line.startsWith('**Success Metrics:**') || /^###\s+Success Metrics/i.test(line)) {
+          currentSubSection = 'success_metrics'
+        } else if (line.startsWith('**Assessment Strategy:**') || /^###\s+Assessment Strategy/i.test(line)) {
+          currentSubSection = 'assessment_strategy'
+        } else if (line.startsWith('**Data Sources:**') || /^###\s+Data Sources/i.test(line)) {
+          currentSubSection = 'data_sources'
+        } else if (line.startsWith('**Levels:**')) {
+          currentSubSection = 'levels'
+        } else if (/^\*\*Reporting Cadence:\*\*/.test(line)) {
+          const cadence = line.replace(/^\*\*Reporting Cadence:\*\*/i, '').trim()
+          report.measurement.learning_analytics.reporting_cadence = cadence || null
+        } else if (line.startsWith('- ')) {
+          const item = line.substring(2).trim()
+          if (currentSubSection === 'success_metrics') {
+            let metric = item
+            let baseline: string | null = null
+            let target = ''
+            let timeframe = ''
+
+            const baselineMatch = metric.match(/\(\s*Baseline:\s*([^\)]+)\)/i)
+            if (baselineMatch) {
+              baseline = baselineMatch[1].trim()
+              metric = metric.replace(baselineMatch[0], '').trim()
+            }
+
+            const targetSplit = item.split(/\u2192\s*Target:/)
+            if (targetSplit.length > 1) {
+              const rhs = targetSplit[1].trim()
+              const bySplit = rhs.split(/\s+by\s+/i)
+              target = (bySplit[0] || '').trim()
+              timeframe = (bySplit[1] || '').trim()
+            }
+
+            metric = metric.replace(/[:\s]+$/, '')
+
+            report.measurement.success_metrics.push({ metric, baseline, target, timeframe })
+          } else if (currentSubSection === 'assessment_strategy') {
+            report.measurement.assessment_strategy.push(item)
+          } else if (currentSubSection === 'data_sources') {
+            report.measurement.data_sources.push(item)
+          } else if (currentSubSection === 'levels') {
+            report.measurement.learning_analytics.levels.push(item)
+          }
         }
       }
 

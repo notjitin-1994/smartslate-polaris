@@ -94,7 +94,7 @@ ${prompt}`
     phone?: string
     timezone?: string
   }): Promise<string> {
-    const prompt = `Research best practices and current trends in Learning & Development for someone with the following profile:
+    const prompt = `Research best practices and current trends in Learning & Development for someone with the following profile. Also search the public web for any professional profiles or public references related to this person (e.g., LinkedIn, personal/company pages, published talks). Do not fabricate; only include if reasonably attributable to this person.
     
     Name: ${data.name}
     Role: ${data.role}
@@ -108,10 +108,10 @@ ${prompt}`
     2. Industry best practices relevant to their department
     3. Current trends in corporate training that might interest them
     4. Key questions they should be thinking about for their L&D initiatives
+    5. Publicly available professional information (summarized, with sources) if any matches are found for the details above
     
     Keep the response professional but personalized.`
-    
-    const result = await this.researchWithRetry(prompt)
+    const result = await this.researchWithRetry(prompt, { model: (env as any).perplexityGreetingModel || 'sonar', maxTokens: 1200 })
     return result.content
   }
   
@@ -127,8 +127,9 @@ ${prompt}`
     mission?: string
     constraints?: string[]
     stakeholders?: string[]
+    requesterRole?: string
   }): Promise<string> {
-    const prompt = `Research comprehensive information about the following organization and its L&D implications:
+    const prompt = `Research comprehensive information about the following organization and its L&D implications. Incorporate legal and compliance context and propose targeted stakeholder questions suitable for the requester's role.
     
     Organization: ${data.orgName}
     Industry: ${data.industry}
@@ -138,6 +139,7 @@ ${prompt}`
     ${data.mission ? `Mission: ${data.mission}` : ''}
     ${data.constraints?.length ? `Legal/Compliance Constraints: ${data.constraints.join(', ')}` : ''}
     ${data.stakeholders?.length ? `Key Stakeholders: ${data.stakeholders.join(', ')}` : ''}
+    ${data.requesterRole ? `Requester Role: ${data.requesterRole}` : ''}
     
     Research and provide:
     1. Public information about the organization (if available)
@@ -147,10 +149,10 @@ ${prompt}`
     5. Best practices for L&D in similar organizations
     6. Technology adoption patterns in their industry
     7. Workforce development trends in their sector
+    8. A set of practical, role-appropriate questions the requester can ask their legal and compliance teams about L&D initiatives in this organization
     
     Focus on actionable insights for L&D planning.`
-    
-    const result = await this.researchWithRetry(prompt)
+    const result = await this.researchWithRetry(prompt, { model: (env as any).perplexityOrgModel || 'sonar pro', maxTokens: 1800 })
     return result.content
   }
   
@@ -168,7 +170,7 @@ ${prompt}`
     experts?: string[]
     other?: string
   }): Promise<string> {
-    const prompt = `Research best practices and recommendations for an L&D project with the following requirements:
+    const prompt = `As an expert Learning Experience Designer, analyze and recommend a requirements brief for an L&D project with the following inputs:
     
     Objectives: ${data.objectives}
     Constraints: ${data.constraints}
@@ -191,8 +193,7 @@ ${prompt}`
     8. Innovation opportunities within the constraints
     
     Provide specific, actionable recommendations.`
-    
-    const result = await this.researchWithRetry(prompt)
+    const result = await this.researchWithRetry(prompt, { model: (env as any).perplexityRequirementModel || 'sonar reasoning', maxTokens: 2000 })
     return result.content
   }
   

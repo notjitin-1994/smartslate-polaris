@@ -15,6 +15,11 @@ type AppEnv = {
   VITE_PERPLEXITY_API_KEY?: string
   VITE_PERPLEXITY_BASE_URL?: string
   VITE_PERPLEXITY_MODEL?: string
+  VITE_PERPLEXITY_GREETING_MODEL?: string
+  VITE_PERPLEXITY_ORG_MODEL?: string
+  VITE_PERPLEXITY_REQUIREMENT_MODEL?: string
+  VITE_PERPLEXITY_PRELIM_MODEL?: string
+  VITE_PERPLEXITY_FINAL_MODEL?: string
   MODE: string
   DEV: boolean
   PROD: boolean
@@ -44,6 +49,11 @@ export const env = {
   perplexityApiKey: read('VITE_PERPLEXITY_API_KEY') || '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',
   perplexityBaseUrl: read('VITE_PERPLEXITY_BASE_URL') || 'https://api.perplexity.ai',
   perplexityModel: read('VITE_PERPLEXITY_MODEL') || 'llama-3.1-sonar-small-128k-online',
+  perplexityGreetingModel: (read('VITE_PERPLEXITY_GREETING_MODEL') || read('VITE_PERPLEXITY_MODEL') || 'sonar'),
+  perplexityOrgModel: (read('VITE_PERPLEXITY_ORG_MODEL') || 'sonar pro'),
+  perplexityRequirementModel: (read('VITE_PERPLEXITY_REQUIREMENT_MODEL') || 'sonar reasoning'),
+  perplexityPrelimModel: (read('VITE_PERPLEXITY_PRELIM_MODEL') || 'sonar reasoning'),
+  perplexityFinalModel: (read('VITE_PERPLEXITY_FINAL_MODEL') || 'sonar reasoning'),
   mode: raw.MODE,
   isDev: raw.DEV,
   isProd: raw.PROD,

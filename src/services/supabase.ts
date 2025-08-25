@@ -32,13 +32,26 @@ const HANDOFF_COOKIE_NAME = 'ss_handoff'
 const HANDOFF_MAX_AGE_SECONDS = 90 // keep this very short-lived
 const HANDOFF_CHUNK_SIZE = 3500 // conservative to stay under 4096 bytes per cookie
 
+// Get the appropriate domain for cookies based on environment
+function getCookieDomain(): string {
+  const hostname = window.location.hostname
+  if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    return '' // Empty domain for localhost (browser will use current domain)
+  }
+  return '.smartslate.io' // Production domain
+}
+
 function setCookie(name: string, value: string, maxAgeSeconds: number) {
-  const cookie = `${name}=${value}; Domain=.smartslate.io; Path=/; Max-Age=${maxAgeSeconds}; Secure; SameSite=Lax`
+  const domain = getCookieDomain()
+  const domainAttr = domain ? `; Domain=${domain}` : ''
+  const cookie = `${name}=${value}; Path=/; Max-Age=${maxAgeSeconds}; Secure; SameSite=Lax${domainAttr}`
   document.cookie = cookie
 }
 
 function deleteCookie(name: string) {
-  document.cookie = `${name}=; Domain=.smartslate.io; Path=/; Max-Age=0; Secure; SameSite=Lax`
+  const domain = getCookieDomain()
+  const domainAttr = domain ? `; Domain=${domain}` : ''
+  document.cookie = `${name}=; Path=/; Max-Age=0; Secure; SameSite=Lax${domainAttr}`
 }
 
 function writeHandoffCookie(session: Session | null) {

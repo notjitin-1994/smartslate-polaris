@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react'
-import { callLLM, llmService } from '@/services/llmClient'
-import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle, updateSummaryEditedContent, updateSummaryPrelimReport, updateSummaryFinalContent } from '@/services/polarisSummaryService'
-import { researchGreeting, researchOrganization, researchRequirements } from '@/services/perplexityService'
+import { callLLM } from '@/services/llmClient'
+import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle, updateSummaryEditedContent, updateSummaryPrelimReport, updateSummaryFinalContent, updateSummaryReports } from '@/services/polarisSummaryService'
+import { researchGreeting, researchOrganization, researchRequirements, perplexityService } from '@/services/perplexityService'
 import RenderField from '@/polaris/needs-analysis/RenderField'
 import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
 import { AIReportEditorEnhanced } from '@/components/AIReportEditorEnhanced'
@@ -16,6 +16,7 @@ import type { NAField, NAResponseMap } from '@/polaris/needs-analysis/types'
 import { useAuth } from '@/contexts/AuthContext'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
 import { env } from '@/config/env'
+import { formatErrorMessage } from '@/lib/errors'
 
 export default function PolarisRevamped() {
   const { user } = useAuth()
@@ -139,12 +140,18 @@ export default function PolarisRevamped() {
       const elapsed = Date.now() - start
       const ratio = Math.min(1, elapsed / targetMs)
       const progress = Math.min(95, Math.max(5, Math.round(easeInOutCubic(ratio) * 95)))
-      // Astronomy-themed loader copy for Solara-Polaris-Starmap
-      let message = 'Igniting thrusters…'
-      if (progress > 15) message = phase === 'report' ? 'Charting the starmap…' : 'Scanning constellations…'
-      if (progress > 45) message = phase === 'report' ? 'Aligning telescopes with Polaris…' : 'Plotting orbital paths…'
-      if (progress > 70) message = 'Calibrating instruments…'
-      if (progress > 85) message = 'Final approach to Solara…'
+      // Human-friendly, technology-agnostic messages per phase
+      let message = 'Preparing…'
+      if (progress > 15) {
+        if (phase === 'prelim-save') message = 'Saving your draft…'
+        else if (phase === 'prelim') message = 'Drafting your preliminary plan…'
+        else if (String(phase).startsWith('dynamic')) message = 'Preparing follow-up questions…'
+        else if (phase === 'report') message = 'Analyzing your inputs…'
+        else message = 'Gathering your information…'
+      }
+      if (progress > 45) message = phase === 'report' ? 'Compiling your tailored plan…' : 'Refining next steps…'
+      if (progress > 70) message = 'Finalizing…'
+      if (progress > 85) message = 'Wrapping up…'
       const etaSeconds = Math.max(1, Math.ceil((targetMs - elapsed) / 1000))
       setLoader({ active: true, phase, message, progress, etaSeconds })
     }
@@ -161,6 +168,27 @@ export default function PolarisRevamped() {
     }
     setLoader((prev) => ({ ...prev, active: true, progress: 100, message: 'Ready' }))
     window.setTimeout(() => setLoader({ active: false, message: '', progress: 0, etaSeconds: 0 }), 450)
+  }
+
+  // Promise timeout helper to avoid indefinite hangs
+  function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+    return new Promise((resolve, reject) => {
+      const id = setTimeout(() => {
+        const err: any = new Error(`${label} timed out after ${ms}ms`)
+        err.code = 'TIMEOUT'
+        reject(err)
+      }, ms)
+      promise.then(
+        (res) => {
+          clearTimeout(id)
+          resolve(res)
+        },
+        (err) => {
+          clearTimeout(id)
+          reject(err)
+        }
+      )
+    })
   }
   
   // Reset all state
@@ -252,10 +280,39 @@ export default function PolarisRevamped() {
         phone: stage1Answers.requester_phone as string | undefined,
         timezone: stage1Answers.requester_timezone as string | undefined
       }
+      // If we don't have a summary yet, create a minimal draft now so we can tag each report incrementally
+      let createdId: string | null = lastSavedSummaryId
+      if (!createdId) {
+        const { data: draft, error: draftErr } = await saveSummary({
+          company_name: (stage2Answers.org_name as string) || null,
+          report_title: null,
+          summary_content: '# Draft – Starmap in progress',
+          prelim_report: null,
+          stage1_answers: { ...experienceAnswer, ...stage1Answers },
+          stage2_answers: stage2Answers,
+          stage3_answers: stage3Answers,
+          stage2_questions: [],
+          stage3_questions: [],
+          greeting_report: null,
+          org_report: null,
+          requirement_report: null,
+        })
+        if (!draftErr && draft?.id) {
+          setLastSavedSummaryId(draft.id)
+          createdId = draft.id
+        }
+      }
       // Start research and capture the resolved content directly in a ref to avoid stale React state reads
       greetingPromiseRef.current = researchGreeting(researchData)
       greetingPromiseRef.current
-        .then((text) => { greetingReportRef.current = text; setGreetingReport(text) })
+        .then(async (text) => {
+          greetingReportRef.current = text
+          setGreetingReport(text)
+          const sid = createdId || lastSavedSummaryId
+          if (sid) {
+            await updateSummaryReports(sid, { greeting_report: text })
+          }
+        })
         .catch(() => setGreetingReport('Research unavailable - continuing with provided information.'))
     } catch {}
     // Move on immediately
@@ -276,9 +333,16 @@ export default function PolarisRevamped() {
         constraints: stage2Answers.org_compliance as string[] | undefined,
         stakeholders: stage2Answers.org_stakeholders as string[] | undefined
       }
-      orgPromiseRef.current = researchOrganization(researchData)
+      orgPromiseRef.current = researchOrganization({ ...researchData, requesterRole: stage1Answers.requester_role as string })
       orgPromiseRef.current
-        .then((text) => { orgReportRef.current = text; setOrgReport(text) })
+        .then(async (text) => {
+          orgReportRef.current = text
+          setOrgReport(text)
+          const sid = lastSavedSummaryId
+          if (sid) {
+            await updateSummaryReports(sid, { org_report: text })
+          }
+        })
         .catch(() => setOrgReport('Research unavailable - continuing with provided information.'))
     } catch {}
     setActive('stage3')
@@ -302,7 +366,14 @@ export default function PolarisRevamped() {
       }
       reqPromiseRef.current = researchRequirements(researchData)
       reqPromiseRef.current
-        .then((text) => { requirementReportRef.current = text; setRequirementReport(text) })
+        .then(async (text) => {
+          requirementReportRef.current = text
+          setRequirementReport(text)
+          const sid = lastSavedSummaryId
+          if (sid) {
+            await updateSummaryReports(sid, { requirement_report: text })
+          }
+        })
         .catch(() => setRequirementReport('Research unavailable - continuing with provided information.'))
     } catch {}
     // Proceed to preliminary master report; we'll wait briefly for research to finish.
@@ -315,6 +386,8 @@ export default function PolarisRevamped() {
       setLoading(true)
       setError(null)
       startSmartLoader('prelim', 12000)
+      console.groupCollapsed('[Polaris] Preliminary report')
+      console.time('[Polaris] prelim:total')
 
       // Ensure research has a short window to complete before we proceed
       // Wait for the actual research promises (which resolve to strings). Store latest results in refs to avoid stale state.
@@ -358,50 +431,153 @@ export default function PolarisRevamped() {
       const stage2Summary = `Organization: ${fmt(stage2Answers.org_name)}\nIndustry: ${fmt(stage2Answers.org_industry)}\nSize: ${fmt(stage2Answers.org_size)}\nHeadquarters: ${fmt(stage2Answers.org_headquarters)}\nWebsite: ${fmt(stage2Answers.org_website)}\nMission: ${fmt(stage2Answers.org_mission)}\nCompliance: ${fmt(stage2Answers.org_compliance)}\nStakeholders: ${fmt(stage2Answers.org_stakeholders)}`
       const stage3Summary = `Objectives: ${fmt(stage3Answers.project_objectives)}\nConstraints: ${fmt(stage3Answers.project_constraints)}\nAudience: ${fmt(stage3Answers.target_audience)}\nTimeline: ${(timeline.start || 'TBD')} to ${(timeline.end || 'TBD')}\nBudget: ${fmt(stage3Answers.project_budget_range)}\nHardware: ${fmt(stage3Answers.available_hardware)}\nSoftware: ${fmt(stage3Answers.available_software)}\nSMEs: ${fmt(stage3Answers.subject_matter_experts)}\nOther: ${fmt(stage3Answers.additional_context)}`
 
-      const prelimPrompt = `You are an expert L&D consultant. Synthesize a concise, editable Preliminary Master Report using the three research inputs and stage answers below. Use clear markdown with these sections only:
+      const prelimPrompt = `You are an expert L&D consultant. Produce a Preliminary Master Report in MARKDOWN that our viewer can parse. FOLLOW THESE RULES EXACTLY:
 
-1. Executive Summary
-2. Organization Context
-3. Requirements Overview
-4. Risks & Constraints
-5. Open Questions for Clarification
+TOP-LEVEL HEADINGS (use these exact strings, with two leading hashes):
+## Executive Summary
+## Recommended Solution
+## Delivery Plan
+## Measurement
+## Budget
+## Risk Mitigation
+## Next Steps
 
-Keep it factual, specific, and succinct. Avoid over-speculation. Do not include any other sections.
+FORMATTING REQUIREMENTS:
+- Under Executive Summary, include lines and lists in this exact pattern:
+  **Problem Statement:** <one sentence>
+  **Current State:**\n- <bullet>\n- <bullet>
+  **Root Causes:**\n- <bullet>\n- <bullet>
+  **Objectives:**\n- <bullet>\n- <bullet>
+- Under Recommended Solution:
+  ### Delivery Modalities\n- **<Modality Name>:** <reason>
+  **Target Audiences:**\n- <bullet>
+  **Key Competencies:**\n- <bullet>
+  **Content Outline:**\n- <bullet>
+- Under Delivery Plan:
+  **<Phase Name>** (<number> weeks)\nGoals:\n- <bullet>\nActivities:\n- <bullet>
+  ### Timeline\n- **<Label>:** yyyy-mm-dd to yyyy-mm-dd
+  ### Resources\n- <role>
+- Under Measurement:
+  **Success Metrics:**\n- <bullet>
+  **Assessment Strategy:**\n- <bullet>
+  **Data Sources:**\n- <bullet>
+- Under Budget:
+  Notes: <one sentence>
+  - **<Item>:** <low> - <high>
+- Under Risk Mitigation:
+  - **Risk:** <text>\n  **Mitigation:** <text>
+- Under Next Steps:
+  1. <short step>\n  2. <short step>
+
+Use the inputs below. Be specific and concise. If research is thin, use the stage answers directly.
 
 ---
-GREETING REPORT:
-${greetingText}
+GREETING REPORT:\n${greetingText}
 
-ORGANIZATION REPORT:
-${orgText}
+ORGANIZATION REPORT:\n${orgText}
 
-REQUIREMENTS REPORT:
-${reqText}
+REQUIREMENTS REPORT:\n${reqText}
 
 ---
-STAGE ANSWERS SUMMARY (use these details directly if research is thin or generic):
-STAGE 1 – REQUESTER & ORG CONTACTS:
-${stage1Summary}
+STAGE ANSWERS SUMMARY (authoritative user-provided data):
+STAGE 1 – REQUESTER & ORG CONTACTS:\n${stage1Summary}
 
-STAGE 2 – ORGANIZATION DETAILS:
-${stage2Summary}
+STAGE 2 – ORGANIZATION DETAILS:\n${stage2Summary}
 
-STAGE 3 – PROJECT SCOPING:
-${stage3Summary}
+STAGE 3 – PROJECT SCOPING:\n${stage3Summary}
 `
 
-      const prelimRes = await callLLM([{ role: 'user', content: prelimPrompt }])
-      const prelim = (prelimRes.content || '').trim() || '# Preliminary Master Report\n\nContent pending.'
+      // Generate prelim with Sonar Reasoning via Perplexity
+      const reasoningModel = (env as any).perplexityPrelimModel || 'sonar reasoning'
+      const prelimRes = await withTimeout(
+        perplexityService.research(prelimPrompt, { model: reasoningModel, temperature: 0.2, maxTokens: 2600 }),
+        60000,
+        'Preliminary report generation'
+      )
+      let prelim = (prelimRes.content || '').trim()
+      // Ensure viewer-compatible markdown if model returns a plain summary
+      const hasExecutive = /(^|\n)##\s+Executive Summary/.test(prelim)
+      if (!hasExecutive) {
+        const fmt = (v: any) => (Array.isArray(v) ? v.filter(Boolean).join(', ') : (v ?? ''))
+        const tl = (stage3Answers.project_timeline || {}) as { start?: string; end?: string }
+        const objectives = fmt(stage3Answers.project_objectives) || 'Objectives to be finalized.'
+        const audience = fmt(stage3Answers.target_audience) || 'Primary learners'
+        const budget = fmt(stage3Answers.project_budget_range) || 'TBD'
+        const tlStart = tl.start || 'TBD'
+        const tlEnd = tl.end || 'TBD'
+        prelim = `## Executive Summary
+**Problem Statement:** ${objectives}
+
+**Current State:**
+- Based on organization details and research above
+
+**Root Causes:**
+- To be validated with stakeholders
+
+**Objectives:**
+- ${objectives}
+
+## Recommended Solution
+### Delivery Modalities
+- **Blended Learning:** Balance flexibility and impact
+
+**Target Audiences:**
+- ${audience}
+
+**Key Competencies:**
+- Align to business goals
+
+**Content Outline:**
+- High-level modules derived from requirements
+
+## Delivery Plan
+**Discovery & Alignment** (2 weeks)
+Goals:
+- Confirm scope and constraints
+Activities:
+- Stakeholder workshops
+
+### Timeline
+- **Project Window:** ${tlStart} to ${tlEnd}
+
+### Resources
+- Core project team
+
+## Measurement
+**Success Metrics:**
+- Baseline and target metrics TBD
+
+**Assessment Strategy:**
+- Formative and summative checks
+
+**Data Sources:**
+- LMS and operational systems
+
+## Budget
+Notes: ${budget}
+- **Development:** TBD - TBD
+
+## Risk Mitigation
+- **Risk:** Incomplete inputs
+  **Mitigation:** Schedule follow-ups to fill gaps
+
+## Next Steps
+1. Validate requirements with stakeholders
+2. Confirm scope, timeline, and constraints`
+      }
       setPrelimMarkdown(prelim)
       setEditedPrelim(prelim)
       setActive('prelim')
     } catch (e: any) {
-      setError(e?.message || 'Failed to generate preliminary report.')
+      console.error('[Polaris] Preliminary report failed', e)
+      setError(formatErrorMessage(e) || 'Failed to generate preliminary report.')
       // If prelim fails, continue to dynamic generation anyway
       await generateDynamicQuestions()
     } finally {
       setLoading(false)
       stopSmartLoader()
+      console.timeEnd('[Polaris] prelim:total')
+      console.groupEnd()
     }
   }
 
@@ -411,6 +587,8 @@ ${stage3Summary}
       setLoading(true)
       setError(null)
       startSmartLoader('dynamic-generation', 15000)
+      console.groupCollapsed('[Polaris] Dynamic questions')
+      console.time('[Polaris] dynamic:total')
       
       // Ensure research has a short window to complete before we proceed
       const toWait: Promise<any>[] = []
@@ -450,7 +628,11 @@ ${stage3Summary}
 RESEARCH CONTEXT:
 ${researchContext}`
         
-        const titleRes = await callLLM([{ role: 'user', content: titlePrompt }])
+        const titleRes = await withTimeout(
+          callLLM([{ role: 'user', content: titlePrompt }]),
+          30000,
+          `Dynamic stage ${stageNum} title`
+        )
         const stageTitle = titleRes.content.trim()
         
         // Generate questions
@@ -463,7 +645,11 @@ ${researchContext}
 
 Create questions that leverage the research insights to ask more targeted, relevant questions.`
         
-        const res = await callLLM([{ role: 'user', content: questionsPrompt }])
+        const res = await withTimeout(
+          callLLM([{ role: 'user', content: questionsPrompt }]),
+          45000,
+          `Dynamic stage ${stageNum} questions`
+        )
         const json = JSON.parse(tryExtractJson(res.content))
         
         stages.push({
@@ -476,23 +662,29 @@ Create questions that leverage the research insights to ask more targeted, relev
       setDynamicStages(stages)
       setActive('dynamic')
     } catch (e: any) {
-      setError(e?.message || 'Failed to generate dynamic questions.')
+      console.error('[Polaris] Dynamic questions failed', e)
+      setError(formatErrorMessage(e) || 'Failed to generate additional questions.')
       // Skip dynamic stages and go straight to report
       await generateReport()
     } finally {
       setLoading(false)
       stopSmartLoader()
+      console.timeEnd('[Polaris] dynamic:total')
+      console.groupEnd()
     }
   }
 
   // Confirm preliminary report: save and proceed to dynamic stages
   async function confirmPrelimAndProceed() {
+    console.groupCollapsed('[Polaris] Confirm & Continue (prelim)')
+    console.time('[Polaris] confirm:total')
+    startSmartLoader('prelim-save', 7000)
     try {
       setSavingPrelim(true)
       // Save prelim to DB (create or update)
       if (!lastSavedSummaryId) {
         const { data: saved, error: saveError } = await saveSummary({
-          company_name: stage2Answers.org_name as string || null,
+          company_name: (stage2Answers.org_name as string) || null,
           report_title: null,
           summary_content: editedPrelim,
           prelim_report: editedPrelim,
@@ -503,26 +695,36 @@ Create questions that leverage the research insights to ask more targeted, relev
           stage3_questions: [],
           greeting_report: greetingReport,
           org_report: orgReport,
-          requirement_report: requirementReport
+          requirement_report: requirementReport,
         })
         if (saveError) {
-          setError('Failed to save preliminary report.')
-          return
+          console.error('[Polaris] Prelim save failed', saveError)
+          throw saveError
         }
         setLastSavedSummaryId(saved?.id || null)
         setReportTitle((stage2Answers.org_name as string) || '')
       } else {
         const { error } = await updateSummaryPrelimReport(lastSavedSummaryId, editedPrelim)
         if (error) {
-          setError('Failed to update preliminary report.')
-          return
+          console.error('[Polaris] Prelim update failed', error)
+          throw error
         }
       }
 
+      // Clear saving state before long generation so the button doesn't appear stuck
+      setSavingPrelim(false)
+      stopSmartLoader()
+
       // Proceed to dynamic stages (which will leverage editedPrelim)
       await generateDynamicQuestions()
+    } catch (err: any) {
+      console.error('[Polaris] Confirm & Continue failed', err)
+      setError(formatErrorMessage(err) || 'Failed to save preliminary report.')
+      stopSmartLoader()
     } finally {
       setSavingPrelim(false)
+      console.timeEnd('[Polaris] confirm:total')
+      console.groupEnd()
     }
   }
   
@@ -541,6 +743,8 @@ Create questions that leverage the research insights to ask more targeted, relev
       setLoading(true)
       setError(null)
       startSmartLoader('report', 20000)
+      console.groupCollapsed('[Polaris] Final report')
+      console.time('[Polaris] report:total')
       
       const allAnswers = {
         experience: experienceAnswer,
@@ -592,13 +796,12 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
       // Strong system instruction for Claude (Anthropic). We explicitly target Anthropic with fallback to OpenAI.
       const systemPrompt = `You are an expert Learning Experience Designer and Instructional Designer with decades of hands-on industry experience. You have deep knowledge of past, current, and emerging learning technologies, and you apply principles from cognitive psychology, human factors, and behavior change. Produce pragmatic, decision-ready L&D deliverables that align with business outcomes and constraints.`
 
-      const res = await llmService.callLLMWithFallback(
-        [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: enhancedPrompt },
-        ],
-        { temperature: 0.2, maxTokens: 4000 },
-        { primaryProvider: 'anthropic' }
+      // Create final report with Sonar Reasoning via Perplexity
+      const finalModel = (env as any).perplexityFinalModel || 'sonar reasoning'
+      const res = await withTimeout(
+        perplexityService.research(`${systemPrompt}\n\n${enhancedPrompt}`, { model: finalModel, temperature: 0.2, maxTokens: 4000 }),
+        90000,
+        'Final report generation'
       )
       
       let reportJson: NAReport
@@ -672,10 +875,13 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
       
       setActive('report')
     } catch (e: any) {
-      setError(e?.message || 'Failed to generate report.')
+      console.error('[Polaris] Final report failed', e)
+      setError(formatErrorMessage(e) || 'Failed to generate report.')
     } finally {
       setLoading(false)
       stopSmartLoader()
+      console.timeEnd('[Polaris] report:total')
+      console.groupEnd()
     }
   }
   
@@ -1155,7 +1361,17 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
             <div className="flex items-start gap-3">
               <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary-400 to-secondary-400 animate-pulse" />
               <div className="flex-1 space-y-1">
-                <div className="text-sm font-semibold text-white/90">Processing...</div>
+                <div className="text-sm font-semibold text-white/90">
+                  {loader.phase === 'prelim-save'
+                    ? 'Saving your draft'
+                    : loader.phase === 'prelim'
+                    ? 'Preparing your draft'
+                    : String(loader.phase).startsWith('dynamic')
+                    ? 'Preparing next questions'
+                    : loader.phase === 'report'
+                    ? 'Creating your starmap'
+                    : 'Working on it…'}
+                </div>
                 <div className="text-xs text-white/70">{loader.message}</div>
               </div>
               <div className="text-[11px] text-white/60 whitespace-nowrap">
@@ -1363,7 +1579,7 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
         </section>
       )}
       
-      {/* Preliminary Report */}
+      {/* Preliminary Report (viewer style, no editing) */}
       {active === 'prelim' && (
         <section className="space-y-4">
           <div className="glass-card p-4 md:p-6">
@@ -1381,7 +1597,7 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
                   type="button"
                   className="btn-primary"
                   onClick={confirmPrelimAndProceed}
-                  disabled={savingPrelim}
+                  disabled={savingPrelim || loading}
                   title="Save prelim and continue to dynamic questions"
                 >
                   {savingPrelim ? 'Saving…' : 'Confirm & Continue'}
@@ -1389,14 +1605,12 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
               </div>
             </div>
             <div className="space-y-3">
-              <AIReportEditorEnhanced
-                reportContent={editedPrelim}
-                greetingReport={greetingReport}
-                orgReport={orgReport}
-                requirementReport={requirementReport}
-                maxEdits={3}
-                onContentChange={setEditedPrelim}
-                className="min-h-[480px]"
+              <ReportDisplay
+                reportMarkdown={editedPrelim}
+                reportTitle={reportTitle.trim() || undefined}
+                editableTitle={false}
+                savingTitle={false}
+                hideTitleSection
               />
               {!lastSavedSummaryId && (
                 <p className="text-xs text-white/60">

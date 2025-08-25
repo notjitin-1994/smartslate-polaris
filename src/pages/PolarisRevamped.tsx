@@ -6,7 +6,6 @@ import RenderField from '@/polaris/needs-analysis/RenderField'
 import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
 import { AIReportEditorEnhanced } from '@/components/AIReportEditorEnhanced'
 import { SolaraLodestar } from '@/components'
-import { IconButton } from '@/components/ui/IconButton'
 import { EXPERIENCE_LEVELS } from '@/polaris/needs-analysis/experience'
 import { STAGE1_REQUESTER_FIELDS, STAGE2_ORGANIZATION_FIELDS, STAGE3_PROJECT_FIELDS } from '@/polaris/needs-analysis/three-stage-static'
 import { NA_STAGE_TITLE_PROMPT, NA_QUESTIONNAIRE_PROMPT } from '@/polaris/needs-analysis/prompts'
@@ -1654,57 +1653,6 @@ Use these to produce the final Starmap. Ensure it resolves open questions using 
       {/* Final Report */}
       {active === 'report' && reportMarkdown && (
         <section className="space-y-4">
-          <div className="sticky top-16 z-30 bg-[rgb(var(--bg))]/70 backdrop-blur-md border-b border-white/10">
-            <div className="flex items-start justify-between gap-3 px-1 py-2">
-              <div className="flex items-start gap-3">
-                <button
-                  type="button"
-                  className="icon-btn mt-1"
-                  aria-label="Back"
-                  title="Back"
-                  onClick={() => (window.location.href = '/portal/starmaps')}
-                >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M15 18l-6-6 6-6" />
-                  </svg>
-                </button>
-                <div>
-                  <h2 className="text-xl md:text-2xl font-bold text-white">{reportTitle.trim() || 'Your L&D Starmap'}</h2>
-                  <div className="text-xs text-white/60 mt-0.5">
-                    Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {lastSavedSummaryId && (
-                  <>
-                    {!isEditMode ? (
-                      <IconButton ariaLabel="Edit report" title="Edit report" onClick={() => setIsEditMode(true)} size="sm">
-                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M12 20h9" />
-                          <path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
-                        </svg>
-                      </IconButton>
-                    ) : (
-                      <>
-                        <IconButton ariaLabel="Cancel edits" title="Cancel edits" onClick={() => { setEditedContent(reportMarkdown); setIsEditMode(false) }} size="sm">
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M18 6L6 18M6 6l12 12" />
-                          </svg>
-                        </IconButton>
-                        <IconButton ariaLabel="Save changes" title="Save changes" onClick={saveEditedContent} disabled={savingEdit} variant="primary" size="sm">
-                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M20 6L9 17l-5-5" />
-                          </svg>
-                        </IconButton>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-          
           <div ref={summaryRef}>
             {!isEditMode ? (
               <ReportDisplay

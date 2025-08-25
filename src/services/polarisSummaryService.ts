@@ -68,6 +68,7 @@ export async function saveSummary(data: {
   report_title?: string | null
   summary_content: string
   prelim_report?: string | null
+  dynamic_questionnaire_report?: string | null
   stage1_answers: Record<string, any>
   stage2_answers: Record<string, any>
   stage3_answers: Record<string, any>
@@ -110,6 +111,7 @@ export async function saveSummary(data: {
     report_title: data.report_title ?? data.company_name ?? 'Discovery Starmap',
     summary_content: data.summary_content,
     prelim_report: data.prelim_report ?? null,
+    dynamic_questionnaire_report: data.dynamic_questionnaire_report ?? null,
     stage1_answers: data.stage1_answers,
     stage2_answers: data.stage2_answers,
     stage3_answers: data.stage3_answers,
@@ -287,7 +289,7 @@ export async function updateSummaryPrelimReport(
 export async function updateSummaryFinalContent(
   id: string,
   finalContent: string,
-  options: { stage2_questions?: any[]; stage3_questions?: any[] } = {}
+  options: { stage2_questions?: any[]; stage3_questions?: any[]; stage3_answers_merge?: Record<string, any>; dynamic_questionnaire_report?: string | null } = {}
 ): Promise<{ error: any }> {
   const supabase = getSupabase()
   const { data: { user } } = await supabase.auth.getUser()
@@ -301,6 +303,8 @@ export async function updateSummaryFinalContent(
   }
   if (options.stage2_questions) (updatePayload as any).stage2_questions = options.stage2_questions
   if (options.stage3_questions) (updatePayload as any).stage3_questions = options.stage3_questions
+  if (options.stage3_answers_merge) (updatePayload as any).stage3_answers = options.stage3_answers_merge
+  if (options.dynamic_questionnaire_report !== undefined) (updatePayload as any).dynamic_questionnaire_report = options.dynamic_questionnaire_report
 
   const { error } = await supabase
     .from('polaris_summaries')

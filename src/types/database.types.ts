@@ -66,6 +66,7 @@ export interface Database {
           org_report: string | null
           requirement_report: string | null
           prelim_report: string | null
+          dynamic_questionnaire_report: string | null
           edited_content: string | null
           is_edited: boolean
           last_edited_at: string | null
@@ -86,6 +87,7 @@ export interface Database {
           org_report?: string | null
           requirement_report?: string | null
           prelim_report?: string | null
+          dynamic_questionnaire_report?: string | null
           edited_content?: string | null
           is_edited?: boolean
           last_edited_at?: string | null
@@ -106,6 +108,7 @@ export interface Database {
           org_report?: string | null
           requirement_report?: string | null
           prelim_report?: string | null
+          dynamic_questionnaire_report?: string | null
           edited_content?: string | null
           is_edited?: boolean
           last_edited_at?: string | null

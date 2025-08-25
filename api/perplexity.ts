@@ -62,8 +62,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Perplexity API key not configured' })
     }
 
-    // Extract request body
-    const { messages, model, temperature = 0.2, max_tokens = 4096 } = req.body
+    // Extract and normalize request body (Vercel can pass stringified JSON in prod)
+    let body: any = req.body
+    if (typeof body === 'string') {
+      try {
+        body = JSON.parse(body)
+      } catch (e) {
+        console.error('Invalid JSON body string:', body)
+        return res.status(400).json({ error: 'Invalid JSON body' })
+      }
+    }
+    // Destructure with defaults
+    let { messages, model, temperature = 0.2, max_tokens = 4096 } = body || {}
+    // Coerce numeric fields if they came as strings
+    if (typeof temperature === 'string') {
+      const t = parseFloat(temperature)
+      if (!Number.isNaN(t)) temperature = t
+    }
+    if (typeof max_tokens === 'string') {
+      const mt = parseInt(max_tokens, 10)
+      if (!Number.isNaN(mt)) max_tokens = mt
+    }
 
     if (!messages || !Array.isArray(messages)) {
       console.error('Invalid request body - messages missing or not an array:', req.body)

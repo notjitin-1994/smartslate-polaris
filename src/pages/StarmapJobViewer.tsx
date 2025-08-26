@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { getStarmapJob, type StarmapJob } from '@/services/starmapJobsService'
 import EnhancedReportDisplay from '@/components/EnhancedReportDisplay'
+import { updateStarmapJobTitle } from '@/services/starmapJobsService'
 
 export default function StarmapJobViewer() {
   const { id } = useParams<{ id: string }>()
@@ -70,7 +71,17 @@ export default function StarmapJobViewer() {
       {markdown ? (
         <EnhancedReportDisplay 
           reportMarkdown={markdown}
+          reportTitle={job.title || 'Needs Analysis Report'}
+          editableTitle
+          onSaveTitle={async (newTitle: string) => {
+            const trimmed = newTitle.trim()
+            if (!trimmed || !job) return
+            const { error } = await updateStarmapJobTitle(job.id, trimmed)
+            if (!error) setJob({ ...job, title: trimmed })
+          }}
           prelimReport={job.preliminary_report || undefined}
+          summaryId={job.legacy_summary_id}
+          starmapJobId={job.id}
         />
       ) : (
         <div className="text-center text-white/60 py-20">

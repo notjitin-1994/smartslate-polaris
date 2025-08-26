@@ -1,8 +1,9 @@
-import { useState, useMemo, memo } from 'react'
+import { useState, useMemo, memo, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import { parseMarkdownToReport } from '@/polaris/needs-analysis/parse'
 import { convertNaJsonStringToMarkdown } from '@/polaris/needs-analysis/format'
 import type { NAReport } from '@/polaris/needs-analysis/report'
+import { generateShareLink, copyToClipboard } from '@/utils/shareUtils'
 
 
 interface EnhancedReportDisplayProps {
@@ -16,6 +17,8 @@ interface EnhancedReportDisplayProps {
   orgReport?: string
   requirementReport?: string
   prelimReport?: string
+  summaryId?: string // Optional summary ID for share functionality
+  starmapJobId?: string // Optional starmap job id for share functionality
 }
 
 // Visual data card component
@@ -136,7 +139,7 @@ const Timeline = memo(({ items }: { items: Array<{ label: string; start: string;
           
           return (
             <div key={index} className="relative flex items-start gap-4">
-              <div className="relative z-10 w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-400 to-secondary-400 flex items-center justify-center shadow-lg shadow-primary-400/20">
+              <div className="relative z-10 w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-400/20">
                 <span className="text-white font-bold text-lg">{index + 1}</span>
               </div>
               <div className="flex-1 pt-2">
@@ -243,15 +246,30 @@ const EnhancedReportDisplay = memo(({
   editableTitle = false,
   onSaveTitle,
   className = '',
-  showResearchData = true,
-  greetingReport,
-  orgReport,
-  requirementReport,
-  prelimReport
+  showResearchData: _unusedShowResearchData = true,
+  greetingReport: _unusedGreetingReport,
+  orgReport: _unusedOrgReport,
+  requirementReport: _unusedRequirementReport,
+  prelimReport: _unusedPrelimReport,
+  summaryId,
+  starmapJobId
 }: EnhancedReportDisplayProps) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleInput, setTitleInput] = useState(reportTitle)
-  const [activeTab, setActiveTab] = useState<'overview' | 'details' | 'research' | 'raw'>('overview')
+  // Tabs removed; default to overview-only rendering
+  const [showCopySuccess, setShowCopySuccess] = useState(false)
+
+  const handleShare = useCallback(async () => {
+    if (!summaryId && !starmapJobId) return
+    const link = summaryId
+      ? generateShareLink(summaryId, { kind: 'summary' })
+      : generateShareLink(starmapJobId!, { kind: 'starmap' })
+    const copied = await copyToClipboard(link)
+    if (copied) {
+      setShowCopySuccess(true)
+      setTimeout(() => setShowCopySuccess(false), 2000)
+    }
+  }, [summaryId, starmapJobId])
   
   // Parse report and filter test data
   const report = useMemo(() => {
@@ -334,9 +352,18 @@ const EnhancedReportDisplay = memo(({
   
   return (
     <div className={`max-w-7xl mx-auto ${className}`}>
+      {showCopySuccess && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed top-5 left-1/2 -translate-x-1/2 z-[999] px-4 py-2 rounded-xl border border-white/15 bg-white/10 backdrop-blur-md shadow-2xl text-white/90"
+        >
+          Share link copied to clipboard!
+        </div>
+      )}
       {/* Header */}
       <div className="mb-8">
-        <div className="glass-card p-6 bg-gradient-to-r from-primary-500/10 to-secondary-500/10">
+        <div className="glass-card p-6 bg-gradient-to-r from-primary-500/10 to-secondary-500/10 relative overflow-hidden z-30">
           <div className="flex items-start justify-between mb-4">
             {isEditingTitle ? (
               <input
@@ -360,23 +387,51 @@ const EnhancedReportDisplay = memo(({
                 autoFocus
               />
             ) : (
-              <h1 className="text-3xl font-bold text-white flex items-center gap-3">
-                {titleInput}
-                {editableTitle && (
-                  <button
-                    onClick={() => setIsEditingTitle(true)}
-                    className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-                  >
-                    <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                    </svg>
-                  </button>
-                )}
-              </h1>
+              <div className="flex items-center justify-between flex-1">
+                <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                  {titleInput}
+                  {editableTitle && (
+                    <button
+                      onClick={() => setIsEditingTitle(true)}
+                      className="p-2 rounded-lg hover:bg-white/10 transition-colors"
+                    >
+                      <svg className="w-5 h-5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                      </svg>
+                    </button>
+                  )}
+                </h1>
+                <div className="flex items-center gap-4">
+                  {/* Share Button */}
+                  {(summaryId || starmapJobId) && (
+                    <div className="relative">
+                      <button
+                        onClick={handleShare}
+                        aria-label="Copy share link"
+                        className="w-9 h-9 inline-flex items-center justify-center text-primary-300 hover:text-primary-200 focus:outline-none focus:ring-2 focus:ring-primary-400/60 transition"
+                        title="Copy link"
+                      >
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
+                          <circle cx="18" cy="6" r="2.5" fill="currentColor" />
+                          <circle cx="18" cy="18" r="2.5" fill="currentColor" />
+                          <circle cx="6" cy="12" r="2.5" fill="currentColor" />
+                          <path d="M8.5 12L15.5 7.5M8.5 12L15.5 16.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                      {/* success toast moved to global fixed position */}
+                    </div>
+                  )}
+                  <div className="text-sm text-white/60">
+                    Generated {new Date().toLocaleDateString()}
+                  </div>
+                </div>
+              </div>
             )}
-            <div className="text-sm text-white/60">
-              Generated {new Date().toLocaleDateString()}
-            </div>
+            {!isEditingTitle && (
+              <div className="text-sm text-white/60 ml-auto">
+                {/* Date is now inside the flex container above */}
+              </div>
+            )}
           </div>
           
           {/* Quick Stats */}
@@ -405,56 +460,11 @@ const EnhancedReportDisplay = memo(({
         </div>
       </div>
       
-      {/* Tab Navigation */}
-      <div className="flex items-center gap-2 mb-6 p-1 bg-white/5 rounded-xl">
-        <button
-          onClick={() => setActiveTab('overview')}
-          className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
-            activeTab === 'overview' 
-              ? 'bg-white/10 text-white' 
-              : 'text-white/60 hover:text-white/80'
-          }`}
-        >
-          Overview
-        </button>
-        <button
-          onClick={() => setActiveTab('details')}
-          className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
-            activeTab === 'details' 
-              ? 'bg-white/10 text-white' 
-              : 'text-white/60 hover:text-white/80'
-          }`}
-        >
-          Detailed Analysis
-        </button>
-        {showResearchData && (greetingReport || orgReport || requirementReport || prelimReport) && (
-          <button
-            onClick={() => setActiveTab('research')}
-            className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
-              activeTab === 'research' 
-                ? 'bg-white/10 text-white' 
-                : 'text-white/60 hover:text-white/80'
-            }`}
-          >
-            Research Data
-          </button>
-        )}
-        <button
-          onClick={() => setActiveTab('raw')}
-          className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all ${
-            activeTab === 'raw' 
-              ? 'bg-white/10 text-white' 
-              : 'text-white/60 hover:text-white/80'
-          }`}
-        >
-          Raw
-        </button>
-      </div>
+      {/* Tab Navigation removed for simplified single-view rendering */}
       
-      {/* Content */}
+      {/* Content (always show overview) */}
       <div className="space-y-6">
-        {activeTab === 'overview' && (
-          <div className="space-y-6">
+        <div className="space-y-6">
             {/* Grid for primary cards */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Executive Summary */}
@@ -956,196 +966,14 @@ const EnhancedReportDisplay = memo(({
               </div>
             )}
           </div>
-        )}
         
-        {activeTab === 'details' && (
-          <div className="space-y-6">
-            {/* Show message if no detailed content */}
-            {(!report.solution?.target_audiences?.length && 
-              !report.solution?.delivery_modalities?.length && 
-              !report.solution?.key_competencies?.length && 
-              !report.solution?.content_outline?.length && 
-              !report.measurement?.success_metrics?.length && 
-              !report.next_steps?.length) && (
-              <div className="text-center py-12">
-                <svg className="w-16 h-16 mx-auto mb-4 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <p className="text-white/60">No detailed analysis available yet.</p>
-                <p className="text-white/40 text-sm mt-2">Complete more sections in the wizard to see detailed insights.</p>
-              </div>
-            )}
-            
-            {/* Audience / Target audiences */}
-            {report.solution?.target_audiences?.length > 0 && (
-              <DataCard
-                title="Target Audiences"
-                icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>}
-                expandable
-              >
-                <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                  {report.solution.target_audiences.map((a, i) => <li key={i}>{a}</li>)}
-                </ul>
-              </DataCard>
-            )}
-
-            {/* Delivery Modalities */}
-            {report.solution?.delivery_modalities?.length > 0 && (
-              <DataCard
-                title="Delivery Modalities"
-                icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>}
-                expandable
-              >
-                <ul className="space-y-2 text-sm text-white/80">
-                  {report.solution.delivery_modalities.map((m, i) => (
-                    <li key={i} className="p-3 rounded-lg bg-white/5 border border-white/10">
-                      <div className="font-medium">{m.modality}</div>
-                      {m.reason && <div className="text-white/60 text-xs mt-1">{m.reason}</div>}
-                    </li>
-                  ))}
-                </ul>
-              </DataCard>
-            )}
-
-            {/* Key Competencies */}
-            {report.solution?.key_competencies?.length > 0 && (
-              <DataCard
-                title="Key Competencies"
-                icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4"/></svg>}
-                expandable
-              >
-                <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                  {report.solution.key_competencies.map((c, i) => <li key={i}>{c}</li>)}
-                </ul>
-              </DataCard>
-            )}
-
-            {/* Content Outline */}
-            {report.solution?.content_outline?.length > 0 && (
-              <DataCard
-                title="Proposed Curriculum Structure"
-                icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18"/></svg>}
-                expandable
-              >
-                <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                  {report.solution.content_outline.map((c, i) => <li key={i}>{c}</li>)}
-                </ul>
-              </DataCard>
-            )}
-
-            {/* Measurement Strategy */}
-            {(report.measurement?.success_metrics?.length > 0 || report.measurement?.assessment_strategy?.length > 0) && (
-              <DataCard
-                title="Measurement Strategy"
-                icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V9a2 2 0 012-2h2a2 2 0 012 2v10M7 19h10M7 12h10"/></svg>}
-                expandable
-              >
-                {report.measurement.success_metrics.length > 0 && (
-                  <div className="mb-4">
-                    <div className="text-white/60 text-xs uppercase tracking-wider mb-2">Success Metrics</div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      {report.measurement.success_metrics.map((m, i) => (
-                        <MetricCard key={i} metric={typeof m === 'string' ? m : m.metric} baseline={typeof m === 'object' ? m.baseline : null} target={typeof m === 'object' ? m.target : ''} timeframe={typeof m === 'object' ? m.timeframe : ''} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {report.measurement.assessment_strategy.length > 0 && (
-                  <div>
-                    <div className="text-white/60 text-xs uppercase tracking-wider mb-2">Assessment Strategy</div>
-                    <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                      {report.measurement.assessment_strategy.map((a, i) => <li key={i}>{a}</li>)}
-                    </ul>
-                  </div>
-                )}
-              </DataCard>
-            )}
-
-            {/* Next Steps */}
-            {report.next_steps?.length > 0 && (
-              <DataCard
-                title="Next Steps"
-                icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>}
-                expandable
-              >
-                <ol className="list-decimal pl-6 text-sm text-white/80 space-y-1">
-                  {report.next_steps.map((s, i) => <li key={i}>{s}</li>)}
-                </ol>
-              </DataCard>
-            )}
-          </div>
-        )}
+        {/* details section removed */}
         
-        {activeTab === 'research' && showResearchData && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {greetingReport && (
-              <DataCard
-                title="Initial Research"
-                icon={
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                }
-                expandable
-              >
-                <div className="prose prose-invert prose-sm max-w-none">
-                  {greetingReport}
-                </div>
-              </DataCard>
-            )}
-            
-            {orgReport && (
-              <DataCard
-                title="Organization Analysis"
-                icon={
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                  </svg>
-                }
-                expandable
-              >
-                <div className="prose prose-invert prose-sm max-w-none">
-                  {orgReport}
-                </div>
-              </DataCard>
-            )}
-            
-            {requirementReport && (
-              <DataCard
-                title="Requirements Analysis"
-                icon={
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                  </svg>
-                }
-                expandable
-              >
-                <div className="prose prose-invert prose-sm max-w-none">
-                  {requirementReport}
-                </div>
-              </DataCard>
-            )}
-            
-            {prelimReport && (
-              <DataCard
-                title="Preliminary Report"
-                icon={
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                  </svg>
-                }
-                expandable
-              >
-                <div className="prose prose-invert prose-sm max-w-none">
-                  {prelimReport}
-                </div>
-              </DataCard>
-            )}
-          </div>
-        )}
         
-        {activeTab === 'raw' && (
-          <DataCard
+        {/* research section removed */}
+        
+        {/* raw section removed */}
+        {/*  <DataCard
             title="Raw Report Content"
             icon={
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1169,8 +997,7 @@ const EnhancedReportDisplay = memo(({
                 })()}
               </pre>
             </div>
-          </DataCard>
-        )}
+          </DataCard> */}
       </div>
     </div>
   )

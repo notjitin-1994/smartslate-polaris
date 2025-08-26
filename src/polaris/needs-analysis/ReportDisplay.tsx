@@ -4,6 +4,7 @@ import { useState, useCallback, useMemo, memo } from 'react'
 import type { ReactNode } from 'react'
 import { parseMarkdownToReport } from './parse'
 import { convertNaJsonStringToMarkdown } from './format'
+import { generateShareLink, copyToClipboard } from '@/utils/shareUtils'
 
 interface ReportDisplayProps {
   reportMarkdown: string
@@ -13,6 +14,7 @@ interface ReportDisplayProps {
   onSaveTitle?: (newTitle: string) => void | Promise<void>
   className?: string
   hideTitleSection?: boolean
+  summaryId?: string // Optional summary ID for share functionality
 }
 
 // PriorityBadge component for risk assessment
@@ -140,7 +142,26 @@ const Icon = memo(({ name, className = 'w-4 h-4' }: {
 Icon.displayName = 'Icon'
 
 // Memoized ReportDisplay component for better performance
-const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false, savingTitle = false, onSaveTitle, className = '', hideTitleSection = false }: ReportDisplayProps) => {
+const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false, savingTitle = false, onSaveTitle, className = '', hideTitleSection = false, summaryId }: ReportDisplayProps) => {
+  // Share functionality states
+  const [isPublic] = useState(false)
+  const [shareLoading] = useState(false)
+  const [showShareSuccess] = useState(false)
+  const [showCopySuccess, setShowCopySuccess] = useState(false)
+
+  // Load public status if summaryId is provided
+  // Public/private status is no longer toggled via the UI; share only copies link
+
+  const handleShare = useCallback(async () => {
+    if (!summaryId) return
+    const shareLink = generateShareLink(summaryId)
+    const copied = await copyToClipboard(shareLink)
+    if (copied) {
+      setShowCopySuccess(true)
+      setTimeout(() => setShowCopySuccess(false), 2000)
+    }
+  }, [summaryId])
+
   // --- Lightweight markdown helpers for non-structured reports (greeting/org/requirement) ---
   type Section = { title: string; lines: string[] }
 
@@ -461,13 +482,36 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
           )}
         </div>
       ) : (
-        <h1 className="text-2xl font-bold text-white/90">{titleInput}</h1>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold text-white/90">{titleInput}</h1>
+          {/* Share Button */}
+          {summaryId && (
+            <div className="relative">
+              <button
+                onClick={handleShare}
+                className={`p-2 rounded-lg transition-all hover:bg-white/10 text-white/60 hover:text-white`}
+                title="Copy link"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 16V4" />
+                  <path d="M8 8l4-4 4 4" />
+                  <path d="M20 20H4a2 2 0 0 1-2-2v-3" />
+                </svg>
+              </button>
+              {showCopySuccess && (
+                <div className="absolute top-full mt-2 right-0 bg-primary-400/20 border border-primary-400/30 rounded-lg p-3 text-sm text-primary-400 whitespace-nowrap animate-in fade-in slide-in-from-top-1 z-50">
+                  Share link copied to clipboard!
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       )}
       <div className="text-sm text-white/60 mt-2">
         Generated on {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
       </div>
     </div>
-  ), [editableTitle, isEditingTitle, titleInput, savingTitle, handleTitleChange, handleTitleKeyDown, handleTitleBlur, handleTitleEdit, handleTitleSave])
+  ), [editableTitle, isEditingTitle, titleInput, savingTitle, handleTitleChange, handleTitleKeyDown, handleTitleBlur, handleTitleEdit, handleTitleSave, summaryId, handleShare, shareLoading, isPublic, showShareSuccess, showCopySuccess])
 
   // Decide if parsed report has any structured content; if not, we will render a plain markdown fallback
   const hasStructuredContent = useMemo(() => {

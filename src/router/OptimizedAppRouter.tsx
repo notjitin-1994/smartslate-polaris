@@ -13,6 +13,7 @@ const AuthLanding = withLazyLoad(() => import('@/pages/AuthLanding'))
 const PortalPage = withLazyLoad(() => import('@/pages/PortalPage').then(m => ({ default: m.PortalPage })))
 const SettingsContent = withLazyLoad(() => import('@/portal/SettingsContent').then(m => ({ default: m.SettingsContent })))
 const PublicProfile = withLazyLoad(() => import('@/pages/PublicProfile').then(m => ({ default: m.PublicProfile })))
+const PublicReportView = withLazyLoad(() => import('@/pages/PublicReportView'))
 const PolarisRevampedV3 = withLazyLoad(() => import('@/pages/PolarisRevampedV3'))
 const PolarisNova = withLazyLoad(() => import('@/pages/PolarisNova'))
 const StarmapJobViewer = withLazyLoad(() => import('@/pages/StarmapJobViewer'))
@@ -53,6 +54,8 @@ export function OptimizedAppRouter() {
             <Route path="/auth/callback" element={<AuthCallback />} />
             <Route path={paths.pricing} element={<Pricing />} />
             <Route path={paths.publicProfile} element={<PublicProfile />} />
+            <Route path="/report/public/:id" element={<PublicReportView />} />
+            <Route path="/report/public/starmap/:id" element={<PublicReportView />} />
             
             
             {/* Protected routes - require authentication */}

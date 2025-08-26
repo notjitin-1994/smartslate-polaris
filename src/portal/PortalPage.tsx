@@ -809,7 +809,7 @@ export function PortalPage() {
         </aside>
 
         <main className="flex-1 min-w-0 h-full overflow-y-auto">
-          <header className="sticky top-0 z-10 border-b border-[#141620] bg-[rgb(var(--bg))]/80 backdrop-blur-xl mb-12 md:mb-0">
+          <header className="sticky top-0 z-40 border-b border-[#141620] bg-[rgb(var(--bg))]/80 backdrop-blur-xl overflow-hidden mb-12 md:mb-0">
             <div className="relative mx-auto max-w-7xl px-4 py-3 sm:py-4">
               {!isPortalRoot && (
                 <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 -top-24 h-48 bg-gradient-to-br from-primary-400/10 via-fuchsia-400/5 to-transparent blur-2xl" />

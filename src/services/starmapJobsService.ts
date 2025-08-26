@@ -120,6 +120,39 @@ export async function getStarmapJob(jobId: string): Promise<{ data: StarmapJob |
 }
 
 /**
+ * Toggle public sharing status for a starmap job
+ */
+export async function toggleStarmapPublicStatus(jobId: string): Promise<{ isPublic: boolean | null; error: any }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { isPublic: null, error: new Error('Not authenticated') }
+
+    const { data, error } = await supabase.rpc('toggle_starmap_public_status', { job_id: jobId })
+    if (error) return { isPublic: null, error }
+    return { isPublic: data as boolean, error: null }
+  } catch (err) {
+    return { isPublic: null, error: err }
+  }
+}
+
+/**
+ * Get public sharing status for a starmap job
+ */
+export async function getStarmapPublicStatus(jobId: string): Promise<{ isPublic: boolean | null; error: any }> {
+  try {
+    const { data, error } = await supabase
+      .from('starmap_jobs')
+      .select('is_public')
+      .eq('id', jobId)
+      .single()
+    if (error) return { isPublic: null, error }
+    return { isPublic: (data as any)?.is_public ?? false, error: null }
+  } catch (err) {
+    return { isPublic: null, error: err }
+  }
+}
+
+/**
  * Get user's starmap jobs
  */
 export async function getUserStarmapJobs(
@@ -418,6 +451,29 @@ export async function saveSessionState(
     return { error: null }
   } catch (err) {
     console.error('Error saving session state:', err)
+    return { error: err }
+  }
+}
+
+/**
+ * Update the starmap job title
+ */
+export async function updateStarmapJobTitle(
+  jobId: string,
+  newTitle: string
+): Promise<{ error: any }> {
+  try {
+    const { error } = await supabase
+      .from('starmap_jobs')
+      .update({ title: newTitle })
+      .eq('id', jobId)
+
+    if (error) return { error }
+
+    await logActivity(jobId, 'title_updated', { new_title: newTitle })
+    return { error: null }
+  } catch (err) {
+    console.error('Error updating starmap job title:', err)
     return { error: err }
   }
 }

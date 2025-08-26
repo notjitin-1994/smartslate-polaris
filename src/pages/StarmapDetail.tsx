@@ -146,6 +146,7 @@ export default function StarmapDetail() {
           editableTitle={false}
           savingTitle={savingTitle}
           hideTitleSection
+          summaryId={id}
           onSaveTitle={async (newTitle) => {
             if (!id || !newTitle.trim()) return
             try {

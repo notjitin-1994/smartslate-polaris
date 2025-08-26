@@ -248,6 +248,53 @@ export async function getSummaryById(id: string): Promise<{ data: PolarisSummary
   return { data, error }
 }
 
+export async function toggleReportPublicStatus(id: string): Promise<{ isPublic: boolean | null; error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { isPublic: null, error: new Error('User not authenticated') }
+  }
+
+  try {
+    // Call the database function to toggle public status
+    const { data, error } = await supabase
+      .rpc('toggle_report_public_status', { report_id: id })
+
+    if (error) {
+      console.error('Error toggling public status:', error)
+      return { isPublic: null, error }
+    }
+
+    return { isPublic: data, error: null }
+  } catch (err) {
+    console.error('Failed to toggle public status:', err)
+    return { isPublic: null, error: err }
+  }
+}
+
+export async function getReportPublicStatus(id: string): Promise<{ isPublic: boolean | null; error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+  
+  if (!user) {
+    return { isPublic: null, error: new Error('User not authenticated') }
+  }
+
+  const { data, error } = await supabase
+    .from('polaris_summaries')
+    .select('is_public')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (error) {
+    return { isPublic: null, error }
+  }
+
+  return { isPublic: data?.is_public ?? false, error: null }
+}
+
 export async function deleteSummary(id: string): Promise<{ error: any }> {
   const supabase = getSupabase()
   const { data: { user } } = await supabase.auth.getUser()

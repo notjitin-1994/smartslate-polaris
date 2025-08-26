@@ -139,8 +139,8 @@ const Timeline = memo(({ items }: { items: Array<{ label: string; start: string;
           
           return (
             <div key={index} className="relative flex items-start gap-4">
-              <div className="relative z-10 w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center shadow-lg shadow-primary-400/20">
-                <span className="text-white font-bold text-lg">{index + 1}</span>
+              <div className="relative z-10 w-16 h-16 rounded-2xl bg-primary-400 flex items-center justify-center">
+                <span className="text-secondary-500 font-bold text-lg">{index + 1}</span>
               </div>
               <div className="flex-1 pt-2">
                 <h4 className="text-white/90 font-medium mb-1">{item.label}</h4>

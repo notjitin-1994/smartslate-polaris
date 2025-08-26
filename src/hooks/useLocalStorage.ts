@@ -30,26 +30,28 @@ export function useLocalStorage<T>(
   const setValue = useCallback(
     (value: T | ((val: T) => T)) => {
       try {
-        // Allow value to be a function so we have same API as useState
-        const valueToStore = value instanceof Function ? value(storedValue) : value
-        
-        setStoredValue(valueToStore)
-        
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(key, JSON.stringify(valueToStore))
+        setStoredValue((currentValue) => {
+          // Allow value to be a function so we have same API as useState
+          const valueToStore = value instanceof Function ? value(currentValue) : value
           
-          // Dispatch a custom event to sync across tabs
-          window.dispatchEvent(
-            new CustomEvent('local-storage-change', {
-              detail: { key, value: valueToStore },
-            })
-          )
-        }
+          if (typeof window !== 'undefined') {
+            window.localStorage.setItem(key, JSON.stringify(valueToStore))
+            
+            // Dispatch a custom event to sync across tabs
+            window.dispatchEvent(
+              new CustomEvent('local-storage-change', {
+                detail: { key, value: valueToStore },
+              })
+            )
+          }
+          
+          return valueToStore
+        })
       } catch (error) {
         console.error(`Error setting localStorage key "${key}":`, error)
       }
     },
-    [key, storedValue]
+    [key]
   )
   
   // Remove value from localStorage

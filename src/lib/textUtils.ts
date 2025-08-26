@@ -67,6 +67,35 @@ export function markdownToHtml(markdown: string): string {
   if (!markdown) return ''
   
   const lines = markdown.split('\n')
+  // Build citation map like: [1] Title — https://example.com or [1]: https://...
+  const citationMap: Record<string, string> = {}
+  for (const raw of lines) {
+    const line = raw.trim()
+    let m = line.match(/^\[(\d+)\][\s:–-]*.*?(https?:\/\/\S+)/)
+    if (m) {
+      citationMap[m[1]] = m[2]
+      continue
+    }
+    m = line.match(/^\[(\d+)\]:\s*(https?:\/\/\S+)/)
+    if (m) {
+      citationMap[m[1]] = m[2]
+    }
+  }
+
+  const convertInline = (text: string): string => {
+    let t = text
+    // Markdown links [text](url)
+    t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1<\/a>')
+    // Autolink raw URLs
+    t = t.replace(/(https?:\/\/[^\s)]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1<\/a>')
+    // Numeric citations [1] [2]
+    t = t.replace(/\[(\d+)\](?!\()/g, (_m, n) => citationMap[n] ? `<a href="${citationMap[n]}" target="_blank" rel="noopener noreferrer">[${n}]<\/a>` : `[${n}]`)
+    // Bold/italic/code
+    t = t.replace(/\*\*(.*?)\*\*/g, '<strong>$1<\/strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1<\/em>')
+      .replace(/`([^`]+)`/g, '<code class="bg-white\/10 px-1 py-0.5 rounded text-sm">$1<\/code>')
+    return t
+  }
   let html = ''
   let inList = false
   let listType = ''
@@ -79,7 +108,7 @@ export function markdownToHtml(markdown: string): string {
     
     // Handle list items
     if (line.match(/^[\*\-\+]\s+(.+)$/)) {
-      const content = line.replace(/^[\*\-\+]\s+/, '')
+      const content = convertInline(line.replace(/^[\*\-\+]\s+/, ''))
       if (!inList) {
         html += '<ul>'
         inList = true
@@ -91,7 +120,7 @@ export function markdownToHtml(markdown: string): string {
     
     // Handle numbered list items
     if (line.match(/^\d+\.\s+(.+)$/)) {
-      const content = line.replace(/^\d+\.\s+/, '')
+      const content = convertInline(line.replace(/^\d+\.\s+/, ''))
       if (!inList) {
         html += '<ol>'
         inList = true
@@ -159,12 +188,8 @@ export function markdownToHtml(markdown: string): string {
       html += `<h1>${line.substring(2)}</h1>`
     }
     // Handle bold/italic/inline code
-    else if (line.includes('**') || line.includes('*') || line.includes('`')) {
-      let processedLine = line
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        .replace(/\*(.*?)\*/g, '<em>$1</em>')
-        .replace(/`([^`]+)`/g, '<code class="bg-white/10 px-1 py-0.5 rounded text-sm">$1</code>')
-      html += `<p>${processedLine}</p>`
+    else if (line.includes('**') || line.includes('*') || line.includes('`') || line.includes('](') || line.includes('http')) {
+      html += `<p>${convertInline(line)}</p>`
     }
     // Handle empty lines
     else if (line === '') {
@@ -267,6 +292,8 @@ export function htmlToMarkdown(html: string): string {
   
   // Links
   md = md.replace(/<a[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gim, '[$2]($1)')
+  // Convert citation-style anchors like <a href="url">[1]</a> back to [1] (we preserve URL elsewhere)
+  md = md.replace(/\[(\d+)\]\((https?:[^)]+)\)/gim, '[$1] ($2)')
   
   // Paragraphs
   md = md.replace(/<p[^>]*>([\s\S]*?)<\/p>/gim, '$1\n')

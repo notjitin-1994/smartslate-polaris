@@ -93,7 +93,7 @@ export default function AllStarmaps() {
             </div>
             <button
               type="button"
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/discover')}
               className={`btn-primary whitespace-nowrap ${(summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT) ? 'opacity-60 cursor-not-allowed' : ''}`}
               disabled={summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT}
               aria-label="Start a new discovery"
@@ -149,7 +149,7 @@ export default function AllStarmaps() {
           <p className="mt-2 text-sm text-white/40">Complete a Polaris discovery to see your starmaps here</p>
           <button
             type="button"
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/discover')}
             className="btn-primary mt-4"
           >
             Start Discovery
@@ -213,7 +213,7 @@ export default function AllStarmaps() {
       <button
         type="button"
         aria-label="New Discovery"
-        onClick={() => navigate('/')}
+        onClick={() => navigate('/discover')}
         disabled={summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT}
         className={`fixed bottom-6 right-6 z-40 rounded-full shadow-xl w-14 h-14 flex items-center justify-center bg-gradient-to-r from-secondary-400 to-secondary-500 text-white hover:opacity-95 active:opacity-90 float-button ${(summaryCount >= SAVED_LIMIT || createdCount >= CREATION_LIMIT) ? 'opacity-60 cursor-not-allowed' : ''}`}
         title={summaryCount >= SAVED_LIMIT ? 'Saved limit reached' : (createdCount >= CREATION_LIMIT ? 'Creation limit reached' : 'Start a new discovery')}

@@ -12,15 +12,19 @@ import AuthCallback from '@/pages/AuthCallback'
 const AuthLanding = withLazyLoad(() => import('@/pages/AuthLanding'))
 const PortalPage = withLazyLoad(() => import('@/pages/PortalPage').then(m => ({ default: m.PortalPage })))
 const SettingsContent = withLazyLoad(() => import('@/portal/SettingsContent').then(m => ({ default: m.SettingsContent })))
-const PortalDashboard = withLazyLoad(() => import('@/portal/PortalDashboard').then(m => ({ default: m.PortalDashboard })))
 const PublicProfile = withLazyLoad(() => import('@/pages/PublicProfile').then(m => ({ default: m.PublicProfile })))
-const PolarisRevamped = withLazyLoad(() => import('@/pages/PolarisRevamped'))
+const PolarisRevampedV3 = withLazyLoad(() => import('@/pages/PolarisRevampedV3'))
 const PolarisNova = withLazyLoad(() => import('@/pages/PolarisNova'))
-const AllStarmaps = withLazyLoad(() => import('@/pages/AllBriefings'))
-const StarmapDetail = withLazyLoad(() => import('@/pages/StarmapDetail'))
+const StarmapJobViewer = withLazyLoad(() => import('@/pages/StarmapJobViewer'))
+const StarmapJobsDashboard = withLazyLoad(() => import('@/components/StarmapJobsDashboard'))
 const Pricing = withLazyLoad(() => import('@/pages/Pricing'))
 const SeedJitinStarmap = withLazyLoad(() => import('@/pages/SeedJitinStarmap'))
 const ReportsDebug = withLazyLoad(() => import('@/pages/ReportsDebug'))
+
+// Job-based Polaris routes (lazy)
+const PolarisJobsDashboard = withLazyLoad(() => import('@/components/PolarisJobsDashboard'))
+const PolarisJobViewer = withLazyLoad(() => import('@/components/PolarisJobViewer'))
+const PolarisJobWizard = withLazyLoad(() => import('@/pages/PolarisJobWizard'))
 
 // Loading component for the entire app
 const AppLoadingFallback = () => (
@@ -54,16 +58,22 @@ export function OptimizedAppRouter() {
             {/* Protected routes - require authentication */}
             <Route element={<ProtectedRoute />}>
               <Route path={paths.portal} element={<PortalPage />}>
-                <Route index element={<PortalDashboard />} />
+                <Route index element={<StarmapJobsDashboard />} />
                 <Route path="settings" element={<SettingsContent />} />
-                <Route path="starmaps" element={<AllStarmaps />} />
-                <Route path="starmaps/:id" element={<StarmapDetail />} />
-                <Route path="discover" element={<PolarisRevamped />} />
+                <Route path="starmaps" element={<StarmapJobsDashboard />} />
+                <Route path="starmap/:id" element={<StarmapJobViewer />} />
+                <Route path="discover" element={<PolarisRevampedV3 />} />
                 <Route path="discover/new" element={<PolarisNova />} />
                 <Route path="seed/jitin" element={<SeedJitinStarmap />} />
                 <Route path="debug/reports" element={<ReportsDebug />} />
                 <Route path="briefings" element={<Navigate to="/starmaps" replace />} />
                 <Route path="summaries" element={<Navigate to="/starmaps" replace />} />
+
+                {/* New Job-based Polaris Routes nested under PortalPage (sidebar + header) */}
+                <Route path="polaris/jobs" element={<PolarisJobsDashboard />} />
+                <Route path="polaris/new" element={<PolarisJobWizard />} />
+                <Route path="polaris/job/:jobId" element={<PolarisJobViewer />} />
+                <Route path="polaris/job/:jobId/resume" element={<PolarisJobWizard />} />
               </Route>
               
             </Route>

@@ -66,13 +66,29 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
       const rawLine = lines[i]
       const line = rawLine.trim()
 
-      if (line.startsWith('## Executive Summary')) currentSection = 'summary'
-      else if (line.startsWith('## Recommended Solution')) currentSection = 'solution'
-      else if (line.startsWith('## Delivery Plan')) currentSection = 'delivery_plan'
-      else if (line.startsWith('## Measurement')) currentSection = 'measurement'
-      else if (line.startsWith('## Budget')) currentSection = 'budget'
-      else if (line.startsWith('## Risk')) currentSection = 'risks'
-      else if (line.startsWith('## Next Steps')) currentSection = 'next_steps'
+      // Normalize headings (case-insensitive, any level ##+)
+      if (/^#{2,}\s+/.test(line)) {
+        const header = line.replace(/^#{1,6}\s+/, '').trim().toLowerCase()
+        // Core sections
+        if (/^executive\s+summary/.test(header)) { currentSection = 'summary'; currentSubSection = '' }
+        else if (/^recommended\s+solution/.test(header)) { currentSection = 'solution'; currentSubSection = '' }
+        else if (/^learner\s+analysis/.test(header)) { currentSection = 'learner_analysis'; currentSubSection = '' }
+        else if (/^technology\s+(&|and)?\s+talent(\s+analysis)?/.test(header)) { currentSection = 'technology_talent'; currentSubSection = '' }
+        else if (/^delivery\s+plan/.test(header)) { currentSection = 'delivery_plan'; currentSubSection = '' }
+        else if (/^measurement(\s+strategy)?/.test(header)) { currentSection = 'measurement'; currentSubSection = '' }
+        else if (/^budget/.test(header)) { currentSection = 'budget'; currentSubSection = '' }
+        else if (/^risk/.test(header)) { currentSection = 'risks'; currentSubSection = '' }
+        else if (/^next\s+steps|^recommendations\s+for\s+success/.test(header)) { currentSection = 'next_steps'; currentSubSection = '' }
+        // Final-report specific synonyms mapped to structured fields
+        else if (/^audience\s+analysis|^target\s+audience/.test(header)) { currentSection = 'solution'; currentSubSection = 'target_audiences' }
+        else if (/^delivery\s+approach/.test(header)) { currentSection = 'solution'; currentSubSection = 'delivery_modalities' }
+        else if (/^competency\s+development\s+focus/.test(header)) { currentSection = 'solution'; currentSubSection = 'key_competencies' }
+        else if (/^proposed\s+curriculum\s+structure/.test(header)) { currentSection = 'solution'; currentSubSection = 'content_outline' }
+        else if (/^technology\s+considerations/.test(header)) { currentSection = 'technology_talent'; currentSubSection = 'tech_current' }
+        else if (/^accessibility\s+implementation/.test(header)) { currentSection = 'solution'; currentSubSection = 'accessibility' }
+        else if (/^implementation\s+roadmap/.test(header)) { currentSection = 'delivery_plan'; currentSubSection = 'phases' }
+        continue
+      }
 
       if (currentSection === 'summary') {
         if (line.startsWith('**Problem Statement:**')) {
@@ -80,11 +96,33 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
         } else if (line.startsWith('**Current State:**')) currentSubSection = 'current_state'
         else if (line.startsWith('**Root Causes:**')) currentSubSection = 'root_causes'
         else if (line.startsWith('**Objectives:**')) currentSubSection = 'objectives'
-        else if (line.startsWith('- ') && currentSubSection) {
+        else if (line.startsWith('**Assumptions:**')) currentSubSection = 'assumptions'
+        else if (line.startsWith('**Unknowns:**')) currentSubSection = 'unknowns'
+        else if (line.startsWith('**Confidence:**')) {
+          // Parse confidence value (e.g., "**Confidence:** 0.75" or "**Confidence:** 75%")
+          const confidenceText = line.replace('**Confidence:**', '').trim()
+          const confidenceMatch = confidenceText.match(/([\d.]+)%?/)
+          if (confidenceMatch) {
+            let confidenceValue = parseFloat(confidenceMatch[1])
+            // If it's a percentage (> 1), convert to decimal
+            if (confidenceValue > 1) confidenceValue = confidenceValue / 100
+            report.summary.confidence = confidenceValue
+          }
+        } else if (line.startsWith('- ') && currentSubSection) {
           const item = line.substring(2)
           if (currentSubSection === 'current_state') report.summary.current_state.push(item)
           else if (currentSubSection === 'root_causes') report.summary.root_causes.push(item)
           else if (currentSubSection === 'objectives') report.summary.objectives.push(item)
+          else if (currentSubSection === 'assumptions') report.summary.assumptions.push(item)
+          else if (currentSubSection === 'unknowns') report.summary.unknowns.push(item)
+        } else if (line.startsWith('- ') && !currentSubSection) {
+          // Bulleted lines under summary without a sub-label → treat as current state points
+          report.summary.current_state.push(line.substring(2))
+        } else if (line && !line.startsWith('#') && !line.startsWith('**')) {
+          // Plain paragraph under Executive Summary → set as problem statement (first), then as current state
+          const text = line
+          if (!report.summary.problem_statement) report.summary.problem_statement = text
+          else report.summary.current_state.push(text)
         }
       }
 
@@ -95,14 +133,21 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
         else if (/^\*\*Content Outline:\*\*/i.test(line)) currentSubSection = 'content_outline'
         else if (line.startsWith('- ')) {
           const item = line.substring(2)
-          if (currentSubSection === 'delivery_modalities' && item.includes(':')) {
-            const [modality, reasonRaw] = item.split(':')
+          if (currentSubSection === 'delivery_modalities') {
+            // Support modality parsing with ':', '—', or '-' separators
+            const splitMatch = item.split(/[:\u2014\-]\s*/)
+            const modality = splitMatch[0] || ''
+            const reasonRaw = splitMatch.slice(1).join(' - ')
             const modalityClean = modality.replace(/\*\*/g, '').trim()
             const reason = reasonRaw?.replace(/\*\*/g, '').trim() || ''
             report.solution.delivery_modalities.push({ modality: modalityClean, reason, priority: report.solution.delivery_modalities.length + 1 })
           } else if (currentSubSection === 'target_audiences') report.solution.target_audiences.push(item)
           else if (currentSubSection === 'key_competencies') report.solution.key_competencies.push(item)
           else if (currentSubSection === 'content_outline') report.solution.content_outline.push(item)
+          else if (currentSubSection === 'accessibility') {
+            // Treat bullets as accessibility standards
+            report.solution.accessibility_and_inclusion.standards.push(item)
+          }
         }
       }
 
@@ -131,12 +176,17 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
             }
             report.delivery_plan.phases.push(phase)
           }
+        } else if (line.startsWith('- ') && currentSubSection === 'phases') {
+          // From "Implementation Roadmap" bullets, record lightweight phases without durations
+          const name = line.substring(2).trim()
+          if (name) report.delivery_plan.phases.push({ name, duration_weeks: 0, goals: [], activities: [] })
         }
       }
 
-      if (currentSection === 'measurement') {
+      if (currentSection === 'measurement' || (currentSection === '' && /success\s+metrics/i.test(line))) {
         // Support both legacy bold labels and newer subheadings
-        if (line.startsWith('**Success Metrics:**') || /^###\s+Success Metrics/i.test(line)) {
+        if (line.startsWith('**Success Metrics:**') || /^###\s+Success Metrics/i.test(line) || /^\*\*Measurement\*\*/.test(line)) {
+          currentSection = 'measurement'
           currentSubSection = 'success_metrics'
         } else if (line.startsWith('**Assessment Strategy:**') || /^###\s+Assessment Strategy/i.test(line)) {
           currentSubSection = 'assessment_strategy'
@@ -150,29 +200,58 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
         } else if (line.startsWith('- ')) {
           const item = line.substring(2).trim()
           if (currentSubSection === 'success_metrics') {
+            // Parse various metric formats
             let metric = item
             let baseline: string | null = null
             let target = ''
             let timeframe = ''
 
+            // Check for baseline in parentheses
             const baselineMatch = metric.match(/\(\s*Baseline:\s*([^\)]+)\)/i)
             if (baselineMatch) {
               baseline = baselineMatch[1].trim()
               metric = metric.replace(baselineMatch[0], '').trim()
             }
 
-            const targetSplit = item.split(/\u2192\s*Target:/)
-            if (targetSplit.length > 1) {
-              const rhs = targetSplit[1].trim()
-              const bySplit = rhs.split(/\s+by\s+/i)
-              target = (bySplit[0] || '').trim()
-              timeframe = (bySplit[1] || '').trim()
+            // Check for arrow format (→ or ->) for target
+            const arrowSplit = item.split(/[→\-]>\s*/)
+            if (arrowSplit.length > 1) {
+              metric = arrowSplit[0].replace(/[:\s]+$/, '').trim()
+              const targetPart = arrowSplit[1]
+              // Extract target and timeframe
+              const targetMatch = targetPart.match(/Target:\s*([^\s]+)(?:\s+by\s+(.+))?/i)
+              if (targetMatch) {
+                target = targetMatch[1] || ''
+                timeframe = targetMatch[2] || ''
+              } else {
+                // Simple format: metric → value
+                target = targetPart.trim()
+              }
+            } else {
+              // Check for colon format
+              const colonSplit = item.split(':')
+              if (colonSplit.length > 1) {
+                metric = colonSplit[0].trim()
+                const valuePart = colonSplit.slice(1).join(':').trim()
+                // Try to extract target from the value
+                const targetMatch = valuePart.match(/([\d]+%?)\s*(?:by\s+(.+))?/i)
+                if (targetMatch) {
+                  target = targetMatch[1] || valuePart
+                  timeframe = targetMatch[2] || ''
+                } else {
+                  target = valuePart
+                }
+              }
             }
 
-            metric = metric.replace(/[:\s]+$/, '')
+            // Clean up metric name
+            metric = metric.replace(/[:\s\-→]+$/, '').trim()
 
-            report.measurement.success_metrics.push({ metric, baseline, target, timeframe })
-          } else if (currentSubSection === 'assessment_strategy') {
+            // Only add if we have at least a metric name
+            if (metric) {
+              report.measurement.success_metrics.push({ metric, baseline, target, timeframe })
+            }
+          } else if (currentSubSection === 'assessment_strategy' || /measurement\s+strategy/i.test(rawLine)) {
             report.measurement.assessment_strategy.push(item)
           } else if (currentSubSection === 'data_sources') {
             report.measurement.data_sources.push(item)
@@ -182,9 +261,95 @@ export function parseMarkdownToReport(markdown: string): NAReport | null {
         }
       }
 
+      if (currentSection === 'technology_talent') {
+        // Handle Technology subsection
+        if (/^###\s+Technology/.test(line)) {
+          currentSubSection = 'technology'
+        } else if (/^###\s+Talent/.test(line)) {
+          currentSubSection = 'talent'
+        } else if (line.startsWith('**Current Stack:**') || /^\*\*Available Technologies?:\*\*/i.test(line)) {
+          currentSubSection = 'tech_current'
+        } else if (line.startsWith('**Gaps:**') && currentSubSection.startsWith('tech')) {
+          currentSubSection = 'tech_gaps'
+        } else if (line.startsWith('**Recommendations:**') && currentSubSection.startsWith('tech')) {
+          currentSubSection = 'tech_recommendations'
+        } else if (line.startsWith('**Available Roles:**')) {
+          currentSubSection = 'talent_available'
+        } else if (line.startsWith('**Gaps:**') && currentSubSection.startsWith('talent')) {
+          currentSubSection = 'talent_gaps'
+        } else if (line.startsWith('**Recommendations:**') && currentSubSection.startsWith('talent')) {
+          currentSubSection = 'talent_recommendations'
+        } else if (line.startsWith('- ')) {
+          const item = line.substring(2).trim()
+          if (currentSubSection === 'tech_current' || currentSubSection === 'technology') {
+            report.technology_talent.technology.current_stack.push(item)
+          } else if (currentSubSection === 'tech_gaps') {
+            report.technology_talent.technology.gaps.push(item)
+          } else if (currentSubSection === 'tech_recommendations') {
+            // Try to parse as capability: fit format
+            const capMatch = item.match(/^(.*?):\s*(.*)$/)
+            if (capMatch) {
+              report.technology_talent.technology.recommendations.push({
+                capability: capMatch[1].trim(),
+                fit: capMatch[2].trim(),
+                constraints: []
+              })
+            } else {
+              report.technology_talent.technology.recommendations.push({
+                capability: item,
+                fit: '',
+                constraints: []
+              })
+            }
+          } else if (currentSubSection === 'talent_available' || currentSubSection === 'talent') {
+            report.technology_talent.talent.available_roles.push(item)
+          } else if (currentSubSection === 'talent_gaps') {
+            report.technology_talent.talent.gaps.push(item)
+          } else if (currentSubSection === 'talent_recommendations') {
+            report.technology_talent.talent.recommendations.push(item)
+          }
+        }
+      }
+
+      if (currentSection === 'learner_analysis') {
+        if (/^###\s+Learner Profile/.test(line)) {
+          currentSubSection = 'profiles'
+        } else if (/^###\s+Readiness Risks/.test(line)) {
+          currentSubSection = 'readiness_risks'
+        } else if (line.startsWith('**') && line.includes(':')) {
+          // Handle profile attributes
+          const match = line.match(/\*\*(.*?):\*\*\s*(.*)/)
+          if (match && report.learner_analysis.profiles.length > 0) {
+            const lastProfile = report.learner_analysis.profiles[report.learner_analysis.profiles.length - 1]
+            const key = match[1].toLowerCase()
+            const value = match[2]
+            if (key.includes('segment')) lastProfile.segment = value
+            else if (key.includes('role')) lastProfile.roles = value.split(',').map(r => r.trim())
+            else if (key.includes('context')) lastProfile.context = value
+            else if (key.includes('motivator')) lastProfile.motivators = value.split(',').map(m => m.trim())
+            else if (key.includes('constraint')) lastProfile.constraints = value.split(',').map(c => c.trim())
+          }
+        } else if (line.startsWith('- ')) {
+          const item = line.substring(2).trim()
+          if (currentSubSection === 'readiness_risks') {
+            report.learner_analysis.readiness_risks.push(item)
+          } else if (currentSubSection === 'profiles' && !report.learner_analysis.profiles.length) {
+            // Create a default profile if none exists
+            report.learner_analysis.profiles.push({
+              segment: item,
+              roles: [],
+              context: null,
+              motivators: [],
+              constraints: []
+            })
+          }
+        }
+      }
+
       if (currentSection === 'next_steps') {
         const match = line.match(/^\d+\.\s+(.*)/)
         if (match) report.next_steps.push(match[1])
+        else if (line.startsWith('- ')) report.next_steps.push(line.substring(2).trim())
       }
 
       if (currentSection === 'risks' && line.startsWith('- **Risk:**')) {

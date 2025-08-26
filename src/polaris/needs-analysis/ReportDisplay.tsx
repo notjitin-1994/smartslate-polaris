@@ -1,7 +1,9 @@
 // src/polaris/needs-analysis/ReportDisplay.tsx
 // Enhanced UX version with improved readability, scanability, and actionability
 import { useState, useCallback, useMemo, memo } from 'react'
+import type { ReactNode } from 'react'
 import { parseMarkdownToReport } from './parse'
+import { convertNaJsonStringToMarkdown } from './format'
 
 interface ReportDisplayProps {
   reportMarkdown: string
@@ -61,9 +63,12 @@ const detectRiskSeverity = (riskText: string): 'high' | 'medium' | 'low' => {
   return 'low'
 }
 
+// Icon types
+type IconName = 'summary' | 'solution' | 'delivery' | 'metrics' | 'timeline' | 'steps' | 'risks' | 'audience' | 'modality' | 'tech' | 'doc' | 'blend' | 'online' | 'workshop' | 'coach' | 'toolbox' | 'check' | 'database' | 'assessment' | 'target'
+
 // Memoized Icon component for better performance
 const Icon = memo(({ name, className = 'w-4 h-4' }: { 
-  name: 'summary' | 'solution' | 'delivery' | 'metrics' | 'timeline' | 'steps' | 'risks' | 'audience' | 'modality' | 'tech' | 'doc' | 'blend' | 'online' | 'workshop' | 'coach' | 'toolbox' | 'check' | 'database' | 'assessment' | 'target'
+  name: IconName
   className?: string 
 }) => {
   const iconMap = {
@@ -136,8 +141,96 @@ Icon.displayName = 'Icon'
 
 // Memoized ReportDisplay component for better performance
 const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false, savingTitle = false, onSaveTitle, className = '', hideTitleSection = false }: ReportDisplayProps) => {
-  // Memoize parsed report to prevent recalculation
-  const report = useMemo(() => parseMarkdownToReport(reportMarkdown), [reportMarkdown])
+  // --- Lightweight markdown helpers for non-structured reports (greeting/org/requirement) ---
+  type Section = { title: string; lines: string[] }
+
+  const parseSections = useCallback((markdown: string): Section[] => {
+    const lines = markdown.split('\n')
+    const sections: Section[] = []
+    let current: Section | null = null
+
+    for (const raw of lines) {
+      const line = raw.replace(/\r$/, '')
+      if (/^##\s+/.test(line)) {
+        if (current) sections.push(current)
+        current = { title: line.replace(/^##\s+/, '').trim(), lines: [] }
+      } else if (current) {
+        current.lines.push(line)
+      }
+    }
+    if (current) sections.push(current)
+    return sections.filter(s => s.title || s.lines.some(l => l.trim() !== ''))
+  }, [])
+
+  const renderInline = useCallback((text: string) => {
+    // Bold: **text**
+    const parts = text.split('**')
+    return parts.map((part, idx) => (
+      idx % 2 === 1 ? <strong key={idx} className="text-white/90">{part}</strong> : <span key={idx}>{part}</span>
+    ))
+  }, [])
+
+  const renderLines = useCallback((lines: string[]) => {
+    const nodes: ReactNode[] = []
+    let listBuffer: string[] = []
+
+    const flushList = () => {
+      if (listBuffer.length > 0) {
+        nodes.push(
+          <ul key={`ul-${nodes.length}`} className="list-disc pl-5 space-y-1 text-sm text-white/80">
+            {listBuffer.map((item, i) => (
+              <li key={i}>{renderInline(item)}</li>
+            ))}
+          </ul>
+        )
+        listBuffer = []
+      }
+    }
+
+    for (const raw of lines) {
+      const line = raw.trimEnd()
+      if (line.startsWith('- ')) {
+        listBuffer.push(line.substring(2))
+        continue
+      }
+      if (/^\*\*.+\*\*$/.test(line)) {
+        flushList()
+        nodes.push(
+          <h4 key={`h4-${nodes.length}`} className="text-sm font-semibold text-white/90 mt-4 mb-2">
+            {renderInline(line.replace(/^\*\*(.+)\*\*$/, '$1'))}
+          </h4>
+        )
+        continue
+      }
+      if (line.trim() === '') {
+        flushList()
+        nodes.push(<div key={`sp-${nodes.length}`} className="h-1" />)
+        continue
+      }
+      flushList()
+      nodes.push(
+        <p key={`p-${nodes.length}`} className="text-sm text-white/80 leading-relaxed">{renderInline(line)}</p>
+      )
+    }
+    flushList()
+    return nodes
+  }, [renderInline])
+
+  const getIconForSection = useCallback((title: string): IconName => {
+    const t = title.toLowerCase()
+    if (t.includes('snapshot')) return 'summary'
+    if (t.includes('challenge')) return 'risks'
+    if (t.includes('best practice')) return 'solution'
+    if (t.includes('trend')) return 'metrics'
+    if (t.includes('question')) return 'assessment'
+    if (t.includes('profile')) return 'doc'
+    if (t.includes('gap') || t.includes('next step')) return 'steps'
+    return 'doc'
+  }, [])
+
+  // Convert NA JSON content to markdown if needed, then parse
+  const normalizedMarkdown = useMemo(() => convertNaJsonStringToMarkdown(reportMarkdown) || reportMarkdown, [reportMarkdown])
+  const report = useMemo(() => parseMarkdownToReport(normalizedMarkdown), [normalizedMarkdown])
   const [isEditingTitle, setIsEditingTitle] = useState<boolean>(false)
   const [titleInput, setTitleInput] = useState<string>(reportTitle || 'Needs Analysis Report')
   const [showAllRisks, setShowAllRisks] = useState<boolean>(false)
@@ -290,14 +383,14 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
       </div>
     )) || [], [report?.solution?.target_audiences])
 
-  // Memoize modality items to prevent unnecessary re-renders
-  const modalityItems = useMemo(() => 
-    report?.solution?.delivery_modalities?.map((m: any, i: number) => (
-      <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
-        <div className="font-medium text-white/90 text-sm mb-2">{(m?.modality || 'Modality')} {(m?.priority ?? i + 1) ? `(P${m?.priority ?? i + 1})` : ''}</div>
-        <div className="text-xs text-white/70 leading-relaxed">{m?.reason || ''}</div>
-      </div>
-    )) || [], [report?.solution?.delivery_modalities])
+  // Memoize modality items to prevent unnecessary re-renders (not used directly; kept for future use)
+  // const modalityItems = useMemo(() => 
+  //   report?.solution?.delivery_modalities?.map((m: any, i: number) => (
+  //     <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+  //       <div className="font-medium text-white/90 text-sm mb-2">{(m?.modality || 'Modality')} {(m?.priority ?? i + 1) ? `(P${m?.priority ?? i + 1})` : ''}</div>
+  //       <div className="text-xs text-white/70 leading-relaxed">{m?.reason || ''}</div>
+  //     </div>
+  //   )) || [], [report?.solution?.delivery_modalities])
 
   // Memoize technology items to prevent unnecessary re-renders
   const technologyItems = useMemo(() => 
@@ -376,12 +469,62 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
     </div>
   ), [editableTitle, isEditingTitle, titleInput, savingTitle, handleTitleChange, handleTitleKeyDown, handleTitleBlur, handleTitleEdit, handleTitleSave])
 
+  // Decide if parsed report has any structured content; if not, we will render a plain markdown fallback
+  const hasStructuredContent = useMemo(() => {
+    if (!report) return false
+    const hasSummary = !!(report.summary?.problem_statement) 
+      || (report.summary?.current_state?.length || 0) > 0
+      || (report.summary?.root_causes?.length || 0) > 0
+      || (report.summary?.objectives?.length || 0) > 0
+    const hasSolution = (report.solution?.delivery_modalities?.length || 0) > 0
+      || (report.solution?.target_audiences?.length || 0) > 0
+      || (report.solution?.key_competencies?.length || 0) > 0
+      || (report.solution?.content_outline?.length || 0) > 0
+    const hasDelivery = (report.delivery_plan?.phases?.length || 0) > 0
+      || (report.delivery_plan?.timeline?.length || 0) > 0
+      || (report.delivery_plan?.resources?.length || 0) > 0
+    const hasMeasurement = (report.measurement?.success_metrics?.length || 0) > 0
+      || (report.measurement?.assessment_strategy?.length || 0) > 0
+      || (report.measurement?.data_sources?.length || 0) > 0
+      || (report.measurement?.learning_analytics?.levels?.length || 0) > 0
+      || !!report.measurement?.learning_analytics?.reporting_cadence
+    const hasBudget = (report.budget?.items?.length || 0) > 0 || !!report.budget?.notes
+    const hasRisks = (report.risks?.length || 0) > 0
+    const hasNext = (report.next_steps?.length || 0) > 0
+    return hasSummary || hasSolution || hasDelivery || hasMeasurement || hasBudget || hasRisks || hasNext
+  }, [report])
+
   // Early return if no report
   if (!report) {
     return (
       <div className={`max-w-6xl mx-auto p-6 ${className}`}>
         <div className="text-center text-white/60">
           <p>No report data available</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Fallback view for raw markdown reports (e.g., Greeting/Org/Requirement reports) not matching the structured parser
+  if (!hasStructuredContent) {
+    const sections = parseSections(reportMarkdown)
+    return (
+      <div className={`max-w-6xl mx-auto p-6 ${className}`}>
+        {!hideTitleSection && titleSection}
+        <div className="space-y-6">
+          {sections.map((s, idx) => (
+            <div key={idx} className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="p-1 rounded bg-white/10">
+                  <Icon name={getIconForSection(s.title)} className="w-4 h-4 text-white/70" />
+                </div>
+                <h3 className="text-lg font-semibold text-white/90">{s.title}</h3>
+              </div>
+              <div className="space-y-2">
+                {renderLines(s.lines)}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     )
@@ -462,6 +605,75 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
             </div>
           )}
 
+          {/* Key Competencies */}
+          {report.solution?.key_competencies && report.solution.key_competencies.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-purple-500/20">
+                  <Icon name="toolbox" className="w-4 h-4 text-purple-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white/90">Key Competencies</h3>
+              </div>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+                {report.solution.key_competencies.map((c, i) => (
+                  <li key={i}>{c}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Content Outline */}
+          {report.solution?.content_outline && report.solution.content_outline.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-indigo-500/20">
+                  <Icon name="doc" className="w-4 h-4 text-indigo-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white/90">Proposed Curriculum Structure</h3>
+              </div>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+                {report.solution.content_outline.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Learner Analysis */}
+          {report.learner_analysis?.profiles && report.learner_analysis.profiles.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-primary-500/20">
+                  <Icon name="audience" className="w-4 h-4 text-primary-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white/90">Learner Analysis</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {report.learner_analysis.profiles.map((p, i) => (
+                  <div key={i} className="p-3 rounded-lg bg-white/5 hover:bg-white/8 transition-colors">
+                    <div className="font-medium text-white/90 text-sm mb-1">{p.segment}</div>
+                    <div className="text-xs text-white/70 leading-relaxed">
+                      {p.roles?.length ? (<div><span className="font-medium text-white/80">Roles:</span> {p.roles.join(', ')}</div>) : null}
+                      {p.context ? (<div className="mt-1"><span className="font-medium text-white/80">Context:</span> {p.context}</div>) : null}
+                      {p.motivators?.length ? (<div className="mt-1"><span className="font-medium text-white/80">Motivators:</span> {p.motivators.join(', ')}</div>) : null}
+                      {p.constraints?.length ? (<div className="mt-1"><span className="font-medium text-white/80">Constraints:</span> {p.constraints.join(', ')}</div>) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {report.learner_analysis.readiness_risks?.length ? (
+                <div className="mt-4">
+                  <div className="font-medium text-white/80 mb-1">Readiness Risks</div>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+                    {report.learner_analysis.readiness_risks.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          )}
+
           {/* Delivery Plan */}
           {report.delivery_plan && (
             <div className="glass-card p-5">
@@ -489,6 +701,79 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
               <div className="space-y-3">
                 {metricsItems}
               </div>
+            </div>
+          )}
+
+          {/* Measurement Details */}
+          {(report.measurement?.data_sources?.length || report.measurement?.learning_analytics?.levels?.length || report.measurement?.learning_analytics?.reporting_cadence) && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-orange-500/20">
+                  <Icon name="assessment" className="w-4 h-4 text-orange-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white/90">Measurement Details</h3>
+              </div>
+              {report.measurement?.data_sources?.length ? (
+                <div className="mb-3">
+                  <div className="font-medium text-white/80 mb-1">Data Sources</div>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+                    {report.measurement.data_sources.map((d, i) => (<li key={i}>{d}</li>))}
+                  </ul>
+                </div>
+              ) : null}
+              {(report.measurement?.learning_analytics?.levels?.length || report.measurement?.learning_analytics?.reporting_cadence) ? (
+                <div>
+                  <div className="font-medium text-white/80 mb-1">Learning Analytics</div>
+                  {report.measurement.learning_analytics.levels?.length ? (
+                    <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+                      {report.measurement.learning_analytics.levels.map((l, i) => (<li key={i}>{l}</li>))}
+                    </ul>
+                  ) : null}
+                  {report.measurement.learning_analytics.reporting_cadence ? (
+                    <div className="text-sm text-white/70 mt-2">Reporting Cadence: {report.measurement.learning_analytics.reporting_cadence}</div>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* Budget */}
+          {(report.budget && (report.budget.items?.length || report.budget.notes)) && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-cyan-500/20">
+                  <Icon name="database" className="w-4 h-4 text-cyan-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white/90">Budget</h3>
+              </div>
+              {report.budget.notes ? (
+                <div className="text-sm text-white/80 leading-relaxed mb-3">{report.budget.notes}</div>
+              ) : null}
+              {report.budget.items?.length ? (
+                <div className="space-y-2">
+                  {report.budget.items.map((b, i) => (
+                    <div key={i} className="p-3 rounded-lg bg-white/5 flex items-center justify-between">
+                      <div className="text-sm text-white/90 font-medium">{b.item}</div>
+                      <div className="text-xs text-white/70">{report.budget.currency || 'USD'} {b.low} – {b.high}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* Next Steps */}
+          {report.next_steps && report.next_steps.length > 0 && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-emerald-500/20">
+                  <Icon name="steps" className="w-4 h-4 text-emerald-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-white/90">Next Steps</h3>
+              </div>
+              <ol className="list-decimal pl-5 space-y-1 text-sm text-white/80">
+                {report.next_steps.map((s, i) => (<li key={i}>{s}</li>))}
+              </ol>
             </div>
           )}
 
@@ -550,33 +835,70 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
             </div>
           )}
 
-          {/* Learning Modalities */}
-          {report.solution?.delivery_modalities && report.solution.delivery_modalities.length > 0 && (
+          {/* Accessibility & Inclusion */}
+          {(report.solution?.accessibility_and_inclusion?.standards?.length || report.solution?.accessibility_and_inclusion?.notes) && (
             <div className="glass-card p-5">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-1 rounded bg-indigo-500/20">
-                  <Icon name="modality" className="w-4 h-4 text-indigo-400" />
+                  <Icon name="check" className="w-4 h-4 text-indigo-400" />
                 </div>
-                <h4 className="text-sm font-semibold text-white/90">Learning Modalities</h4>
+                <h4 className="text-sm font-semibold text-white/90">Accessibility & Inclusion</h4>
               </div>
-              <div className="space-y-3">
-                {modalityItems}
-              </div>
+              {report.solution.accessibility_and_inclusion.standards?.length ? (
+                <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+                  {report.solution.accessibility_and_inclusion.standards.map((s, i) => (<li key={i}>{s}</li>))}
+                </ul>
+              ) : null}
+              {report.solution.accessibility_and_inclusion.notes ? (
+                <div className="text-xs text-white/70 leading-relaxed mt-2">{report.solution.accessibility_and_inclusion.notes}</div>
+              ) : null}
             </div>
           )}
 
           {/* Technology Stack */}
-          {report.technology_talent?.technology?.current_stack && report.technology_talent.technology.current_stack.length > 0 && (
+          {(report.technology_talent?.technology?.current_stack?.length || report.technology_talent?.technology?.gaps?.length || report.technology_talent?.technology?.recommendations?.length || report.technology_talent?.technology?.data_plan?.standards?.length || report.technology_talent?.technology?.data_plan?.integrations?.length) && (
             <div className="glass-card p-5">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-1 rounded bg-cyan-500/20">
                   <Icon name="tech" className="w-4 h-4 text-cyan-400" />
                 </div>
-                <h4 className="text-sm font-semibold text-white/90">Technology Stack</h4>
+                <h4 className="text-sm font-semibold text-white/90">Technology & Data</h4>
               </div>
-              <div className="space-y-3">
-                {technologyItems}
-              </div>
+              {report.technology_talent.technology.current_stack?.length ? (
+                <div className="mb-3">
+                  <div className="font-medium text-white/80 mb-1">Current Stack</div>
+                  <div className="space-y-3">{technologyItems}</div>
+                </div>
+              ) : null}
+              {report.technology_talent.technology.gaps?.length ? (
+                <div className="mb-3">
+                  <div className="font-medium text-white/80 mb-1">Gaps</div>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+                    {report.technology_talent.technology.gaps.map((g, i) => (<li key={i}>{g}</li>))}
+                  </ul>
+                </div>
+              ) : null}
+              {report.technology_talent.technology.recommendations?.length ? (
+                <div className="mb-3">
+                  <div className="font-medium text-white/80 mb-1">Recommendations</div>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+                    {report.technology_talent.technology.recommendations.map((r, i) => (
+                      <li key={i}>{r.capability} — {r.fit}{r.constraints?.length ? ` (Constraints: ${r.constraints.join(', ')})` : ''}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {(report.technology_talent.technology.data_plan?.standards?.length || report.technology_talent.technology.data_plan?.integrations?.length) ? (
+                <div>
+                  <div className="font-medium text-white/80 mb-1">Data Plan</div>
+                  {report.technology_talent.technology.data_plan.standards?.length ? (
+                    <div className="text-xs text-white/70 mb-1">Standards: {report.technology_talent.technology.data_plan.standards.join(', ')}</div>
+                  ) : null}
+                  {report.technology_talent.technology.data_plan.integrations?.length ? (
+                    <div className="text-xs text-white/70">Integrations: {report.technology_talent.technology.data_plan.integrations.join(', ')}</div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           )}
 
@@ -592,6 +914,37 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
               <div className="space-y-3">
                 {assessmentItems}
               </div>
+            </div>
+          )}
+
+          {/* Talent Overview */}
+          {(report.technology_talent?.talent?.available_roles?.length || report.technology_talent?.talent?.gaps?.length || report.technology_talent?.talent?.recommendations?.length) && (
+            <div className="glass-card p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="p-1 rounded bg-emerald-500/20">
+                  <Icon name="coach" className="w-4 h-4 text-emerald-400" />
+                </div>
+                <h4 className="text-sm font-semibold text-white/90">Talent Overview</h4>
+              </div>
+              {report.technology_talent.talent.available_roles?.length ? (
+                <div className="mb-2 text-sm text-white/80"><span className="font-medium text-white/80">Available Roles:</span> {report.technology_talent.talent.available_roles.join(', ')}</div>
+              ) : null}
+              {report.technology_talent.talent.gaps?.length ? (
+                <div className="mb-2">
+                  <div className="font-medium text-white/80 mb-1">Gaps</div>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+                    {report.technology_talent.talent.gaps.map((g, i) => (<li key={i}>{g}</li>))}
+                  </ul>
+                </div>
+              ) : null}
+              {report.technology_talent.talent.recommendations?.length ? (
+                <div>
+                  <div className="font-medium text-white/80 mb-1">Recommendations</div>
+                  <ul className="list-disc pl-5 space-y-1 text-sm text-white/80">
+                    {report.technology_talent.talent.recommendations.map((r, i) => (<li key={i}>{r}</li>))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

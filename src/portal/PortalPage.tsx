@@ -6,7 +6,7 @@ import { getSupabase } from '@/services/supabase'
 import { paths, portalUserPath, publicProfilePath } from '@/routes/paths'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { getCapitalizedFirstName } from '@/lib/textUtils'
-import { getRecentSummaries, type PolarisSummary } from '@/services/polarisSummaryService'
+// import type { PolarisSummary } from '@/services/polarisSummaryService'
 
 
 type NavItem = string | { label: string; href?: string; tagText?: string; tagTone?: 'success' | 'preview' | 'soon' | 'info' }
@@ -198,24 +198,7 @@ function SidebarToggleIcon({ className = '' }: { className?: string }) {
   )
 }
 
-function IconWrench({ className = '' }: { className?: string }) {
-  return (
-    <svg
-      xmlns="http://www.w3.org/2000/svg"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-      aria-hidden="true"
-    >
-      <path d="M21 6.5a5 5 0 0 1-6.8 4.7L7.8 17.6a2 2 0 1 1-2.8-2.8l6.4-6.4A5 5 0 1 1 21 6.5z" />
-      <circle cx="4.5" cy="19.5" r="1.5" />
-    </svg>
-  )
-}
+
 
 function IconBookOpen({ className = '' }: { className?: string }) {
   return (
@@ -401,7 +384,8 @@ export function PortalPage() {
   const { user: userParam } = useParams()
   const outlet = useOutlet()
   const viewingProfile = Boolean(userParam)
-  const [recentSummaries, setRecentSummaries] = useState<PolarisSummary[]>([])
+  // Recent starmaps section removed; keep state unused to avoid fetches
+  // const [recentSummaries, setRecentSummaries] = useState<PolarisSummary[]>([])
   // Profile form state
   const [username, setUsername] = useState<string>('')
   const [displayName, setDisplayName] = useState<string>('')
@@ -464,10 +448,7 @@ export function PortalPage() {
       .then(({ data: { user: currentUser } }) => {
         if (isMounted) {
           setUser(currentUser ?? null)
-          // Load recent summaries when user is authenticated
-          if (currentUser) {
-            loadRecentSummaries()
-          }
+          // Removed recent summaries loading
         }
       })
     const { data: { subscription } } = getSupabase().auth.onAuthStateChange(async (_event) => {
@@ -475,10 +456,7 @@ export function PortalPage() {
         // Always fetch the freshest user metadata on any auth change
         const { data: { user: nextUser } } = await getSupabase().auth.getUser()
         setUser(nextUser ?? null)
-        // Reload recent summaries when auth state changes
-        if (nextUser) {
-          loadRecentSummaries()
-        }
+        // Recent summaries removed
       }
     })
     return () => {
@@ -487,23 +465,9 @@ export function PortalPage() {
     }
   }, [])
 
-  // Reload summaries when returning from Polaris page
-  useEffect(() => {
-    if (location.pathname === '/' || location.pathname === '/starmaps') {
-      loadRecentSummaries()
-    }
-  }, [location.pathname])
+  // Removed recent summaries reload hook
 
-  async function loadRecentSummaries() {
-    try {
-      const { data } = await getRecentSummaries(3)
-      if (data) {
-        setRecentSummaries(data)
-      }
-    } catch (err) {
-      console.error('Failed to load recent summaries:', err)
-    }
-  }
+  // Recent summaries loader removed
 
   // profile menu opener removed; profile page navigation is used instead
 
@@ -732,6 +696,7 @@ export function PortalPage() {
                         <span className="ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium border-primary-400/30 text-primary-300 bg-primary-400/10">2.5 Preview</span>
                       </a>
                     </li>
+                    {/* Removed "Polaris Jobs" entry per request */}
                     {solaraItems.slice(1).map((item) => (
                       <li key={typeof item === 'string' ? item : item.label}>
                         <a href={typeof item !== 'string' && item.href ? item.href : '#'} className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-400 hover:bg-white/5 rounded-lg transition pressable">
@@ -746,45 +711,7 @@ export function PortalPage() {
                 </div>
               </div>
               
-              {/* Recent Starmaps Section */}
-              <div className="mt-4 pt-4 border-t border-white/10">
-                <h4 className="px-3 text-xs font-semibold text-primary-400 mb-2">Recent Starmaps</h4>
-                <div className="mt-1 pl-2">
-                  {recentSummaries.length > 0 ? (
-                    <ul className="space-y-0.5 list-none">
-                      {recentSummaries.map((summary) => (
-                        <li key={summary.id}>
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/starmaps/${summary.id}`)}
-                            className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/85 hover:text-white hover:bg-white/5 rounded-lg transition pressable"
-                          >
-                            <span className="truncate text-white/85">
-                              {summary.report_title || summary.company_name || 'Untitled Discovery'}
-                            </span>
-                            <span className="text-[10px] text-white/40">
-                              {new Date(summary.created_at).toLocaleDateString()}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                      <li>
-                        <button
-                          type="button"
-                          onClick={() => navigate('/starmaps')}
-                          className="w-full text-left px-3 py-1.5 text-xs text-white/80 hover:text-white hover:bg-white/5 rounded-lg transition pressable underline-accent"
-                        >
-                          View all starmaps →
-                        </button>
-                      </li>
-                    </ul>
-                  ) : (
-                    <div className="px-3 py-2 text-xs text-white/40">
-                      No starmaps yet
-                    </div>
-                  )}
-                </div>
-              </div>
+              {/* Recent Starmaps Section removed */}
             </nav>
           )}
 
@@ -1207,25 +1134,25 @@ export function PortalPage() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up">
                   <WorkspaceActionCard
-                    href="#"
-                    label="Build"
-                    description="Conduct stakeholder analysis, instructional design & generate storyboards, build and deploy courses."
-                    icon={IconWrench}
+                    href="/discover"
+                    label="Create Starmap"
+                    description="Build comprehensive L&D strategies with AI-powered insights and beautiful visualizations."
+                    icon={IconSparkle}
                   />
                 </div>
                 <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up animate-delay-75">
                   <WorkspaceActionCard
-                    href="#"
-                    label="Learn"
-                    description="Explore docs, courses, and tutorials to level up quickly."
+                    href="/starmaps"
+                    label="My Starmaps"
+                    description="View and manage all your discovery starmaps in one place."
                     icon={IconBookOpen}
                   />
                 </div>
                 <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up animate-delay-150">
                   <WorkspaceActionCard
-                    href="#"
-                    label="Insight"
-                    description="Discover analytics and reports to drive better decisions."
+                    href="/polaris/jobs"
+                    label="Jobs Dashboard"
+                    description="Monitor and track your asynchronous report generation jobs."
                     icon={IconChart}
                   />
                 </div>
@@ -1291,51 +1218,7 @@ export function PortalPage() {
                   <NavSection title="Strategic Skills Architecture" items={["Explore Partnership", "My Architecture"]} defaultOpen />
                   <NavSection title="Solara" items={solaraItems} defaultOpen />
                   
-                  {/* Recent Starmaps Section for Mobile */}
-                  <div className="mt-4 pt-4 border-t border-white/10">
-                    <h4 className="px-3 text-xs font-semibold text-primary-400 mb-2">Recent Starmaps</h4>
-                    <div className="mt-1 pl-2">
-                      {recentSummaries.length > 0 ? (
-                        <ul className="space-y-0.5 list-none">
-                          {recentSummaries.map((summary) => (
-                            <li key={summary.id}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMobileMenuOpen(false)
-                                  navigate(`/starmaps/${summary.id}`)
-                                }}
-                                className="w-full text-left flex items-center justify-between px-3 py-1.5 text-sm text-white/85 hover:text-white hover:bg-white/5 rounded-lg transition pressable"
-                              >
-                                <span className="truncate text-white/85">
-                                  {summary.company_name || 'Untitled Discovery'}
-                                </span>
-                                <span className="text-[10px] text-white/40">
-                                  {new Date(summary.created_at).toLocaleDateString()}
-                                </span>
-                              </button>
-                            </li>
-                          ))}
-                          <li>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMobileMenuOpen(false)
-                                navigate('/starmaps')
-                              }}
-                              className="w-full text-left px-3 py-1.5 text-xs text-white/80 hover:text-white hover:bg-white/5 rounded-lg transition pressable underline-accent"
-                            >
-                              View all starmaps →
-                            </button>
-                          </li>
-                        </ul>
-                      ) : (
-                        <div className="px-3 py-2 text-xs text-white/40">
-                          No starmaps yet
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                  {/* Recent Starmaps Section for Mobile removed */}
                 </nav>
                 <div className="mt-auto">
                   {/* Mobile subscribe button above bottom actions */}

@@ -4,7 +4,7 @@ import { saveSummary, getUserSummaryCount, SUMMARY_LIMIT, updateSummaryTitle, up
 import { researchGreeting, researchOrganization, researchRequirements, perplexityService } from '@/services/perplexityService'
 import RenderField from '@/polaris/needs-analysis/RenderField'
 import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
-import { AIReportEditorEnhanced } from '@/components/AIReportEditorEnhanced'
+import ReportCardEditor from '@/polaris/needs-analysis/ReportCardEditor'
 import { SolaraLodestar } from '@/components'
 import { EXPERIENCE_LEVELS } from '@/polaris/needs-analysis/experience'
 import { STAGE1_REQUESTER_FIELDS, STAGE2_ORGANIZATION_FIELDS, STAGE3_PROJECT_FIELDS } from '@/polaris/needs-analysis/three-stage-static'
@@ -2483,16 +2483,44 @@ Return ONLY valid JSON matching the NAReport schema with these sections: summary
                     </button>
                   </div>
                 )}
-                <AIReportEditorEnhanced
-                  summaryId={lastSavedSummaryId || undefined}
-                  reportContent={editedContent}
-                  greetingReport={greetingReport}
-                  orgReport={orgReport}
-                  requirementReport={requirementReport}
-                  maxEdits={3}
-                  onContentChange={setEditedContent}
-                  className="min-h-[600px]"
-                />
+                <div className="space-y-4">
+                  {lastSavedSummaryId && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={reportTitle}
+                        onChange={(e) => setReportTitle(e.target.value)}
+                        className="flex-1 input"
+                        placeholder="Report title"
+                      />
+                      <button
+                        type="button"
+                        className="btn-primary btn-sm"
+                        disabled={savingTitle || !reportTitle.trim()}
+                        onClick={async () => {
+                          if (!lastSavedSummaryId || !reportTitle.trim()) return
+                          try {
+                            setSavingTitle(true)
+                            const { error } = await updateSummaryTitle(lastSavedSummaryId, reportTitle.trim())
+                            if (!error) {
+                              setReportTitle(reportTitle.trim())
+                            }
+                          } finally {
+                            setSavingTitle(false)
+                          }
+                        }}
+                        title="Save title"
+                      >
+                        {savingTitle ? 'Saving…' : 'Save title'}
+                      </button>
+                    </div>
+                  )}
+                  <ReportCardEditor
+                    markdown={editedContent}
+                    onChange={setEditedContent}
+                    className="min-h-[600px]"
+                  />
+                </div>
               </div>
             )}
           </div>

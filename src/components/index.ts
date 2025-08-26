@@ -10,3 +10,7 @@ export type { EditRequest, AIReportEditorProps } from './AIReportEditor'
 export type { AIReportEditorEnhancedProps } from './AIReportEditorEnhanced'
 export { IconButton } from './ui/IconButton'
 export { SolaraLodestar } from './SolaraLodestar'
+
+// Enhanced UI Components for Starmap Creation
+export { StepIndicator, WizardContainer, FieldCard, ActionButtons, ProgressBar } from './StarmapWizard'
+export { default as EnhancedReportDisplay } from './EnhancedReportDisplay'

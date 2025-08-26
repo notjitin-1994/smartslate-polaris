@@ -111,10 +111,22 @@ export async function saveSummary(data: {
     }
   }
 
+  // Compute canonical starmap title: [YYYY-MM-DD]-[Org Name]-[User's Name]
+  const requesterName = (data.stage1_answers && (data.stage1_answers as any).requester_name) 
+    || (user?.user_metadata as any)?.full_name 
+    || (user?.email ? (user.email as string).split('@')[0] : null)
+    || 'Unknown User'
+  const orgName = data.company_name 
+    || (data.stage2_answers && (data.stage2_answers as any).org_name)
+    || 'Unknown Org'
+  const createdDate = new Date().toISOString().slice(0, 10)
+  const computedTitle = `${createdDate}-${String(orgName).trim()}-${String(requesterName).trim()}`
+
   const summaryData: CreatePolarisSummary = {
     user_id: user.id,
     company_name: data.company_name,
-    report_title: data.report_title ?? data.company_name ?? 'Discovery Starmap',
+    // Enforce canonical naming regardless of provided report_title
+    report_title: computedTitle,
     summary_content: data.summary_content,
     prelim_report: data.prelim_report ?? null,
     dynamic_questionnaire_report: data.dynamic_questionnaire_report ?? null,
@@ -144,7 +156,7 @@ export async function saveSummary(data: {
   return { data: savedSummary, error }
 }
 
-export async function updateSummaryTitle(id: string, newTitle: string): Promise<{ error: any }> {
+export async function updateSummaryTitle(id: string, _newTitle: string): Promise<{ error: any }> {
   const supabase = getSupabase()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -152,9 +164,31 @@ export async function updateSummaryTitle(id: string, newTitle: string): Promise<
     return { error: new Error('User not authenticated') }
   }
 
+  // Load existing answers to enforce canonical naming
+  const { data: existing, error: loadErr } = await supabase
+    .from('polaris_summaries')
+    .select('company_name, stage1_answers, stage2_answers, created_at')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (loadErr) {
+    return { error: loadErr }
+  }
+
+  const requesterName = (existing?.stage1_answers && (existing.stage1_answers as any).requester_name)
+    || (user?.user_metadata as any)?.full_name
+    || (user?.email ? (user.email as string).split('@')[0] : null)
+    || 'Unknown User'
+  const orgName = existing?.company_name
+    || (existing?.stage2_answers && (existing.stage2_answers as any).org_name)
+    || 'Unknown Org'
+  const datePart = (existing?.created_at ? String(existing.created_at).slice(0, 10) : new Date().toISOString().slice(0, 10))
+  const computedTitle = `${datePart}-${String(orgName).trim()}-${String(requesterName).trim()}`
+
   const { error } = await supabase
     .from('polaris_summaries')
-    .update({ report_title: newTitle })
+    .update({ report_title: computedTitle })
     .eq('id', id)
     .eq('user_id', user.id)
 

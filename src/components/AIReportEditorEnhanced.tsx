@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { aiEditingService } from '@/services/aiEditingService'
 import { RichTextEditor } from '@/components/RichTextEditor'
 import { markdownToHtml, htmlToMarkdown } from '@/lib/textUtils'
+import { convertNaJsonStringToMarkdown } from '@/polaris/needs-analysis/format'
 import type { EditRequest } from './AIReportEditor'
 
 export interface AIReportEditorEnhancedProps {
@@ -28,7 +29,7 @@ export function AIReportEditorEnhanced({
   className = '',
   readOnly = false
 }: AIReportEditorEnhancedProps) {
-  const [currentContent, setCurrentContent] = useState<string>(markdownToHtml(reportContent))
+  const [currentContent, setCurrentContent] = useState<string>(markdownToHtml(convertNaJsonStringToMarkdown(reportContent) || reportContent))
   const [editHistory, setEditHistory] = useState<EditRequest[]>([])
   const [currentEditIndex, setCurrentEditIndex] = useState(-1)
   const [isProcessing, setIsProcessing] = useState(false)

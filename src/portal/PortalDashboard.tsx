@@ -105,8 +105,8 @@ export function PortalDashboard() {
           onClick={() => navigate('/starmaps')}
         />
         <ActionCard
-          title="Discover"
-          description="Start a new guided discovery to scope your needs."
+          title="Create New Starmap"
+          description="Start a new guided discovery with enhanced AI insights and beautiful visualizations."
           icon={IconCompass}
           onClick={() => navigate('/discover')}
         />

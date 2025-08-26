@@ -12,3 +12,4 @@ export { getSupabase } from './supabase'
 
 // Polaris services
 export * from './polarisSummaryService'
+export * from './polarisReportsService'

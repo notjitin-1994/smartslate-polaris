@@ -20,6 +20,7 @@ const AllStarmaps = withLazyLoad(() => import('@/pages/AllBriefings'))
 const StarmapDetail = withLazyLoad(() => import('@/pages/StarmapDetail'))
 const Pricing = withLazyLoad(() => import('@/pages/Pricing'))
 const SeedJitinStarmap = withLazyLoad(() => import('@/pages/SeedJitinStarmap'))
+const ReportsDebug = withLazyLoad(() => import('@/pages/ReportsDebug'))
 
 // Loading component for the entire app
 const AppLoadingFallback = () => (
@@ -60,6 +61,7 @@ export function OptimizedAppRouter() {
                 <Route path="discover" element={<PolarisRevamped />} />
                 <Route path="discover/new" element={<PolarisNova />} />
                 <Route path="seed/jitin" element={<SeedJitinStarmap />} />
+                <Route path="debug/reports" element={<ReportsDebug />} />
                 <Route path="briefings" element={<Navigate to="/starmaps" replace />} />
                 <Route path="summaries" element={<Navigate to="/starmaps" replace />} />
               </Route>

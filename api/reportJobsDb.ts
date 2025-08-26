@@ -1,9 +1,14 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto'
 
 // Initialize Supabase client with service role for server-side operations
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+const webhookSecret = process.env.WEBHOOK_SECRET || ''
+const webhookBaseUrl = process.env.WEBHOOK_BASE_URL || process.env.VITE_SITE_URL || 'http://localhost:5173'
+const webhookTimeoutMs = parseInt(process.env.WEBHOOK_TIMEOUT_MS || '10000')
+const webhookMaxRetries = parseInt(process.env.WEBHOOK_MAX_RETRIES || '3')
 
 const supabase = supabaseUrl && supabaseServiceKey 
   ? createClient(supabaseUrl, supabaseServiceKey, {
@@ -15,6 +20,152 @@ function allowCors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key')
+}
+
+function generateWebhookSignature(payload: string, secret: string): string {
+  const hmac = crypto.createHmac('sha256', secret)
+  hmac.update(payload, 'utf8')
+  return `sha256=${hmac.digest('hex')}`
+}
+
+async function callWebhook(
+  endpoint: string,
+  payload: any,
+  retryAttempt: number = 0
+): Promise<{ success: boolean; response?: any; error?: string }> {
+  if (!webhookSecret) {
+    return { success: false, error: 'Webhook secret not configured' }
+  }
+
+  try {
+    const payloadString = JSON.stringify(payload)
+    const signature = generateWebhookSignature(payloadString, webhookSecret)
+    
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), webhookTimeoutMs)
+    
+    const webhookUrl = `${webhookBaseUrl.replace(/\/$/, '')}/${endpoint}`
+    
+    console.log(`Calling webhook ${webhookUrl} (attempt ${retryAttempt + 1}/${webhookMaxRetries + 1})`)
+    
+    const response = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Webhook-Signature': signature,
+        'User-Agent': 'Polaris-Webhook/1.0'
+      },
+      body: payloadString,
+      signal: controller.signal
+    })
+    
+    clearTimeout(timeoutId)
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`HTTP ${response.status}: ${errorText}`)
+    }
+    
+    const responseData = await response.json()
+    console.log(`Webhook ${webhookUrl} succeeded on attempt ${retryAttempt + 1}`)
+    
+    return { success: true, response: responseData }
+  } catch (err: any) {
+    const errorMessage = err?.message || 'Unknown webhook error'
+    console.error(`Webhook ${endpoint} failed (attempt ${retryAttempt + 1}):`, errorMessage)
+    
+    // Retry with exponential backoff
+    if (retryAttempt < webhookMaxRetries) {
+      const delay = Math.min(1000 * Math.pow(2, retryAttempt), 10000)
+      console.log(`Retrying webhook ${endpoint} in ${delay}ms...`)
+      
+      await new Promise(resolve => setTimeout(resolve, delay))
+      return callWebhook(endpoint, payload, retryAttempt + 1)
+    }
+    
+    return { success: false, error: errorMessage }
+  }
+}
+
+async function notifyReportCompletion(
+  jobId: string,
+  reportId: string,
+  reportType: string,
+  researchReport: string,
+  researchStatus: 'completed' | 'failed',
+  researchMetadata: Record<string, any>,
+  errorMessage?: string
+): Promise<{ success: boolean; usedWebhook: boolean; error?: string }> {
+  const payload = {
+    job_id: jobId,
+    report_id: reportId,
+    report_type: reportType,
+    research_report: researchReport,
+    research_status: researchStatus,
+    research_metadata: researchMetadata,
+    ...(errorMessage && { error: errorMessage })
+  }
+
+  // Try webhook first
+  const webhookResult = await callWebhook('prelim-report', payload)
+  
+  if (webhookResult.success) {
+    return { success: true, usedWebhook: true }
+  }
+
+  // Fallback to direct database update if webhook fails
+  console.warn(`Webhook failed for job ${jobId}, falling back to direct database update`)
+  return { success: false, usedWebhook: false, error: webhookResult.error }
+}
+
+async function directDatabaseUpdate(
+  jobId: string,
+  reportId: string,
+  reportTable: string,
+  researchReport: string,
+  researchStatus: 'completed' | 'failed',
+  researchMetadata: Record<string, any>,
+  errorMessage?: string
+): Promise<{ success: boolean; error?: string }> {
+  if (!supabase) {
+    return { success: false, error: 'Database not configured' }
+  }
+
+  try {
+    const updateData: any = {
+      research_report: researchReport,
+      research_status: researchStatus,
+      research_metadata: {
+        ...researchMetadata,
+        job_id: jobId,
+        fallback_update: true,
+        webhook_failed: true,
+        updated_at: new Date().toISOString()
+      },
+      webhook_status: 'failed'
+    }
+
+    if (errorMessage) {
+      updateData.research_metadata.error = errorMessage
+    }
+
+    const { error } = await supabase
+      .from(reportTable)
+      .update(updateData)
+      .eq('id', reportId)
+
+    if (error) {
+      console.error(`Direct database update failed for ${reportTable}:`, error)
+      return { success: false, error: error.message }
+    }
+
+    console.log(`Direct database update succeeded for job ${jobId}, report ${reportId}`)
+    return { success: true }
+  } catch (err: any) {
+    const errorMsg = err?.message || 'Database update failed'
+    console.error(`Direct database update error for job ${jobId}:`, errorMsg)
+    return { success: false, error: errorMsg }
+  }
 }
 
 function normalizePerplexityModel(input?: string): string {
@@ -31,6 +182,15 @@ function normalizePerplexityModel(input?: string): string {
   return 'sonar'
 }
 
+function getReportTableFromType(type?: string): string | null {
+  if (!type) return null
+  const t = String(type).toLowerCase()
+  if (t === 'greeting') return 'greeting_reports'
+  if (t === 'org' || t === 'organization') return 'org_reports'
+  if (t === 'requirement' || t === 'requirements') return 'requirement_reports'
+  return null
+}
+
 async function runJob(jobId: string, prompt: string, model?: string, temperature: number = 0.2, max_tokens: number = 2600) {
   if (!supabase) {
     console.error('Supabase not initialized')
@@ -38,6 +198,17 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
   }
 
   try {
+    // Read job metadata to know which report row to update
+    const { data: jobRow } = await supabase
+      .from('report_jobs')
+      .select('metadata, summary_id, user_id')
+      .eq('job_id', jobId)
+      .single()
+
+    const reportType = (jobRow as any)?.metadata?.report_type as string | undefined
+    const reportId = (jobRow as any)?.metadata?.report_id as string | undefined
+    const reportTable = getReportTableFromType(reportType)
+
     // Update job status to running
     const { error: updateError } = await supabase
       .from('report_jobs')
@@ -51,6 +222,22 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
     if (updateError) {
       console.error(`Failed to update job ${jobId} to running:`, updateError)
       return
+    }
+
+    // Also reflect running state in the target report row if provided
+    if (reportTable && reportId) {
+      await supabase
+        .from(reportTable)
+        .update({
+          research_status: 'running',
+          research_metadata: {
+            ...(jobRow as any)?.metadata,
+            job_id: jobId,
+            model: model || process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar-pro',
+            started_at: new Date().toISOString(),
+          }
+        })
+        .eq('id', reportId)
     }
 
     const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || process.env.VITE_PERPLEXITY_API_KEY || ''
@@ -123,6 +310,43 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
     if (completeError) {
       console.error(`Failed to complete job ${jobId}:`, completeError)
     }
+
+    // Notify report completion via webhook
+    if (reportTable && reportId && reportType) {
+      const researchMetadata = {
+        ...(jobRow as any)?.metadata,
+        job_id: jobId,
+        model: mdl,
+        completed_at: new Date().toISOString(),
+        provider: 'perplexity'
+      }
+
+      const webhookResult = await notifyReportCompletion(
+        jobId,
+        reportId,
+        reportType,
+        content.trim(),
+        'completed',
+        researchMetadata
+      )
+
+      // If webhook failed, fall back to direct database update
+      if (!webhookResult.success && !webhookResult.usedWebhook) {
+        console.warn(`Webhook failed for job ${jobId}, using direct database fallback`)
+        const fallbackResult = await directDatabaseUpdate(
+          jobId,
+          reportId,
+          reportTable,
+          content.trim(),
+          'completed',
+          researchMetadata
+        )
+        
+        if (!fallbackResult.success) {
+          console.error(`Both webhook and database fallback failed for job ${jobId}`)
+        }
+      }
+    }
   } catch (err: any) {
     console.error(`Job ${jobId} failed:`, err?.message || err)
     
@@ -137,6 +361,54 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
           completed_at: new Date().toISOString()
         })
         .eq('job_id', jobId)
+    }
+
+    // Reflect failure in the target report row via webhook
+    try {
+      const { data: jobRow } = await supabase
+        .from('report_jobs')
+        .select('metadata')
+        .eq('job_id', jobId)
+        .single()
+      const reportType = (jobRow as any)?.metadata?.report_type as string | undefined
+      const reportId = (jobRow as any)?.metadata?.report_id as string | undefined
+      const reportTable = getReportTableFromType(reportType)
+      
+      if (reportTable && reportId && reportType) {
+        const researchMetadata = {
+          ...(jobRow as any)?.metadata,
+          job_id: jobId,
+          error: err?.message || 'Job failed',
+          failed_at: new Date().toISOString(),
+          provider: 'perplexity'
+        }
+
+        const webhookResult = await notifyReportCompletion(
+          jobId,
+          reportId,
+          reportType,
+          '',  // Empty content for failed jobs
+          'failed',
+          researchMetadata,
+          err?.message || 'Job failed'
+        )
+
+        // If webhook failed, fall back to direct database update
+        if (!webhookResult.success && !webhookResult.usedWebhook) {
+          console.warn(`Failure webhook failed for job ${jobId}, using direct database fallback`)
+          await directDatabaseUpdate(
+            jobId,
+            reportId,
+            reportTable,
+            '',
+            'failed',
+            researchMetadata,
+            err?.message || 'Job failed'
+          )
+        }
+      }
+    } catch (updateErr) {
+      console.error(`Failed to update report failure status for job ${jobId}:`, updateErr)
     }
   }
 }
@@ -163,6 +435,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const max_tokens: number | undefined = body.max_tokens
       const summary_id: string | undefined = body.summary_id
       const user_id: string | undefined = body.user_id
+      const metadataFromBody: any = body.metadata || {}
+      const report_type: string | undefined = body.report_type || metadataFromBody.report_type
+      const report_id: string | undefined = body.report_id || metadataFromBody.report_id
 
       if (!prompt || typeof prompt !== 'string') {
         return res.status(400).json({ error: 'prompt is required' })
@@ -203,7 +478,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           idempotency_key: idempotencyKey || null,
           metadata: {
             source: 'api',
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            ...(metadataFromBody || {}),
+            ...(report_type ? { report_type } : {}),
+            ...(report_id ? { report_id } : {}),
           }
         })
 

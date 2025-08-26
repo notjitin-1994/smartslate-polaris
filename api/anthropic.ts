@@ -73,8 +73,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     clearTimeout(timeoutId)
 
     const text = await upstream.text()
+    // Pass through upstream status and a helpful error body for 4xx/5xx
     res.status(upstream.status)
     res.setHeader('Content-Type', 'application/json')
+    if (!upstream.ok) {
+      // eslint-disable-next-line no-console
+      console.error('Anthropic upstream error:', upstream.status, text)
+      res.send(text || JSON.stringify({ error: 'Anthropic upstream error', status: upstream.status }))
+      return
+    }
     res.send(text)
   } catch (err: any) {
     if (err instanceof Error && err.name === 'AbortError') {

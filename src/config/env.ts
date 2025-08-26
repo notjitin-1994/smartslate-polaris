@@ -43,7 +43,8 @@ export const env = {
   llmProvider: (read('VITE_LLM_PROVIDER') || 'anthropic').toLowerCase(),
   openaiApiKey: read('VITE_OPENAI_API_KEY'),
   openaiBaseUrl: read('VITE_OPENAI_BASE_URL'),
-  openaiModel: read('VITE_OPENAI_MODEL') || 'gpt-5',
+  // Use a valid default for OpenAI
+  openaiModel: read('VITE_OPENAI_MODEL') || 'gpt-4o-mini',
   anthropicApiKey: read('VITE_ANTHROPIC_API_KEY'),
   anthropicBaseUrl: read('VITE_ANTHROPIC_BASE_URL'),
   anthropicModel: read('VITE_ANTHROPIC_MODEL') || 'claude-3-5-sonnet-latest',

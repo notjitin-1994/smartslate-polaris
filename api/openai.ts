@@ -25,7 +25,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const baseUrl = ((process.env.OPENAI_BASE_URL || process.env.VITE_OPENAI_BASE_URL || 'https://api.openai.com').trim()).replace(/\/$/, '')
-    const defaultModel = (process.env.OPENAI_MODEL || process.env.VITE_OPENAI_MODEL || 'gpt-5').trim()
+    // Use a valid default model
+    const defaultModel = (process.env.OPENAI_MODEL || process.env.VITE_OPENAI_MODEL || 'gpt-4o-mini').trim()
     const defaultMax = Number(process.env.OPENAI_MAX_TOKENS || process.env.VITE_OPENAI_MAX_TOKENS) || 4096
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
@@ -48,8 +49,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const text = await upstream.text()
     res.status(upstream.status)
     res.setHeader('Content-Type', 'application/json')
+    if (!upstream.ok) {
+      // eslint-disable-next-line no-console
+      console.error('OpenAI upstream error:', upstream.status, text)
+      res.send(text || JSON.stringify({ error: 'OpenAI upstream error', status: upstream.status }))
+      return
+    }
     res.send(text)
   } catch (err: any) {
+    // eslint-disable-next-line no-console
+    console.error('OpenAI proxy error:', err)
     res.status(500).json({ error: 'OpenAI proxy error', detail: err?.message })
   }
 }

@@ -9,7 +9,8 @@ export default defineConfig(({ mode }) => {
   const ANTHROPIC_BASE_URL = ((env.VITE_ANTHROPIC_BASE_URL || env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').trim()).replace(/\/$/, '')
   const ANTHROPIC_VERSION = (env.ANTHROPIC_VERSION || '2023-06-01').trim()
   const OPENAI_API_KEY = (env.OPENAI_API_KEY || env.VITE_OPENAI_API_KEY || '').trim()
-  const OPENAI_BASE_URL = ((env.VITE_OPENAI_API_KEY || env.OPENAI_API_KEY || 'https://api.openai.com').trim()).replace(/\/$/, '')
+  // Fix: previously used API key env var when deriving base URL. Use correct *_BASE_URL vars
+  const OPENAI_BASE_URL = ((env.VITE_OPENAI_BASE_URL || env.OPENAI_BASE_URL || 'https://api.openai.com').trim()).replace(/\/$/, '')
   const PERPLEXITY_API_KEY = (env.PERPLEXITY_API_KEY || env.VITE_PERPLEXITY_API_KEY || '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').trim()
   const PERPLEXITY_BASE_URL = ((env.VITE_PERPLEXITY_BASE_URL || env.PERPLEXITY_BASE_URL || 'https://api.perplexity.ai').trim()).replace(/\/$/, '')
 

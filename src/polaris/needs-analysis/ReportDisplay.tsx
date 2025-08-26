@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import { parseMarkdownToReport } from './parse'
 import { convertNaJsonStringToMarkdown } from './format'
 import { generateShareLink, copyToClipboard } from '@/utils/shareUtils'
+import { getReportPublicStatus, toggleReportPublicStatus } from '@/services/polarisSummaryService'
 
 interface ReportDisplayProps {
   reportMarkdown: string
@@ -152,15 +153,24 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
   // Load public status if summaryId is provided
   // Public/private status is no longer toggled via the UI; share only copies link
 
+  const ensurePublic = useCallback(async () => {
+    if (!summaryId) return
+    const { isPublic } = await getReportPublicStatus(summaryId)
+    if (!isPublic) {
+      await toggleReportPublicStatus(summaryId)
+    }
+  }, [summaryId])
+
   const handleShare = useCallback(async () => {
     if (!summaryId) return
+    await ensurePublic()
     const shareLink = generateShareLink(summaryId)
     const copied = await copyToClipboard(shareLink)
     if (copied) {
       setShowCopySuccess(true)
       setTimeout(() => setShowCopySuccess(false), 2000)
     }
-  }, [summaryId])
+  }, [summaryId, ensurePublic])
 
   // --- Lightweight markdown helpers for non-structured reports (greeting/org/requirement) ---
   type Section = { title: string; lines: string[] }

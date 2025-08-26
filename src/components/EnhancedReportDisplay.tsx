@@ -4,6 +4,8 @@ import { parseMarkdownToReport } from '@/polaris/needs-analysis/parse'
 import { convertNaJsonStringToMarkdown } from '@/polaris/needs-analysis/format'
 import type { NAReport } from '@/polaris/needs-analysis/report'
 import { generateShareLink, copyToClipboard } from '@/utils/shareUtils'
+import { getReportPublicStatus, toggleReportPublicStatus } from '@/services/polarisSummaryService'
+import { getStarmapPublicStatus, toggleStarmapPublicStatus } from '@/services/starmapJobsService'
 
 
 interface EnhancedReportDisplayProps {
@@ -259,8 +261,24 @@ const EnhancedReportDisplay = memo(({
   // Tabs removed; default to overview-only rendering
   const [showCopySuccess, setShowCopySuccess] = useState(false)
 
+  const ensurePublic = useCallback(async () => {
+      if (summaryId) {
+        const { isPublic } = await getReportPublicStatus(summaryId)
+        if (!isPublic) {
+          await toggleReportPublicStatus(summaryId)
+        }
+      } else if (starmapJobId) {
+        const { isPublic } = await getStarmapPublicStatus(starmapJobId)
+        if (!isPublic) {
+          await toggleStarmapPublicStatus(starmapJobId)
+        }
+      }
+  }, [summaryId, starmapJobId])
+
   const handleShare = useCallback(async () => {
     if (!summaryId && !starmapJobId) return
+    // Ensure the resource is public before sharing
+    await ensurePublic()
     const link = summaryId
       ? generateShareLink(summaryId, { kind: 'summary' })
       : generateShareLink(starmapJobId!, { kind: 'starmap' })
@@ -269,7 +287,7 @@ const EnhancedReportDisplay = memo(({
       setShowCopySuccess(true)
       setTimeout(() => setShowCopySuccess(false), 2000)
     }
-  }, [summaryId, starmapJobId])
+  }, [summaryId, starmapJobId, ensurePublic])
   
   // Parse report and filter test data
   const report = useMemo(() => {

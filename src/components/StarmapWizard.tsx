@@ -25,11 +25,11 @@ export function StepIndicator({ steps, currentStep, completedSteps, onStepClick 
                 {index < steps.length - 1 && (
                   <div className="absolute left-1/2 top-8 w-full h-0.5">
                     <div className="w-full h-full bg-white/10" />
-                    <div 
-                      className={`absolute inset-0 bg-gradient-to-r from-primary-400 to-secondary-400 transition-all duration-500 ${
-                        completed.includes(index) ? 'w-full' : 'w-0'
-                      }`}
-                    />
+                                      <div 
+                    className={`absolute inset-0 bg-primary-500 transition-all duration-500 ${
+                      completed.includes(index) ? 'w-full' : 'w-0'
+                    }`}
+                  />
                   </div>
                 )}
                 
@@ -44,12 +44,12 @@ export function StepIndicator({ steps, currentStep, completedSteps, onStepClick 
                   <div className={`
                     w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 
                     ${isActive 
-                      ? 'bg-gradient-to-br from-primary-400 to-secondary-400 shadow-lg shadow-primary-400/30 scale-110' 
+                      ? 'bg-primary-500 shadow-lg shadow-primary-500/30 scale-110' 
                       : isCompleted 
                       ? 'bg-gradient-to-br from-emerald-500 to-teal-500 shadow-md shadow-emerald-400/20'
                       : isAccessible
-                      ? 'bg-white/10 hover:bg-white/15 border border-white/20'
-                      : 'bg-white/5 border border-white/10'
+                      ? 'bg-[rgb(var(--bg))] border border-primary-500'
+                      : 'bg-[rgb(var(--bg))] border border-primary-500'
                     }
                   `}>
                     {isCompleted ? (
@@ -57,7 +57,7 @@ export function StepIndicator({ steps, currentStep, completedSteps, onStepClick 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                       </svg>
                     ) : (
-                      <span className={`text-lg font-bold ${isActive ? 'text-white' : 'text-white/70'}`}>
+                      <span className={`text-lg font-bold ${isActive ? 'text-secondary-500' : 'text-white/70'}`}>
                         {index + 1}
                       </span>
                     )}
@@ -101,9 +101,9 @@ export function StepIndicator({ steps, currentStep, completedSteps, onStepClick 
                 key={index}
                 className={`h-2 rounded-full transition-all ${
                   index === currentStep
-                    ? 'w-8 bg-gradient-to-r from-primary-400 to-secondary-400'
+                    ? 'w-8 bg-primary-500'
                     : completed.includes(index)
-                    ? 'w-2 bg-emerald-400'
+                    ? 'w-2 bg-primary-500'
                     : 'w-2 bg-white/20'
                 }`}
               />
@@ -253,13 +253,14 @@ export function ActionButtons({
           <button
             type="button"
             onClick={handleBack}
-            className="btn-ghost flex items-center gap-2"
+            className="w-12 h-12 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 flex items-center justify-center transition-all duration-200 group"
             disabled={isLoading}
+            aria-label={label}
+            title={label}
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5 text-secondary-500 group-hover:text-secondary-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            {label}
           </button>
         )}
       </div>
@@ -269,10 +270,14 @@ export function ActionButtons({
           <button
             type="button"
             onClick={onSkip}
-            className="btn-ghost text-white/60"
+            className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 flex items-center justify-center transition-all duration-200 group"
             disabled={isLoading}
+            aria-label={skipLabel}
+            title={skipLabel}
           >
-            {skipLabel}
+            <svg className="w-4 h-4 text-secondary-500 group-hover:text-secondary-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
+            </svg>
           </button>
         )}
         
@@ -281,29 +286,27 @@ export function ActionButtons({
             type="button"
             onClick={onNext}
             className={`
-              relative px-6 py-2.5 rounded-xl font-medium transition-all duration-200
+              relative w-12 h-12 rounded-xl font-medium transition-all duration-200 flex items-center justify-center
               ${nextDisabled 
                 ? 'bg-white/10 text-white/40 cursor-not-allowed' 
-                : 'bg-gradient-to-r from-primary-500 to-secondary-500 text-white hover:shadow-lg hover:shadow-primary-500/25 hover:scale-105'
+                : 'bg-secondary-500 text-white hover:bg-secondary-400 hover:shadow-lg hover:shadow-secondary-500/25 hover:scale-105'
               }
             `}
             disabled={nextDisabled || isLoading}
+            aria-label={nextLabel}
+            title={nextLabel}
           >
             {isLoading ? (
-              <div className="flex items-center gap-2">
-                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+              <div className="flex items-center justify-center">
+                <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
-                Processing...
               </div>
             ) : (
-              <div className="flex items-center gap-2">
-                {nextLabel}
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </div>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             )}
           </button>
         )}
@@ -331,7 +334,7 @@ export function ProgressBar({ value, max, label }: ProgressBarProps) {
       )}
       <div className="h-2 bg-white/10 rounded-full overflow-hidden">
         <div 
-          className="h-full bg-gradient-to-r from-primary-400 to-secondary-400 rounded-full transition-all duration-500"
+          className="h-full bg-primary-500 rounded-full transition-all duration-500"
           style={{ width: `${percentage}%` }}
         />
       </div>

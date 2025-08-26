@@ -156,7 +156,7 @@ export default function AllStarmaps() {
           </button>
         </div>
       ) : (
-        <div>
+        <div className="bg-[rgb(var(--bg))] p-4 rounded-lg">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-sm font-semibold text-white/80 accent-text-soft">Your Starmaps</h2>
           </div>

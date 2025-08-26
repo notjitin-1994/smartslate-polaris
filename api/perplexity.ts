@@ -5,6 +5,13 @@ const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || process.env.VITE_PE
 const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || process.env.VITE_PERPLEXITY_BASE_URL || 'https://api.perplexity.ai'
 const PERPLEXITY_MODEL = process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar-pro'
 
+// Performance monitoring
+const logPerformance = (operation: string, startTime: number) => {
+  const duration = Date.now() - startTime
+  console.log(`[API Performance] ${operation}: ${duration}ms`)
+  return duration
+}
+
 function normalizePerplexityModel(input?: string): string {
   const requested = (input || '').trim().toLowerCase()
 
@@ -39,10 +46,16 @@ function normalizePerplexityModel(input?: string): string {
 const HARDCODED_KEY = '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'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Basic CORS allowance and preflight handling
+  const startTime = Date.now()
+  
+  // Generate request ID early for tracking throughout the request lifecycle
+  const requestId = (req.headers['x-request-id'] as string) || `req_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+  
+  // Enhanced CORS with caching headers
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-ID')
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
 
   if (req.method === 'OPTIONS') {
     return res.status(200).end()
@@ -111,13 +124,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       max_tokens,
     }
     
-    // Log request details for debugging
-    console.log('Perplexity API request:', {
+    // Enhanced logging with request ID for tracing
+    console.log('[Perplexity API] Request:', {
+      requestId,
       url: `${PERPLEXITY_BASE_URL}/chat/completions`,
       model: requestPayload.model,
       messageCount: messages.length,
       temperature,
-      max_tokens
+      max_tokens,
+      timestamp: new Date().toISOString()
     })
     
     const response = await fetch(`${PERPLEXITY_BASE_URL}/chat/completions`, {
@@ -142,19 +157,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const data = await response.json()
-    res.status(200).json(data)
+    
+    // Log performance metrics
+    const duration = logPerformance(`Perplexity API call (${requestPayload.model})`, startTime)
+    
+    // Add performance metadata to response
+    const enhancedResponse = {
+      ...(typeof data === 'object' && data !== null ? data : {}),
+      metadata: {
+        requestId,
+        model: requestPayload.model,
+        duration,
+        timestamp: new Date().toISOString()
+      }
+    }
+    
+    res.status(200).json(enhancedResponse)
   } catch (error) {
+    // Enhanced error handling with request tracking
+    const duration = Date.now() - startTime
+    
     if (error instanceof Error && error.name === 'AbortError') {
-      console.error('Perplexity API handler timeout:', `Exceeded ${Number(process.env.PPLX_SERVER_TIMEOUT_MS || 75000)}ms`)
+      console.error('[Perplexity API] Timeout:', {
+        requestId,
+        duration,
+        timeout: Number(process.env.PPLX_SERVER_TIMEOUT_MS || 75000)
+      })
       return res.status(504).json({ 
         error: 'Upstream timeout',
-        details: 'Perplexity request exceeded server timeout'
+        details: 'Perplexity request exceeded server timeout',
+        requestId,
+        duration
       })
     }
-    console.error('Perplexity API handler error:', error)
+    
+    console.error('[Perplexity API] Error:', {
+      requestId,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      duration
+    })
+    
     res.status(500).json({ 
       error: 'Internal server error',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error',
+      requestId,
+      duration
     })
   }
 }

@@ -113,12 +113,12 @@ export default function StarmapJobsDashboard() {
   return (
     <div className="min-h-screen bg-[rgb(var(--bg))] text-white">
       {/* Header */}
-      <div className="border-b border-white/10 bg-black/20 backdrop-blur-xl">
+      <div className="border-b border-white/10 bg-[rgb(var(--bg))]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold text-white">Your Starmaps</h1>
-              <p className="text-white/70 mt-1">Manage and track your L&D starmap journeys</p>
+              <p className="text-white/70 mt-1">One place to track all your Starmaps</p>
             </div>
             <button
               onClick={() => navigate('/discover')}

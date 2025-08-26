@@ -176,7 +176,7 @@ export default function AllSummaries() {
           </button>
         </div>
       ) : (
-        <div>
+        <div className="bg-[rgb(var(--bg))] p-4 rounded-lg">
           <h2 className="text-sm font-semibold text-white/80 mb-3">Your Starmaps</h2>
           <div className="space-y-3">
             {summaries.map((summary) => (

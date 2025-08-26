@@ -74,6 +74,8 @@ export default function PolarisRevampedV3() {
   const [asyncJobId, setAsyncJobId] = useState<string | null>(null)
   const [asyncStatus, setAsyncStatus] = useState<string | null>(null)
   const [asyncProgress, setAsyncProgress] = useState(0)
+  const [asyncPhase, setAsyncPhase] = useState<string>('')
+  const [asyncMessage, setAsyncMessage] = useState<string>('')
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
   
@@ -188,8 +190,11 @@ export default function PolarisRevampedV3() {
     // Resume polling if job is processing
     if (job.status === 'processing' && job.report_job_id) {
       setAsyncJobId(job.report_job_id)
-      setAsyncStatus('processing')
-      startPolling(job.id)
+              setAsyncStatus('processing')
+        const loadingInfo = getLoadingMessage('processing', 0)
+        setAsyncPhase(loadingInfo.phase)
+        setAsyncMessage(loadingInfo.message)
+        startPolling(job.id)
     }
     
     // Navigate to appropriate step
@@ -319,6 +324,11 @@ export default function PolarisRevampedV3() {
       setAsyncStatus('processing')
       setAsyncProgress(0)
       
+      // Set initial loading message
+      const loadingInfo = getLoadingMessage('processing', 0)
+      setAsyncPhase(loadingInfo.phase)
+      setAsyncMessage(loadingInfo.message)
+      
       // Save async job info
       await saveSessionState(job.id, {
         active: 'report',
@@ -359,6 +369,11 @@ export default function PolarisRevampedV3() {
       setAsyncStatus(data.status)
       setAsyncProgress(data.progress)
       
+      // Update dynamic loading messages
+      const loadingInfo = getLoadingMessage(data.status, data.progress)
+      setAsyncPhase(loadingInfo.phase)
+      setAsyncMessage(loadingInfo.message)
+      
       if (data.status === 'succeeded' && data.result) {
         // Job completed successfully
         setReport(data.result)
@@ -392,6 +407,61 @@ export default function PolarisRevampedV3() {
   
   function getStepIndex(stepId: string): number {
     return STEPS.findIndex(s => s.id === stepId)
+  }
+
+  function getLoadingMessage(status: string, progress: number): { title: string; message: string; phase: string } {
+    switch (status) {
+      case 'queued':
+        return {
+          title: 'Your Starmap is Queued',
+          message: 'We\'re preparing to generate your personalized L&D starmap. This typically takes 1-2 minutes.',
+          phase: 'queued'
+        }
+      case 'running':
+        if (progress < 20) {
+          return {
+            title: 'Analyzing Your Inputs',
+            message: 'Processing your organization details and project requirements to create targeted questions.',
+            phase: 'analyzing'
+          }
+        } else if (progress < 40) {
+          return {
+            title: 'Researching Best Practices',
+            message: 'Gathering industry insights and L&D methodologies relevant to your situation.',
+            phase: 'researching'
+          }
+        } else if (progress < 60) {
+          return {
+            title: 'Crafting Your Strategy',
+            message: 'Developing personalized recommendations and action plans based on your unique context.',
+            phase: 'crafting'
+          }
+        } else if (progress < 80) {
+          return {
+            title: 'Finalizing Your Starmap',
+            message: 'Polishing the details and ensuring all recommendations are actionable and well-structured.',
+            phase: 'finalizing'
+          }
+        } else {
+          return {
+            title: 'Almost Complete!',
+            message: 'Adding final touches and preparing your comprehensive L&D starmap for delivery.',
+            phase: 'completing'
+          }
+        }
+      case 'processing':
+        return {
+          title: 'Processing Your Request',
+          message: 'Setting up the AI analysis pipeline and preparing to generate your starmap.',
+          phase: 'processing'
+        }
+      default:
+        return {
+          title: 'Your Starmap is Being Generated',
+          message: 'You can safely navigate away and return later. We\'ll save your report when it\'s ready.',
+          phase: 'generating'
+        }
+    }
   }
   
   function canProceedToNext(): boolean {
@@ -526,31 +596,50 @@ export default function PolarisRevampedV3() {
         
         {generating && !asyncJobId ? (
           <WizardContainer 
-            title="Generating Content" 
-            description={generationProgress}
+            title="Preparing Your Starmap" 
+            description="Setting up the AI analysis pipeline and preparing your personalized questions."
           >
             <div className="text-center py-12">
-              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-400 mx-auto mb-4"></div>
-              <p className="text-lg text-white/80">{generationProgress}</p>
+              <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-500 mx-auto mb-4"></div>
+              <p className="text-lg text-white/80 mb-4">
+                {generationProgress || 'Initializing AI analysis...'}
+              </p>
+              <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 border border-primary-500/30 rounded-full">
+                <div className="w-2 h-2 bg-primary-400 rounded-full animate-pulse"></div>
+                <span className="text-sm font-medium text-primary-300">
+                  Preparing
+                </span>
+              </div>
             </div>
           </WizardContainer>
         ) : active === 'report' && (asyncStatus === 'processing' || asyncStatus === 'queued' || asyncStatus === 'running') ? (
           <WizardContainer 
-            title="Your Starmap is Being Generated" 
-            description="You can safely navigate away and return later. We'll save your report when it's ready."
+            title={getLoadingMessage(asyncStatus || 'processing', asyncProgress).title}
+            description={asyncMessage || "You can safely navigate away and return later. We'll save your report when it's ready."}
           >
             <div className="text-center py-12">
               <div className="mb-8">
                 <div className="w-full bg-white/10 rounded-full h-4 overflow-hidden">
                   <div 
-                    className="bg-gradient-to-r from-primary-400 to-secondary-400 h-full transition-all duration-500"
+                    className="bg-primary-500 h-full transition-all duration-500"
                     style={{ width: `${asyncProgress}%` }}
                   />
                 </div>
                 <p className="mt-2 text-white/60">{asyncProgress}% complete</p>
               </div>
+              
+              {/* Dynamic Phase Indicator */}
+              <div className="mb-6">
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500/20 border border-primary-500/30 rounded-full">
+                  <div className="w-2 h-2 bg-primary-400 rounded-full animate-pulse"></div>
+                  <span className="text-sm font-medium text-primary-300 capitalize">
+                    {asyncPhase || 'processing'}
+                  </span>
+                </div>
+              </div>
+              
               <p className="text-lg text-white mb-4">
-                Your personalized L&D starmap is being crafted with advanced AI
+                {asyncMessage || 'Your personalized L&D starmap is being crafted with advanced AI'}
               </p>
               <p className="text-white/70 mb-8">
                 This typically takes 1-2 minutes. Feel free to browse other sections or come back later.

@@ -85,6 +85,7 @@ SwirlBackground.displayName = 'SwirlBackground'
 export default function PublicReportView() {
   const { id } = useParams<{ id: string }>()
   const [reportMarkdown, setReportMarkdown] = useState<string>('')
+  const [reportTitle, setReportTitle] = useState<string>('Needs Analysis Report')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -111,7 +112,7 @@ export default function PublicReportView() {
         if (fetchError || !data) {
           const { data: starmap, error: starmapErr } = await supabase
             .from('starmap_jobs')
-            .select('final_report, preliminary_report')
+            .select('title, final_report, preliminary_report')
             .eq('id', id)
             .eq('is_public', true)
             .single()
@@ -126,15 +127,27 @@ export default function PublicReportView() {
             setLoading(false)
             return
           }
-          const markdown = convertNaJsonStringToMarkdown(raw) || String(raw)
-          setReportMarkdown(markdown)
+          const rawText = typeof raw === 'string' ? raw : JSON.stringify(raw)
+          if (rawText.trim().startsWith('{')) {
+            setReportMarkdown(rawText)
+          } else {
+            const markdown = convertNaJsonStringToMarkdown(rawText) || String(rawText)
+            setReportMarkdown(markdown)
+          }
+          setReportTitle((starmap as any)?.title || 'Needs Analysis Report')
           setLoading(false)
           return
         }
         // Summaries path
         const raw = (data as any)?.needs_analysis_report || (data as any)?.summary_content || ''
-        const markdown = typeof raw === 'string' ? (convertNaJsonStringToMarkdown(raw) || raw) : convertNaJsonStringToMarkdown(JSON.stringify(raw))
-        setReportMarkdown(markdown || '')
+        const rawText = typeof raw === 'string' ? raw : JSON.stringify(raw)
+        if (rawText.trim().startsWith('{')) {
+          setReportMarkdown(rawText)
+        } else {
+          const markdown = convertNaJsonStringToMarkdown(rawText) || rawText
+          setReportMarkdown(markdown || '')
+        }
+        setReportTitle((data as any)?.report_title || (data as any)?.company_name || 'Needs Analysis Report')
       } catch (err) {
         console.error('Error loading report:', err)
         setError('Failed to load report')
@@ -207,7 +220,7 @@ export default function PublicReportView() {
         <div className="container mx-auto px-4 py-8 max-w-7xl">
           <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.35)] overflow-hidden">
             <div className="p-4 md:p-8">
-              <EnhancedReportDisplay reportMarkdown={reportMarkdown} />
+              <EnhancedReportDisplay reportMarkdown={reportMarkdown} reportTitle={reportTitle} />
             </div>
           </div>
           <div className="mt-12 text-center text-white/50 text-sm font-['Lato']">

@@ -4,6 +4,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { paths } from '@/routes/paths'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { withLazyLoad } from '@/components/LazyLoad'
+import { DevDebugButton } from '@/components/DevDebugButton'
 
 // Eagerly loaded components (needed immediately)
 import AuthCallback from '@/pages/AuthCallback'
@@ -21,6 +22,7 @@ const StarmapJobsDashboard = withLazyLoad(() => import('@/components/StarmapJobs
 const Pricing = withLazyLoad(() => import('@/pages/Pricing'))
 const SeedJitinStarmap = withLazyLoad(() => import('@/pages/SeedJitinStarmap'))
 const ReportsDebug = withLazyLoad(() => import('@/pages/ReportsDebug'))
+const ApiDebug = withLazyLoad(() => import('@/pages/ApiDebug'))
 
 // Job-based Polaris routes (lazy)
 const PolarisJobsDashboard = withLazyLoad(() => import('@/components/PolarisJobsDashboard'))
@@ -56,6 +58,9 @@ export function OptimizedAppRouter() {
             <Route path={paths.publicProfile} element={<PublicProfile />} />
             <Route path="/report/public/:id" element={<PublicReportView />} />
             <Route path="/report/public/starmap/:id" element={<PublicReportView />} />
+            {import.meta.env.DEV && (
+              <Route path="/dev/debug" element={<ApiDebug />} />
+            )}
             
             
             {/* Protected routes - require authentication */}
@@ -100,6 +105,7 @@ export function OptimizedAppRouter() {
               }
             />
           </Routes>
+          {import.meta.env.DEV && <DevDebugButton />}
           
         </Suspense>
       </AuthProvider>

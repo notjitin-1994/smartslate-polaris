@@ -1099,6 +1099,40 @@ ${extraInstruction}
       setSavingPrelim(false)
       stopSmartLoader()
 
+      // Fire-and-forget background job to generate dynamic questionnaire
+      try {
+        const dynIdemKey = `dynq:${lastSavedSummaryId || ''}`
+        const dynJobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`
+
+        // Create DB job row with metadata indicating dynamic questionnaire
+        const { data: dynJob, error: dynJobErr } = await createReportJob({
+          job_id: dynJobId,
+          summary_id: lastSavedSummaryId || undefined,
+          status: 'queued',
+          model: (env as any).anthropicModel || 'claude-3-5-sonnet-latest',
+          temperature: 0.6,
+          max_tokens: 6000,
+          metadata: { report_type: 'dynamic_questionnaire' },
+        })
+
+        if (!dynJobErr && dynJob) {
+          // Trigger job execution via API (do not await)
+          void fetch('/api/reportJobsDb', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Idempotency-Key': dynIdemKey },
+            body: JSON.stringify({
+              prompt: 'dynamic_questionnaire',
+              model: (env as any).anthropicModel || 'claude-3-5-sonnet-latest',
+              summary_id: lastSavedSummaryId,
+              user_id: user?.id,
+              metadata: { report_type: 'dynamic_questionnaire' },
+            })
+          }).catch(() => {})
+        }
+      } catch (e) {
+        console.warn('Dynamic questionnaire background job trigger failed:', e)
+      }
+
       // Proceed to dynamic stages (which will leverage editedPrelim)
       await generateDynamicQuestions()
     } catch (err: any) {

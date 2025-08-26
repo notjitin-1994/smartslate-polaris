@@ -28,6 +28,161 @@ function generateWebhookSignature(payload: string, secret: string): string {
   return `sha256=${hmac.digest('hex')}`
 }
 
+// ---------- Dynamic Questionnaire Helpers ----------
+
+async function callAnthropicMessages(payload: {
+  model: string
+  temperature: number
+  system?: string
+  messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  max_tokens: number
+}): Promise<{ ok: boolean; content?: string; status?: number; error?: string }> {
+  try {
+    const apiKey = (process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || '').trim()
+    const baseUrl = ((process.env.ANTHROPIC_BASE_URL || process.env.VITE_ANTHROPIC_BASE_URL || 'https://api.anthropic.com').trim()).replace(/\/$/, '')
+    const version = (process.env.ANTHROPIC_VERSION || '2023-06-01').trim()
+    if (!apiKey) return { ok: false, error: 'Anthropic API key not configured' }
+
+    const controller = new AbortController()
+    const SERVER_TIMEOUT_MS = Number(process.env.ANTHROPIC_SERVER_TIMEOUT_MS || 115000)
+    const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
+
+    const resp = await fetch(`${baseUrl}/v1/messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': version,
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    })
+
+    clearTimeout(timeoutId)
+
+    const text = await resp.text()
+    if (!resp.ok) return { ok: false, status: resp.status, error: text || `HTTP ${resp.status}` }
+
+    // Anthropic returns either { content: [{ type: 'text', text: '...' }] } or a string
+    try {
+      const data: any = JSON.parse(text)
+      const content = Array.isArray(data?.content) ? (data.content.find((c: any) => c.type === 'text')?.text || '') : (data?.content || '')
+      return { ok: true, content }
+    } catch {
+      return { ok: true, content: text }
+    }
+  } catch (err: any) {
+    const msg = err?.name === 'AbortError' ? 'Anthropic request timed out' : (err?.message || 'Anthropic request failed')
+    return { ok: false, error: msg }
+  }
+}
+
+function cleanAndParseJson<T = any>(raw: string): T {
+  const cleaned = (raw || '')
+    .replace(/```json\n?/g, '')
+    .replace(/```\n?/g, '')
+    .trim()
+  return JSON.parse(cleaned) as T
+}
+
+async function buildDynamicQuestionnairePrompt(summaryId: string): Promise<string> {
+  if (!supabase) return ''
+  // Pull context from summary
+  const { data: s } = await supabase
+    .from('polaris_summaries')
+    .select('company_name, prelim_report, greeting_report, org_report, requirement_report, stage1_answers, stage2_answers, stage3_answers')
+    .eq('id', summaryId)
+    .single()
+
+  const prelim = (s as any)?.prelim_report || ''
+  const greeting = (s as any)?.greeting_report || ''
+  const org = (s as any)?.org_report || ''
+  const req = (s as any)?.requirement_report || ''
+  const stage1 = JSON.stringify((s as any)?.stage1_answers || {})
+  const stage2 = JSON.stringify((s as any)?.stage2_answers || {})
+  const stage3 = JSON.stringify((s as any)?.stage3_answers || {})
+
+  return [
+    'You are designing a dynamic questionnaire to gather deeper insights for a Learning Needs Analysis. Return ONLY valid JSON.',
+    'JSON schema:',
+    '{ "stages": [ { "id": "stage_1", "title": "string", "description": "string?", "questions": [',
+    '{ "id": "string", "type": "text|textarea|single_select|multi_select|slider|number|calendar_date|calendar_range|boolean", "label": "string", "help?": "string", "required?": true, "options?": [{"value":"","label":""}] } ] } ] }',
+    'Constraints:',
+    '- 2 to 4 stages. Each stage 6-9 questions. Avoid duplicates. Make questions actionable and varied.',
+    '- Use prior answers and reports to tailor focus areas.',
+    `Company: ${(s as any)?.company_name || ''}`,
+    `Stage 1 answers: ${stage1}`,
+    `Stage 2 answers: ${stage2}`,
+    `Stage 3 answers: ${stage3}`,
+    'Reports context below to inform questions:',
+    `Preliminary Report:\n${prelim}`,
+    `Greeting Report:\n${greeting}`,
+    `Organization Report:\n${org}`,
+    `Requirements Report:\n${req}`,
+  ].join('\n\n')
+}
+
+async function generateDynamicQuestionnaire(summaryId: string): Promise<{ stagesJson: string; stagesObj: any }> {
+  const system = 'You are an expert learning designer. Produce concise, high-quality JSON only.'
+  const prompt = await buildDynamicQuestionnairePrompt(summaryId)
+
+  const model = (process.env.ANTHROPIC_MODEL || process.env.VITE_ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest').trim()
+  const maxTokens = Math.min(parseInt(process.env.ANTHROPIC_MAX_TOKENS || process.env.VITE_ANTHROPIC_MAX_TOKENS || '12000'), 8192)
+
+  const result = await callAnthropicMessages({
+    model,
+    temperature: 0.6,
+    system,
+    messages: [{ role: 'user', content: prompt }],
+    max_tokens: maxTokens,
+  })
+
+  if (!result.ok || !result.content) {
+    throw new Error(result.error || 'Dynamic questionnaire generation failed')
+  }
+
+  // Ensure JSON shape
+  const parsed = cleanAndParseJson<any>(result.content)
+  const stagesArray = Array.isArray(parsed?.stages) ? parsed.stages : parsed
+  const safe = { stages: stagesArray }
+  return { stagesJson: JSON.stringify(safe), stagesObj: safe }
+}
+
+async function notifyDynamicQuestionnaire(
+  jobId: string,
+  summaryId: string,
+  questionnaire: any,
+  status: 'completed' | 'failed',
+  errorMessage?: string
+): Promise<{ success: boolean; usedWebhook: boolean; error?: string }> {
+  const payload = {
+    job_id: jobId,
+    summary_id: summaryId,
+    questionnaire,
+    status,
+    ...(errorMessage && { error: errorMessage })
+  }
+
+  const webhookResult = await callWebhook('dynamic-questionnaire', payload)
+  if (webhookResult.success) return { success: true, usedWebhook: true }
+
+  // Fallback: direct DB update
+  if (!supabase) return { success: false, usedWebhook: false, error: webhookResult.error }
+  try {
+    const questionnaireString = typeof questionnaire === 'string' ? questionnaire : JSON.stringify(questionnaire)
+    const { error } = await supabase
+      .from('polaris_summaries')
+      .update({ dynamic_questionnaire_report: questionnaireString })
+      .eq('id', summaryId)
+    if (error) {
+      return { success: false, usedWebhook: false, error: error.message }
+    }
+    return { success: true, usedWebhook: false }
+  } catch (e: any) {
+    return { success: false, usedWebhook: false, error: e?.message || webhookResult.error }
+  }
+}
+
 async function callWebhook(
   endpoint: string,
   payload: any,
@@ -208,6 +363,7 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
     const reportType = (jobRow as any)?.metadata?.report_type as string | undefined
     const reportId = (jobRow as any)?.metadata?.report_id as string | undefined
     const reportTable = getReportTableFromType(reportType)
+    const summaryIdForDynamic = (jobRow as any)?.summary_id as string | undefined
 
     // Update job status to running
     const { error: updateError } = await supabase
@@ -240,6 +396,28 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
         .eq('id', reportId)
     }
 
+    // Branch 1: Dynamic questionnaire job
+    if (String(reportType).toLowerCase() === 'dynamic_questionnaire' || (!reportTable && summaryIdForDynamic)) {
+      // Progress update for dynamic generation
+      await supabase
+        .from('report_jobs')
+        .update({ percent: 20, eta_seconds: 90 })
+        .eq('job_id', jobId)
+
+      const { stagesJson, stagesObj } = await generateDynamicQuestionnaire(summaryIdForDynamic || '')
+
+      // Mark job success
+      await supabase
+        .from('report_jobs')
+        .update({ status: 'succeeded', result: stagesJson, percent: 100, eta_seconds: 0, completed_at: new Date().toISOString() })
+        .eq('job_id', jobId)
+
+      // Deliver via webhook (or fallback DB update)
+      await notifyDynamicQuestionnaire(jobId, summaryIdForDynamic || '', stagesObj, 'completed')
+      return
+    }
+
+    // Branch 2: Research report job (existing behavior)
     const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || process.env.VITE_PERPLEXITY_API_KEY || ''
     const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || process.env.VITE_PERPLEXITY_BASE_URL || 'https://api.perplexity.ai'
     const mdl = normalizePerplexityModel(model || process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar-pro')
@@ -363,7 +541,7 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
         .eq('job_id', jobId)
     }
 
-    // Reflect failure in the target report row via webhook
+    // Reflect failure in the target report row via webhook or dynamic questionnaire fallback
     try {
       const { data: jobRow } = await supabase
         .from('report_jobs')
@@ -373,8 +551,11 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
       const reportType = (jobRow as any)?.metadata?.report_type as string | undefined
       const reportId = (jobRow as any)?.metadata?.report_id as string | undefined
       const reportTable = getReportTableFromType(reportType)
+      const summaryIdForDynamic = (jobRow as any)?.metadata?.summary_id || (jobRow as any)?.summary_id
       
-      if (reportTable && reportId && reportType) {
+      if (String(reportType).toLowerCase() === 'dynamic_questionnaire' && summaryIdForDynamic) {
+        await notifyDynamicQuestionnaire(jobId, String(summaryIdForDynamic), {}, 'failed', err?.message || 'Job failed')
+      } else if (reportTable && reportId && reportType) {
         const researchMetadata = {
           ...(jobRow as any)?.metadata,
           job_id: jobId,

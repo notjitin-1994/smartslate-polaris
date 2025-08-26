@@ -64,7 +64,7 @@ const DataCard = memo(({
   }
   
   return (
-    <div className={`rounded-2xl border ${variantStyles[variant]} p-5 transition-all duration-300 hover:shadow-lg hover:shadow-black/10`}>
+    <div className={`rounded-2xl border ${variantStyles[variant]} p-6 transition-all duration-300 hover:shadow-lg hover:shadow-black/10 h-full flex flex-col`}>
       <div 
         className={`flex items-center gap-3 mb-4 ${expandable ? 'cursor-pointer' : ''}`}
         onClick={() => expandable && setIsExpanded(!isExpanded)}
@@ -83,7 +83,7 @@ const DataCard = memo(({
         )}
       </div>
       {isExpanded && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+        <div className="animate-in fade-in slide-in-from-top-2 duration-300 flex-1">
           {children}
         </div>
       )}
@@ -260,6 +260,20 @@ const EnhancedReportDisplay = memo(({
   const [titleInput, setTitleInput] = useState(reportTitle)
   // Tabs removed; default to overview-only rendering
   const [showCopySuccess, setShowCopySuccess] = useState(false)
+
+  // Utility to render a responsive grid where the last card spans full width when count is odd
+  const renderResponsiveGrid = (nodes: ReactNode[]) => {
+    const cards = nodes.filter((n): n is ReactNode => Boolean(n))
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+        {cards.map((node, idx) => (
+          <div key={idx} className={(idx === cards.length - 1 && cards.length % 2 === 1 ? 'lg:col-span-2 ' : '') + 'h-full'}>
+            {node}
+          </div>
+        ))}
+      </div>
+    )
+  }
 
   const ensurePublic = useCallback(async () => {
       if (summaryId) {
@@ -484,152 +498,149 @@ const EnhancedReportDisplay = memo(({
       <div className="space-y-6">
         <div className="space-y-6">
             {/* Grid for primary cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Executive Summary */}
-            <DataCard
-              title="Executive Summary"
-              icon={
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              }
-              variant="primary"
-            >
-              <div className="space-y-4 text-sm">
-                {report.summary?.problem_statement && (
-                  <div>
-                    <div className="text-white/60 text-xs uppercase tracking-wider mb-1">Problem Statement</div>
-                    <div className="text-white/90">{report.summary.problem_statement}</div>
-                  </div>
-                )}
-                {report.summary?.objectives && report.summary.objectives.length > 0 && (
-                  <div>
-                    <div className="text-white/60 text-xs uppercase tracking-wider mb-2">Key Objectives</div>
-                    <div className="space-y-2">
-                      {report.summary.objectives.map((obj, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary-400 mt-1.5 flex-shrink-0" />
-                          <div className="text-white/80">{obj}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </DataCard>
-            
-            {/* Delivery Timeline */}
-            {report.delivery_plan?.timeline && report.delivery_plan.timeline.length > 0 && (
-              <DataCard
-                title="Delivery Timeline"
-                icon={
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                }
-                variant="success"
-              >
-                <Timeline items={report.delivery_plan.timeline.filter(t => t.start && t.end) as Array<{label: string; start: string; end: string}>} />
-              </DataCard>
-            )}
-
-            {/* Delivery Phases (if timeline absent) */}
-            {(!report.delivery_plan?.timeline || report.delivery_plan.timeline.length === 0) && report.delivery_plan?.phases?.length > 0 && (
-              <DataCard
-                title="Implementation Roadmap"
-                icon={
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
-                  </svg>
-                }
-                variant="success"
-              >
-                <div className="space-y-3">
-                  {report.delivery_plan.phases.map((p, i) => (
-                    <div key={i} className="p-3 rounded-lg bg-white/5 border border-white/10">
-                      <div className="flex items-center justify-between text-sm text-white/80">
-                        <span className="font-medium">{p.name}</span>
-                        {p.duration_weeks ? (
-                          <span className="text-white/60">{p.duration_weeks} weeks</span>
-                        ) : null}
+            {renderResponsiveGrid([
+              (
+                <DataCard
+                  key="exec-summary"
+                  title="Executive Summary"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  }
+                  variant="primary"
+                >
+                  <div className="space-y-4 text-sm">
+                    {report.summary?.problem_statement && (
+                      <div>
+                        <div className="text-white/60 text-xs uppercase tracking-wider mb-1">Problem Statement</div>
+                        <div className="text-white/90">{report.summary.problem_statement}</div>
                       </div>
-                      {p.goals?.length > 0 && (
-                        <div className="mt-2 text-xs text-white/70">
-                          <div className="text-white/60 mb-1">Goals</div>
-                          <ul className="list-disc pl-5 space-y-0.5">
-                            {p.goals.map((g, idx) => <li key={idx}>{g}</li>)}
-                          </ul>
+                    )}
+                    {report.summary?.objectives && report.summary.objectives.length > 0 && (
+                      <div>
+                        <div className="text-white/60 text-xs uppercase tracking-wider mb-2">Key Objectives</div>
+                        <div className="space-y-2">
+                          {report.summary.objectives.map((obj, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-primary-400 mt-1.5 flex-shrink-0" />
+                              <div className="text-white/80">{obj}</div>
+                            </div>
+                          ))}
                         </div>
-                      )}
-                      {p.activities?.length > 0 && (
-                        <div className="mt-2 text-xs text-white/70">
-                          <div className="text-white/60 mb-1">Activities</div>
-                          <ul className="list-disc pl-5 space-y-0.5">
-                            {p.activities.map((a, idx) => <li key={idx}>{a}</li>)}
-                          </ul>
+                      </div>
+                    )}
+                  </div>
+                </DataCard>
+              ),
+              (report.delivery_plan?.timeline && report.delivery_plan.timeline.length > 0) ? (
+                <DataCard
+                  key="timeline"
+                  title="Delivery Timeline"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  }
+                  variant="success"
+                >
+                  <Timeline items={report.delivery_plan.timeline.filter(t => t.start && t.end) as Array<{label: string; start: string; end: string}>} />
+                </DataCard>
+              ) : null,
+              ((!report.delivery_plan?.timeline || report.delivery_plan.timeline.length === 0) && report.delivery_plan?.phases?.length > 0) ? (
+                <DataCard
+                  key="phases"
+                  title="Implementation Roadmap"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+                    </svg>
+                  }
+                  variant="success"
+                >
+                  <div className="space-y-3">
+                    {report.delivery_plan.phases.map((p, i) => (
+                      <div key={i} className="p-3 rounded-lg bg-white/5 border border-white/10">
+                        <div className="flex items-center justify-between text-sm text-white/80">
+                          <span className="font-medium">{p.name}</span>
+                          {p.duration_weeks ? (
+                            <span className="text-white/60">{p.duration_weeks} weeks</span>
+                          ) : null}
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </DataCard>
-            )}
-            
-            {/* Success Metrics */}
-            {report.measurement?.success_metrics && report.measurement.success_metrics.length > 0 && (
-              <DataCard
-                title="Success Metrics"
-                icon={
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
-                }
-              >
-                <div className="space-y-3">
-                  {report.measurement.success_metrics.slice(0, 3).map((metric, i) => (
-                    <MetricCard
-                      key={i}
-                      metric={typeof metric === 'string' ? metric : metric.metric}
-                      baseline={typeof metric === 'object' ? metric.baseline : null}
-                      target={typeof metric === 'object' ? metric.target : ''}
-                      timeframe={typeof metric === 'object' ? metric.timeframe : ''}
-                    />
-                  ))}
-                </div>
-              </DataCard>
-            )}
-            
-            {/* Risk Assessment */}
-            {report.risks && report.risks.length > 0 && (
-              <DataCard
-                title="Risk Assessment"
-                icon={
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                }
-                variant="warning"
-              >
-                <div className="space-y-3">
-                  {report.risks.map((risk, i) => (
-                    <RiskCard
-                      key={i}
-                      risk={risk.risk}
-                      mitigation={risk.mitigation}
-                      severity={risk.severity as 'low' | 'medium' | 'high'}
-                    />
-                  ))}
-                </div>
-              </DataCard>
-            )}
-            </div>
+                        {p.goals?.length > 0 && (
+                          <div className="mt-2 text-xs text-white/70">
+                            <div className="text-white/60 mb-1">Goals</div>
+                            <ul className="list-disc pl-5 space-y-0.5">
+                              {p.goals.map((g, idx) => <li key={idx}>{g}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                        {p.activities?.length > 0 && (
+                          <div className="mt-2 text-xs text-white/70">
+                            <div className="text-white/60 mb-1">Activities</div>
+                            <ul className="list-disc pl-5 space-y-0.5">
+                              {p.activities.map((a, idx) => <li key={idx}>{a}</li>)}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </DataCard>
+              ) : null,
+              (report.measurement?.success_metrics && report.measurement.success_metrics.length > 0) ? (
+                <DataCard
+                  key="metrics"
+                  title="Success Metrics"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  }
+                >
+                  <div className="space-y-3">
+                    {report.measurement.success_metrics.slice(0, 3).map((metric, i) => (
+                      <MetricCard
+                        key={i}
+                        metric={typeof metric === 'string' ? metric : metric.metric}
+                        baseline={typeof metric === 'object' ? metric.baseline : null}
+                        target={typeof metric === 'object' ? metric.target : ''}
+                        timeframe={typeof metric === 'object' ? metric.timeframe : ''}
+                      />
+                    ))}
+                  </div>
+                </DataCard>
+              ) : null,
+              (report.risks && report.risks.length > 0) ? (
+                <DataCard
+                  key="risks"
+                  title="Risk Assessment"
+                  icon={
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  }
+                  variant="warning"
+                >
+                  <div className="space-y-3">
+                    {report.risks.map((risk, i) => (
+                      <RiskCard
+                        key={i}
+                        risk={risk.risk}
+                        mitigation={risk.mitigation}
+                        severity={risk.severity as 'low' | 'medium' | 'high'}
+                      />
+                    ))}
+                  </div>
+                </DataCard>
+              ) : null,
+            ])}
             
             {/* RECOMMENDED SOLUTION SECTION */}
             <div className="border-t border-white/10 pt-6">
               <h3 className="text-xl font-semibold text-white mb-4">Recommended Solution</h3>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Target Audiences */}
-                {report.solution?.target_audiences?.length > 0 && (
+              {renderResponsiveGrid([
+                report.solution?.target_audiences?.length > 0 ? (
                   <DataCard
                     title="Target Audiences"
                     icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>}
@@ -638,10 +649,9 @@ const EnhancedReportDisplay = memo(({
                       {report.solution.target_audiences.map((a, i) => <li key={i}>{a}</li>)}
                     </ul>
                   </DataCard>
-                )}
+                ) : null,
 
-                {/* Delivery Modalities */}
-                {report.solution?.delivery_modalities?.length > 0 && (
+                report.solution?.delivery_modalities?.length > 0 ? (
                   <DataCard
                     title="Delivery Modalities"
                     icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>}
@@ -655,10 +665,9 @@ const EnhancedReportDisplay = memo(({
                       ))}
                     </ul>
                   </DataCard>
-                )}
+                ) : null,
 
-                {/* Key Competencies */}
-                {report.solution?.key_competencies?.length > 0 && (
+                report.solution?.key_competencies?.length > 0 ? (
                   <DataCard
                     title="Key Competencies"
                     icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4"/></svg>}
@@ -667,10 +676,9 @@ const EnhancedReportDisplay = memo(({
                       {report.solution.key_competencies.map((c, i) => <li key={i}>{c}</li>)}
                     </ul>
                   </DataCard>
-                )}
+                ) : null,
 
-                {/* Content Outline */}
-                {report.solution?.content_outline?.length > 0 && (
+                report.solution?.content_outline?.length > 0 ? (
                   <DataCard
                     title="Proposed Curriculum Structure"
                     icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18"/></svg>}
@@ -679,10 +687,9 @@ const EnhancedReportDisplay = memo(({
                       {report.solution.content_outline.map((c, i) => <li key={i}>{c}</li>)}
                     </ul>
                   </DataCard>
-                )}
+                ) : null,
 
-                {/* Accessibility */}
-                {report.solution?.accessibility_and_inclusion?.standards?.length > 0 && (
+                report.solution?.accessibility_and_inclusion?.standards?.length > 0 ? (
                   <DataCard
                     title="Accessibility & Inclusion"
                     icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>}
@@ -694,16 +701,16 @@ const EnhancedReportDisplay = memo(({
                       <p className="text-sm text-white/60 mt-2">{report.solution.accessibility_and_inclusion.notes}</p>
                     )}
                   </DataCard>
-                )}
-              </div>
+                ) : null,
+              ])}
             </div>
 
             {/* LEARNER ANALYSIS SECTION */}
             {(report.learner_analysis?.profiles?.length > 0 || report.learner_analysis?.readiness_risks?.length > 0) && (
               <div className="border-t border-white/10 pt-6">
                 <h3 className="text-xl font-semibold text-white mb-4">Learner Analysis</h3>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {report.learner_analysis.profiles?.length > 0 && (
+                {renderResponsiveGrid([
+                  report.learner_analysis.profiles?.length > 0 && (
                     <DataCard
                       title="Learner Profiles"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>}
@@ -723,9 +730,8 @@ const EnhancedReportDisplay = memo(({
                         ))}
                       </div>
                     </DataCard>
-                  )}
-                  
-                  {report.learner_analysis.readiness_risks?.length > 0 && (
+                  ) || null,
+                  report.learner_analysis.readiness_risks?.length > 0 ? (
                     <DataCard
                       title="Readiness Risks"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>}
@@ -735,8 +741,8 @@ const EnhancedReportDisplay = memo(({
                         {report.learner_analysis.readiness_risks.map((r, i) => <li key={i}>{r}</li>)}
                       </ul>
                     </DataCard>
-                  )}
-                </div>
+                  ) : null,
+                ])}
               </div>
             )}
 
@@ -827,8 +833,8 @@ const EnhancedReportDisplay = memo(({
             {(report.measurement?.assessment_strategy?.length > 0 || report.measurement?.data_sources?.length > 0 || report.measurement?.learning_analytics) && (
               <div className="border-t border-white/10 pt-6">
                 <h3 className="text-xl font-semibold text-white mb-4">Measurement & Assessment</h3>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {report.measurement.assessment_strategy?.length > 0 && (
+                {renderResponsiveGrid([
+                  report.measurement.assessment_strategy?.length > 0 && (
                     <DataCard
                       title="Assessment Strategy"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>}
@@ -837,9 +843,9 @@ const EnhancedReportDisplay = memo(({
                         {report.measurement.assessment_strategy.map((a, i) => <li key={i}>{a}</li>)}
                       </ul>
                     </DataCard>
-                  )}
+                  ) || null,
                   
-                  {report.measurement.data_sources?.length > 0 && (
+                  report.measurement.data_sources?.length > 0 ? (
                     <DataCard
                       title="Data Sources"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>}
@@ -848,11 +854,11 @@ const EnhancedReportDisplay = memo(({
                         {report.measurement.data_sources.map((d, i) => <li key={i}>{d}</li>)}
                       </ul>
                     </DataCard>
-                  )}
+                  ) : null,
                   
-                  {report.measurement.learning_analytics && (
+                  (report.measurement.learning_analytics && (
                     report.measurement.learning_analytics.levels?.length > 0 || report.measurement.learning_analytics.reporting_cadence
-                  ) && (
+                  )) ? (
                     <DataCard
                       title="Learning Analytics"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 8v8m-4-5v5m-4-2v2m-2 4h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>}
@@ -874,8 +880,8 @@ const EnhancedReportDisplay = memo(({
                         )}
                       </div>
                     </DataCard>
-                  )}
-                </div>
+                  ) : null,
+                ])}
               </div>
             )}
 
@@ -883,7 +889,8 @@ const EnhancedReportDisplay = memo(({
             {report.budget && (report.budget.items?.length > 0 || report.budget.notes) && (
               <div className="border-t border-white/10 pt-6">
                 <h3 className="text-xl font-semibold text-white mb-4">Budget Considerations</h3>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {renderResponsiveGrid([
+                  (
                   <DataCard
                     title="Budget Breakdown"
                     icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
@@ -906,7 +913,8 @@ const EnhancedReportDisplay = memo(({
                       )}
                     </div>
                   </DataCard>
-                </div>
+                  )
+                ])}
               </div>
             )}
 
@@ -914,17 +922,21 @@ const EnhancedReportDisplay = memo(({
             {report.next_steps?.length > 0 && (
               <div className="border-t border-white/10 pt-6">
                 <h3 className="text-xl font-semibold text-white mb-4">Next Steps</h3>
-                <DataCard
-                  title="Recommended Actions"
-                  icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>}
-                  variant="success"
-                >
-                  <ol className="list-decimal pl-6 text-sm text-white/80 space-y-2">
-                    {report.next_steps.map((step, i) => (
-                      <li key={i} className="pl-2">{step}</li>
-                    ))}
-                  </ol>
-                </DataCard>
+                {renderResponsiveGrid([
+                  (
+                    <DataCard
+                      title="Recommended Actions"
+                      icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>}
+                      variant="success"
+                    >
+                      <ol className="list-decimal pl-6 text-sm text-white/80 space-y-2">
+                        {report.next_steps.map((step, i) => (
+                          <li key={i} className="pl-2">{step}</li>
+                        ))}
+                      </ol>
+                    </DataCard>
+                  )
+                ])}
               </div>
             )}
 
@@ -934,8 +946,8 @@ const EnhancedReportDisplay = memo(({
               report.summary?.assumptions?.length > 0 || report.summary?.unknowns?.length > 0) && (
               <div className="border-t border-white/10 pt-6">
                 <h3 className="text-xl font-semibold text-white mb-4">Additional Analysis</h3>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {report.summary.current_state?.length > 0 && (
+                {renderResponsiveGrid([
+                  report.summary.current_state?.length > 0 && (
                     <DataCard
                       title="Current State"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>}
@@ -944,9 +956,9 @@ const EnhancedReportDisplay = memo(({
                         {report.summary.current_state.map((item, i) => <li key={i}>{item}</li>)}
                       </ul>
                     </DataCard>
-                  )}
+                  ) || null,
                   
-                  {report.summary.root_causes?.length > 0 && (
+                  report.summary.root_causes?.length > 0 ? (
                     <DataCard
                       title="Root Causes"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>}
@@ -956,9 +968,9 @@ const EnhancedReportDisplay = memo(({
                         {report.summary.root_causes.map((item, i) => <li key={i}>{item}</li>)}
                       </ul>
                     </DataCard>
-                  )}
+                  ) : null,
                   
-                  {report.summary.assumptions?.length > 0 && (
+                  report.summary.assumptions?.length > 0 ? (
                     <DataCard
                       title="Assumptions"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
@@ -967,9 +979,9 @@ const EnhancedReportDisplay = memo(({
                         {report.summary.assumptions.map((item, i) => <li key={i}>{item}</li>)}
                       </ul>
                     </DataCard>
-                  )}
+                  ) : null,
                   
-                  {report.summary.unknowns?.length > 0 && (
+                  report.summary.unknowns?.length > 0 ? (
                     <DataCard
                       title="Unknowns"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
@@ -979,8 +991,8 @@ const EnhancedReportDisplay = memo(({
                         {report.summary.unknowns.map((item, i) => <li key={i}>{item}</li>)}
                       </ul>
                     </DataCard>
-                  )}
-                </div>
+                  ) : null,
+                ])}
               </div>
             )}
           </div>

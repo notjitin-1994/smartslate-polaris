@@ -5,6 +5,7 @@ import { OptimizedAppRouter } from '@/router/OptimizedAppRouter'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { getSupabase } from '@/services/supabase'
 import { performanceMonitor } from '@/utils/performance'
+import { installApiDebugInterceptor } from '@/dev/apiDebug'
 
 // Ensure a consistent title on Polaris hosts as early as possible
 if (typeof window !== 'undefined') {
@@ -21,6 +22,11 @@ if (typeof window !== 'undefined') {
 
 // Initialize Supabase early so cross-subdomain session adoption (cookie handoff) runs at startup
 getSupabase()
+
+// Install dev-only API debug interceptor
+if (import.meta.env.DEV) {
+  installApiDebugInterceptor()
+}
 
 // Initialize performance monitoring in production
 if (import.meta.env.PROD) {

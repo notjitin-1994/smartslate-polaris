@@ -102,7 +102,7 @@ export function PortalDashboard() {
           title="View all Starmaps"
           description="Browse, manage, and open your Polaris discovery starmaps."
           icon={IconStarmap}
-          onClick={() => navigate('/starmaps')}
+          onClick={() => navigate('/discover')}
         />
         <ActionCard
           title="Create New Starmap"

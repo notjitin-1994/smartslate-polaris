@@ -5,9 +5,9 @@ import type { Database } from '@/types/database.types'
 export type PolarisSummary = Database['public']['Tables']['polaris_summaries']['Row']
 export type CreatePolarisSummary = Database['public']['Tables']['polaris_summaries']['Insert']
 
-// Limits
-export const CREATION_LIMIT = 10
-export const SAVED_LIMIT = 5
+// Limits (default personal plan: Explorer)
+export const CREATION_LIMIT = 5
+export const SAVED_LIMIT = 2
 // Back-compat: SUMMARY_LIMIT previously meant saved summaries. Keep export alias.
 export const SUMMARY_LIMIT = SAVED_LIMIT
 

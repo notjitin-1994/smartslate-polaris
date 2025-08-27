@@ -1,7 +1,7 @@
 import { getSupabase } from '@/lib/supabaseClient'
 import { BaseApiClient } from '@/services/api/baseClient'
 import { env } from '@/config/env'
-import { researchGreeting, researchOrganization, researchRequirements } from '@/services/perplexityService'
+import { unifiedAIService } from '@/services/unifiedAIService'
 
 export type ReportType = 'greeting' | 'org' | 'requirement'
 export type ResearchStatus = 'pending' | 'running' | 'completed' | 'failed'
@@ -157,8 +157,11 @@ export async function runGreetingResearchSync(reportId: string, data: {
   phone?: string
   timezone?: string
 }) {
-  const content = await researchGreeting(data)
-  return updateResearchReport(reportId, content, 'greeting', { model: env.perplexityGreetingModel || 'sonar' })
+  const prompt = (function () {
+    return `You are Solara Polaris's L&D research agent. Generate the greeting intake brief using this JSON:\n${JSON.stringify(data)}\n\nFollow the standard sections and rules. Return only Markdown.`
+  })()
+  const r = await unifiedAIService.research(prompt, { maxTokens: 1200, temperature: 0.3 })
+  return updateResearchReport(reportId, r.content, 'greeting', { provider: r.provider, model: r.model })
 }
 
 export async function runOrgResearchSync(reportId: string, data: {
@@ -172,8 +175,11 @@ export async function runOrgResearchSync(reportId: string, data: {
   stakeholders?: string[]
   requesterRole?: string
 }) {
-  const content = await researchOrganization(data)
-  return updateResearchReport(reportId, content, 'org', { model: env.perplexityOrgModel || 'sonar-pro' })
+  const prompt = (function () {
+    return `You are Solara Polaris's L&D research agent. Generate the organization intake brief using this JSON:\n${JSON.stringify(data)}\n\nFollow the standard sections and rules. Return only Markdown.`
+  })()
+  const r = await unifiedAIService.research(prompt, { maxTokens: 1800, temperature: 0.3 })
+  return updateResearchReport(reportId, r.content, 'org', { provider: r.provider, model: r.model })
 }
 
 export async function runRequirementResearchSync(reportId: string, data: {
@@ -187,8 +193,11 @@ export async function runRequirementResearchSync(reportId: string, data: {
   experts?: string[]
   other?: string
 }) {
-  const content = await researchRequirements(data)
-  return updateResearchReport(reportId, content, 'requirement', { model: env.perplexityRequirementModel || 'sonar-reasoning' })
+  const prompt = (function () {
+    return `You are Solara Polaris's L&D research agent. Generate the requirements brief using this JSON:\n${JSON.stringify(data)}\n\nFollow the standard sections and rules. Return only Markdown.`
+  })()
+  const r = await unifiedAIService.research(prompt, { maxTokens: 2000, temperature: 0.3 })
+  return updateResearchReport(reportId, r.content, 'requirement', { provider: r.provider, model: r.model })
 }
 
 // Build prompts for async job path (mirrors perplexityService prompts)

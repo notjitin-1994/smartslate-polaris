@@ -49,7 +49,7 @@ export const env = {
   anthropicBaseUrl: read('VITE_ANTHROPIC_BASE_URL'),
   anthropicModel: read('VITE_ANTHROPIC_MODEL') || 'claude-3-5-sonnet-latest',
   anthropicMaxTokens: read('VITE_ANTHROPIC_MAX_TOKENS'),
-  perplexityApiKey: read('VITE_PERPLEXITY_API_KEY') || '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',
+  perplexityApiKey: read('VITE_PERPLEXITY_API_KEY'),
   perplexityBaseUrl: read('VITE_PERPLEXITY_BASE_URL') || 'https://api.perplexity.ai',
   perplexityModel: read('VITE_PERPLEXITY_MODEL') || 'sonar',
   perplexityGreetingModel: (read('VITE_PERPLEXITY_GREETING_MODEL') || read('VITE_PERPLEXITY_MODEL') || 'sonar'),

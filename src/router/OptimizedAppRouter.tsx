@@ -1,4 +1,4 @@
-import { Suspense } from 'react'
+import { } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { paths } from '@/routes/paths'
@@ -18,32 +18,16 @@ const SettingsContent = withLazyLoad(() => import('@/portal/SettingsContent').th
 const PublicProfile = withLazyLoad(() => import('@/pages/PublicProfile').then(m => ({ default: m.PublicProfile })))
 const PublicReportView = withLazyLoad(() => import('@/pages/PublicReportView'))
 const PolarisRevampedV3 = withLazyLoad(() => import('@/pages/PolarisRevampedV3'))
-const PolarisNova = withLazyLoad(() => import('@/pages/PolarisNova'))
-const StarmapJobViewer = withLazyLoad(() => import('@/pages/StarmapJobViewer'))
 const StarmapJobsDashboard = withLazyLoad(() => import('@/components/StarmapJobsDashboard'))
 const Pricing = withLazyLoad(() => import('@/pages/Pricing'))
-const SeedJitinStarmap = withLazyLoad(() => import('@/pages/SeedJitinStarmap'))
 const ReportsDebug = withLazyLoad(() => import('@/pages/ReportsDebug'))
 const ApiDebug = withLazyLoad(() => import('@/pages/ApiDebug'))
 const CardComparison = withLazyLoad(() => import('@/pages/CardComparison'))
+const StarmapJobViewer = withLazyLoad(() => import('@/pages/StarmapJobViewer'))
 
-// Job-based Polaris routes (lazy)
-const PolarisJobsDashboard = withLazyLoad(() => import('@/components/PolarisJobsDashboard'))
-const PolarisJobViewer = withLazyLoad(() => import('@/components/PolarisJobViewer'))
-const PolarisJobWizard = withLazyLoad(() => import('@/pages/PolarisJobWizard'))
+// Job-based Polaris routes removed; only /discover remains active
 
-// Loading component for the entire app
-const AppLoadingFallback = () => (
-  <div className="fixed inset-0 bg-gradient-to-br from-[#020C1B] to-[#0A1628] flex items-center justify-center">
-    <div className="text-center">
-      <div className="relative inline-block">
-        <div className="w-16 h-16 border-4 border-white/20 rounded-full"></div>
-        <div className="absolute top-0 left-0 w-16 h-16 border-4 border-primary-400 rounded-full animate-spin border-t-transparent"></div>
-      </div>
-      <p className="mt-4 text-white/60 text-sm animate-pulse">Loading SmartSlate...</p>
-    </div>
-  </div>
-)
+// App-wide fallback removed to avoid blocking page content while auth initializes
 
 /**
  * Optimized App Router with lazy loading and code splitting
@@ -54,12 +38,11 @@ export function OptimizedAppRouter() {
       <AuthProvider>
         <SmallScreenGate minWidthPx={800}>
         {import.meta.env.DEV && <RouteBreadcrumbs />}
-        <Suspense fallback={<AppLoadingFallback />}>
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<AuthLanding />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
-            <Route path={paths.pricing} element={<Pricing />} />
+            {/* Pricing is shown within the portal layout */}
             <Route path={paths.publicProfile} element={<PublicProfile />} />
             <Route path="/report/public/:id" element={<PublicReportView />} />
             <Route path="/report/public/starmap/:id" element={<PublicReportView />} />
@@ -76,20 +59,12 @@ export function OptimizedAppRouter() {
               <Route path={paths.portal} element={<PortalPage />}>
                 <Route index element={<StarmapJobsDashboard />} />
                 <Route path="settings" element={<SettingsContent />} />
-                <Route path="starmaps" element={<StarmapJobsDashboard />} />
-                <Route path="starmap/:id" element={<StarmapJobViewer />} />
                 <Route path="discover" element={<PolarisRevampedV3 />} />
-                <Route path="discover/new" element={<PolarisNova />} />
-                <Route path="seed/jitin" element={<SeedJitinStarmap />} />
+                <Route path="report/starmap/:id" element={<StarmapJobViewer />} />
+                <Route path="pricing" element={<Pricing />} />
                 <Route path="debug/reports" element={<ReportsDebug />} />
-                <Route path="briefings" element={<Navigate to="/starmaps" replace />} />
-                <Route path="summaries" element={<Navigate to="/starmaps" replace />} />
-
-                {/* New Job-based Polaris Routes nested under PortalPage (sidebar + header) */}
-                <Route path="polaris/jobs" element={<PolarisJobsDashboard />} />
-                <Route path="polaris/new" element={<PolarisJobWizard />} />
-                <Route path="polaris/job/:jobId" element={<PolarisJobViewer />} />
-                <Route path="polaris/job/:jobId/resume" element={<PolarisJobWizard />} />
+                <Route path="briefings" element={<Navigate to="/discover" replace />} />
+                <Route path="summaries" element={<Navigate to="/discover" replace />} />
               </Route>
               
             </Route>
@@ -115,7 +90,6 @@ export function OptimizedAppRouter() {
           </Routes>
           {import.meta.env.DEV && <DevDebugButton />}
           
-        </Suspense>
         </SmallScreenGate>
       </AuthProvider>
     </BrowserRouter>

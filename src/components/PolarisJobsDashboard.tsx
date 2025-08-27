@@ -221,11 +221,10 @@ export default function PolarisJobsDashboard() {
   }
   
   function handleCreateNew() {
-    navigate('/polaris/new')
+    navigate('/discover')
   }
   
   if (!user) {
-    navigate('/auth')
     return null
   }
   

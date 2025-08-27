@@ -11,7 +11,7 @@ export default defineConfig(({ mode }) => {
   const OPENAI_API_KEY = (env.OPENAI_API_KEY || env.VITE_OPENAI_API_KEY || '').trim()
   // Fix: previously used API key env var when deriving base URL. Use correct *_BASE_URL vars
   const OPENAI_BASE_URL = ((env.VITE_OPENAI_BASE_URL || env.OPENAI_BASE_URL || 'https://api.openai.com').trim()).replace(/\/$/, '')
-  const PERPLEXITY_API_KEY = (env.PERPLEXITY_API_KEY || env.VITE_PERPLEXITY_API_KEY || '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').trim()
+  const PERPLEXITY_API_KEY = (env.PERPLEXITY_API_KEY || env.VITE_PERPLEXITY_API_KEY || '').trim()
   const PERPLEXITY_BASE_URL = ((env.VITE_PERPLEXITY_BASE_URL || env.PERPLEXITY_BASE_URL || 'https://api.perplexity.ai').trim()).replace(/\/$/, '')
 
   // Ensure server-side API handlers (dev middleware) see the Perplexity env vars
@@ -19,6 +19,19 @@ export default defineConfig(({ mode }) => {
   if (!process.env.VITE_PERPLEXITY_API_KEY && PERPLEXITY_API_KEY) process.env.VITE_PERPLEXITY_API_KEY = PERPLEXITY_API_KEY
   if (!process.env.PERPLEXITY_BASE_URL && PERPLEXITY_BASE_URL) process.env.PERPLEXITY_BASE_URL = PERPLEXITY_BASE_URL
   if (!process.env.VITE_PERPLEXITY_BASE_URL && PERPLEXITY_BASE_URL) process.env.VITE_PERPLEXITY_BASE_URL = PERPLEXITY_BASE_URL
+
+  // Ensure OpenAI env vars are available to local API handlers in dev
+  if (!process.env.OPENAI_API_KEY && OPENAI_API_KEY) process.env.OPENAI_API_KEY = OPENAI_API_KEY
+  if (!process.env.VITE_OPENAI_API_KEY && OPENAI_API_KEY) process.env.VITE_OPENAI_API_KEY = OPENAI_API_KEY
+  if (!process.env.OPENAI_BASE_URL && OPENAI_BASE_URL) process.env.OPENAI_BASE_URL = OPENAI_BASE_URL
+  if (!process.env.VITE_OPENAI_BASE_URL && OPENAI_BASE_URL) process.env.VITE_OPENAI_BASE_URL = OPENAI_BASE_URL
+
+  // Ensure Anthropic env vars are available to local API handlers in dev
+  if (!process.env.ANTHROPIC_API_KEY && ANTHROPIC_API_KEY) process.env.ANTHROPIC_API_KEY = ANTHROPIC_API_KEY
+  if (!process.env.VITE_ANTHROPIC_API_KEY && ANTHROPIC_API_KEY) process.env.VITE_ANTHROPIC_API_KEY = ANTHROPIC_API_KEY
+  if (!process.env.ANTHROPIC_BASE_URL && ANTHROPIC_BASE_URL) process.env.ANTHROPIC_BASE_URL = ANTHROPIC_BASE_URL
+  if (!process.env.VITE_ANTHROPIC_BASE_URL && ANTHROPIC_BASE_URL) process.env.VITE_ANTHROPIC_BASE_URL = ANTHROPIC_BASE_URL
+  if (!process.env.ANTHROPIC_VERSION && ANTHROPIC_VERSION) process.env.ANTHROPIC_VERSION = ANTHROPIC_VERSION
 
   // Supabase for DB-backed report jobs (optional in dev)
   const SUPABASE_URL = (env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL || '').trim()

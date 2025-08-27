@@ -129,9 +129,9 @@ export class UnifiedAIService {
       return request.preferredProvider
     }
 
-    // For research queries, always use Perplexity
+    // For research queries, prefer Anthropic (fallbacks handled below)
     if (request.capabilities?.includes('research')) {
-      return 'perplexity'
+      return 'anthropic'
     }
 
     // Based on input type (following user's strategy)
@@ -315,7 +315,7 @@ export class UnifiedAIService {
       case 'google':
         return ['anthropic', 'openai']
       case 'perplexity':
-        return ['openai'] // Use OpenAI for basic queries if Perplexity fails
+        return ['openai', 'anthropic']
       default:
         return ['anthropic', 'openai']
     }
@@ -348,7 +348,7 @@ export class UnifiedAIService {
       prompt: query,
       inputType: 'text',
       capabilities: ['research'],
-      preferredProvider: 'perplexity',
+      preferredProvider: 'anthropic',
       ...options
     })
   }

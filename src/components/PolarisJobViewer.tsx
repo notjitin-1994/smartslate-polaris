@@ -21,6 +21,7 @@ import { convertNaJsonStringToMarkdown } from '@/polaris/needs-analysis/format'
 import { useAuth } from '@/contexts/AuthContext'
 import { RichTextEditor } from '@/components/RichTextEditor'
 import { updateJobTitle } from '@/services/polarisJobsService'
+import { regenerateFinalReportWithContextForJob } from '@/services/reportGenerationService'
 
 interface ReportTab {
   id: ReportType
@@ -101,10 +102,20 @@ export default function PolarisJobViewer() {
   // Title edit state
   const [editTitleMode, setEditTitleMode] = useState(false)
   const [titleInput, setTitleInput] = useState('')
+  // Regeneration modal state
+  const [regenOpen, setRegenOpen] = useState(false)
+  const [regenText, setRegenText] = useState('')
+  const [regenJson, setRegenJson] = useState<any>(null)
+  const [regenJsonName, setRegenJsonName] = useState<string | null>(null)
+  const [regenJsonError, setRegenJsonError] = useState<string | null>(null)
+  const [focusAreas, setFocusAreas] = useState<string[]>([])
+  const [preserveStructure, setPreserveStructure] = useState(true)
+  const [updateOnlySelected, setUpdateOnlySelected] = useState(false)
+  const [regenerating, setRegenerating] = useState(false)
   
   useEffect(() => {
     if (!jobId) {
-      navigate('/polaris/jobs')
+      navigate('/discover')
       return
     }
     loadJobData()
@@ -161,6 +172,11 @@ export default function PolarisJobViewer() {
   function canEdit(): boolean {
     if (!job) return false
     return job.edits_remaining > 0 && getActiveContent() !== ''
+  }
+
+  function hasFinal(): boolean {
+    if (!job) return false
+    return Boolean(getJobReportContent(job, 'final'))
   }
   
   function startEdit() {
@@ -265,7 +281,6 @@ export default function PolarisJobViewer() {
   }
   
   if (!user) {
-    navigate('/auth')
     return null
   }
   
@@ -283,7 +298,7 @@ export default function PolarisJobViewer() {
         <div className="text-center">
           <p className="text-red-200 mb-4">{error || 'Job not found'}</p>
           <button
-            onClick={() => navigate('/polaris/jobs')}
+            onClick={() => navigate('/discover')}
             className="text-primary-500 hover:underline"
           >
             Back to Jobs
@@ -303,7 +318,7 @@ export default function PolarisJobViewer() {
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-4">
               <button
-                onClick={() => navigate('/polaris/jobs')}
+                onClick={() => navigate('/discover')}
                 className="p-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition-all"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -692,14 +707,24 @@ export default function PolarisJobViewer() {
                 </button>
                 
                 {/* Edit Controls */}
-                {!editMode && canEdit() && (
-                  <div className="p-6 border-b border-white/10">
-                    <button
-                      onClick={startEdit}
-                      className="px-6 py-3 rounded-lg bg-white/10 hover:bg-white/20 font-medium transition-all transform hover:scale-105"
-                    >
-                      ✏️ Edit This Report
-                    </button>
+                {!editMode && (
+                  <div className="p-6 border-b border-white/10 flex flex-wrap items-center gap-3">
+                    {canEdit() && (
+                      <button
+                        onClick={startEdit}
+                        className="px-6 py-3 rounded-lg bg-white/10 hover:bg-white/20 font-medium transition-all transform hover:scale-105"
+                      >
+                        ✏️ Edit This Report
+                      </button>
+                    )}
+                    {hasFinal() && (
+                      <button
+                        onClick={() => setRegenOpen(true)}
+                        className="px-6 py-3 rounded-lg bg-secondary-500/30 text-secondary-100 border border-secondary-400/40 hover:bg-secondary-500/40 hover:text-white transition-all"
+                      >
+                        🔁 Add Context & Recreate
+                      </button>
+                    )}
                   </div>
                 )}
                 
@@ -909,6 +934,238 @@ export default function PolarisJobViewer() {
                 >
                   Close
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Regenerate Modal */}
+      {regenOpen && job && (
+        <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-[rgb(var(--bg))]/70 backdrop-blur-sm" onClick={() => !regenerating && setRegenOpen(false)} />
+          <div className="absolute inset-0 flex items-center justify-center p-4">
+            <div className="glass-card w-full max-w-2xl overflow-hidden">
+              <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-secondary-500/20 text-secondary-300 flex items-center justify-center">
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="23 4 23 10 17 10" />
+                      <polyline points="1 20 1 14 7 14" />
+                      <path d="M3.51 9a9 9 0 0114.13-3.36L23 10M1 14l5.37 4.37A9 9 0 0020.49 15" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-lg md:text-xl font-semibold text-white">Add Context & Recreate</h3>
+                    <p className="text-xs md:text-sm text-white/60">Integrate additional details to regenerate the final report</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setRegenOpen(false)}
+                  disabled={regenerating}
+                  aria-label="Close"
+                  className="icon-btn icon-btn-ghost disabled:opacity-50"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="px-6 py-5 space-y-6 max-h-[72vh] overflow-y-auto brand-scroll">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm text-white/80">Additional Context</label>
+                    <span className="text-xs text-white/50">Tip: describe updates, constraints, assumptions</span>
+                  </div>
+                  <textarea
+                    className="w-full min-h-[140px] rounded-xl bg-white/5 border border-white/10 p-3 text-sm text-white placeholder-white/40 focus:outline-none focus:ring-2 focus:ring-primary-400/40 brand-scroll"
+                    placeholder="Paste notes, requirements, changes, or clarifications to integrate into the full report..."
+                    value={regenText}
+                    onChange={(e) => setRegenText(e.target.value)}
+                    disabled={regenerating}
+                  />
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm text-white/80">Attach JSON (optional)</label>
+                    <span className="text-xs text-white/50">Structured data for precise updates</span>
+                  </div>
+                  <div className="rounded-xl border-2 border-dashed border-white/10 hover:border-white/20 bg-white/5 transition p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center text-white/70">
+                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                          <path d="M14 2v6h6" />
+                        </svg>
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm text-white/85">
+                          {regenJson ? (
+                            <span>Attached: <span className="text-white/70">{regenJsonName || 'JSON file'}</span></span>
+                          ) : (
+                            <span>Drag & drop a JSON file here, or click Browse</span>
+                          )}
+                        </p>
+                        <p className="text-xs text-white/50">Max 1 file • .json</p>
+                      </div>
+                      {!regenJson ? (
+                        <label className="px-3 py-2 rounded-lg btn-ghost cursor-pointer">
+                          <input
+                            type="file"
+                            accept="application/json,.json"
+                            className="hidden"
+                            onChange={(e) => {
+                              setRegenJsonError(null)
+                              const f = e.target.files && e.target.files[0]
+                              if (!f) { setRegenJson(null); setRegenJsonName(null); return }
+                              const reader = new FileReader()
+                              reader.onload = () => {
+                                try {
+                                  const parsed = JSON.parse(String(reader.result || '{}'))
+                                  setRegenJson(parsed)
+                                  setRegenJsonName(f.name)
+                                } catch (err: any) {
+                                  setRegenJsonError('Failed to parse JSON file')
+                                  setRegenJson(null)
+                                  setRegenJsonName(null)
+                                }
+                              }
+                              reader.readAsText(f)
+                            }}
+                            disabled={regenerating}
+                          />
+                          Browse
+                        </label>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setRegenJson(null); setRegenJsonName(null) }}
+                          className="px-3 py-2 rounded-lg btn-ghost"
+                          disabled={regenerating}
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                    {regenJsonError && (
+                      <p className="mt-2 text-xs text-red-300">{regenJsonError}</p>
+                    )}
+                    {regenJson && (
+                      <details className="mt-3">
+                        <summary className="cursor-pointer text-xs text-white/60">Preview JSON</summary>
+                        <pre className="mt-2 p-2 bg-black/20 rounded text-white/70 overflow-x-auto text-xs max-h-40">{JSON.stringify(regenJson, null, 2)}</pre>
+                      </details>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm text-white/80">Focus Areas (optional)</label>
+                    <span className="text-xs text-white/50">Highlight sections to prioritize</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      'Executive Summary',
+                      'Current State Analysis',
+                      'Recommended Solution',
+                      'Learner Experience Design',
+                      'Measurement Framework',
+                      'Resource Planning',
+                      'Risk Assessment',
+                      'Next Steps'
+                    ].map((area) => {
+                      const selected = focusAreas.includes(area)
+                      return (
+                        <button
+                          key={area}
+                          type="button"
+                          className={`px-3 py-1.5 rounded-full border text-sm transition ${selected ? 'bg-secondary-500/20 text-white border-secondary-400/40' : 'bg-white/5 text-white/70 border-white/10 hover:text-white hover:bg-white/10'}`}
+                          onClick={() => setFocusAreas((prev) => selected ? prev.filter(a => a !== area) : [...prev, area])}
+                          disabled={regenerating}
+                        >
+                          {area}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
+                    <div>
+                      <p className="text-sm text-white">Preserve original structure</p>
+                      <p className="text-xs text-white/60">Maintain section order and headings</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={preserveStructure}
+                      onClick={() => setPreserveStructure(v => !v)}
+                      disabled={regenerating}
+                      className={`w-11 h-6 rounded-full transition relative ${preserveStructure ? 'bg-secondary-500/60' : 'bg-white/15'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${preserveStructure ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                  <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/10">
+                    <div>
+                      <p className="text-sm text-white">Only update selected sections</p>
+                      <p className="text-xs text-white/60">Limit changes to chosen focus areas</p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={updateOnlySelected}
+                      onClick={() => setUpdateOnlySelected(v => !v)}
+                      disabled={regenerating}
+                      className={`w-11 h-6 rounded-full transition relative ${updateOnlySelected ? 'bg-secondary-500/60' : 'bg-white/15'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${updateOnlySelected ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="px-6 py-4 border-t border-white/10 flex items-center justify-between gap-2">
+                <p className="hidden sm:block text-xs text-white/50">Recreation typically completes in under 2 minutes.</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setRegenOpen(false)}
+                    className="px-5 py-2 rounded-lg btn-ghost"
+                    disabled={regenerating}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!job) return
+                      try {
+                        setRegenerating(true)
+                        await regenerateFinalReportWithContextForJob(job.id, {
+                          newContextText: regenText,
+                          newContextJson: regenJson,
+                          focusAreas,
+                          preserveStructure,
+                          updateOnlySelectedSections: updateOnlySelected
+                        })
+                        await loadJobData()
+                        setRegenOpen(false)
+                        // Reset inputs
+                        setRegenText('')
+                        setRegenJson(null)
+                        setRegenJsonName(null)
+                        setFocusAreas([])
+                        setPreserveStructure(true)
+                        setUpdateOnlySelected(false)
+                      } catch (e) {
+                        console.error('Regeneration failed:', e)
+                        alert('Failed to recreate report. Please try again.')
+                      } finally {
+                        setRegenerating(false)
+                      }
+                    }}
+                    className="px-6 py-2 rounded-lg btn-primary disabled:opacity-50"
+                    disabled={regenerating || (!regenText && !regenJson)}
+                  >
+                    {regenerating ? 'Recreating…' : 'Recreate Report'}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

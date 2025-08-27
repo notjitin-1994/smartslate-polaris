@@ -9,6 +9,7 @@ type PersonalPlan = {
   name: string
   tagline: string
   priceMonthly: number
+  introPriceMonthly?: number
   maxConstellationsPerMonth: number
   maxStarmaps: number
   features: string[]
@@ -35,51 +36,50 @@ const personalPlans: PersonalPlan[] = [
     id: 'personal-starter',
     name: 'Explorer',
     tagline: 'Begin your cosmic journey',
-    priceMonthly: 9,
-    maxConstellationsPerMonth: 10,
-    maxStarmaps: 5,
+    priceMonthly: 18,
+    introPriceMonthly: 9,
+    maxConstellationsPerMonth: 5,
+    maxStarmaps: 2,
     features: [
-      'AI-powered report creation',
-      'Solara Lodestar AI Editor', 
-      'Standard processing speed',
-      'Community support'
+      'AI-powered Report Creation',
+      'Public Sharing',
+      'Standard Processing Speed'
     ],
-    highlighted: ['10 Starmaps/month']
+    highlighted: ['5 Starmaps/month']
   },
   {
     id: 'personal-pro',
     name: 'Navigator',
     tagline: 'Chart deeper territories',
-    priceMonthly: 19,
-    maxConstellationsPerMonth: 30,
-    maxStarmaps: 20,
+    priceMonthly: 38,
+    introPriceMonthly: 19,
+    maxConstellationsPerMonth: 10,
+    maxStarmaps: 5,
     features: [
       'Everything in Explorer',
-      '5x faster AI processing',
+      '1 Iteration of Feedback Addressal per Starmap',
       'Export to Word & PDF',
       'Priority support response',
-      'Version history (30 days)',
-      'Custom templates'
+      'Access to Deeper Research Material & Reporting'
     ],
-    highlighted: ['30 Starmaps/month', '5x faster processing'],
+    highlighted: ['10 Starmaps/month', '5x faster processing'],
     popular: true
   },
   {
     id: 'personal-power',
     name: 'Voyager',
     tagline: 'Unlimited exploration',
-    priceMonthly: 49,
-    maxConstellationsPerMonth: 500,
-    maxStarmaps: 75,
+    priceMonthly: 69,
+    introPriceMonthly: 49,
+    maxConstellationsPerMonth: 50,
+    maxStarmaps: 20,
     features: [
       'Everything in Navigator',
-      'Advanced research suite',
-      'Custom style presets',
-      'API access (coming soon)',
-      'White-glove onboarding',
-      'Unlimited version history'
+      'Advanced Research Suite',
+      '5 Iteration of Feedback Addressal per Starmap',
+      'API access (coming soon)'
     ],
-    highlighted: ['Unlimited Starmaps/month (fair usage)', 'Advanced research']
+    highlighted: ['50 Starmaps/month', 'Advanced research']
   },
 ]
 
@@ -148,8 +148,9 @@ export default function Pricing() {
   useDocumentTitle('Smartslate | Pricing')
   const [billing, setBilling] = useState<BillingCycle>('monthly')
   const [teamSeats, setTeamSeats] = useState<number>(5)
-  const annualMultiplier = 0.8 // 20% discount
-  const annualSavings = 0.2 // 20% savings
+  const annualMultiplier = 0.3 // 70% discount
+  const annualSavings = 0.7 // 70% savings
+  const introMultiplier = 0.5 // 50% introductory offer
 
   // Volume discount logic to encourage 5 seats (Crew), 10 seats (Fleet), and >10 (Armada)
   function computePerSeatWithVolume(plan: TeamPlan, seats: number, cycle: BillingCycle) {
@@ -187,12 +188,17 @@ export default function Pricing() {
   }
 
   const personalPriced = useMemo(() => {
-    return personalPlans.map((p) => ({
-      ...p,
-      price: billing === 'monthly' ? p.priceMonthly : Math.ceil(p.priceMonthly * annualMultiplier),
-      monthlyPrice: p.priceMonthly,
-      savings: billing === 'annual' ? Math.ceil(p.priceMonthly * annualSavings * 12) : 0,
-    }))
+    return personalPlans.map((p) => {
+      const baseMonthly = p.priceMonthly
+      const introMonthly = typeof p.introPriceMonthly === 'number' ? p.introPriceMonthly : Math.ceil(baseMonthly * introMultiplier)
+      const price = billing === 'monthly' ? introMonthly : Math.ceil(baseMonthly * annualMultiplier)
+      return {
+        ...p,
+        price,
+        monthlyPrice: baseMonthly,
+        savings: billing === 'annual' ? Math.ceil(baseMonthly * annualSavings * 12) : 0,
+      }
+    })
   }, [billing])
 
   // Compute per-seat price lazily inside render per tier; no top-level const needed
@@ -202,19 +208,13 @@ export default function Pricing() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#020C1B] via-[#0A1628] to-[#0F1B2E] text-white relative overflow-hidden">
-      {/* Subtle cosmic background effect */}
-      <div className="absolute inset-0 opacity-30">
-        <div className="absolute top-20 left-10 w-96 h-96 bg-primary-500/20 rounded-full blur-3xl animate-pulse-subtle" />
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-secondary-500/20 rounded-full blur-3xl animate-pulse-subtle" style={{ animationDelay: '1s' }} />
-      </div>
-      
+    <div className="min-h-screen text-white relative overflow-hidden">
       <div className="relative max-w-7xl mx-auto px-4 py-16">
         {/* Hero Section */}
         <header className="text-center mb-12 animate-fade-in-up">
           <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full bg-gradient-to-r from-primary-600/20 to-primary-500/20 border border-white/10">
-            <span className="text-xs font-medium text-primary-400">✨ Limited Time</span>
-            <span className="text-xs text-white/80">Save 20% with annual billing</span>
+            <span className="text-xs font-medium text-primary-400">✨ Introductory Offer</span>
+            <span className="text-xs text-white/80">50% OFF (Monthly) • 70% OFF (Annual)</span>
           </div>
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold bg-gradient-to-r from-primary-400 to-primary-600 bg-clip-text text-transparent">
             Launch Your Ideas Into Orbit
@@ -248,7 +248,7 @@ export default function Pricing() {
               Annual
             </button>
             <span className="pointer-events-none absolute -top-3 right-2 px-2 py-0.5 rounded-full bg-emerald-400 text-xs font-bold text-[#0A1628] shadow-lg shadow-emerald-500/25">
-              SAVE 20%
+              INTRO 50% OFF
             </span>
           </div>
           
@@ -310,19 +310,30 @@ export default function Pricing() {
                   
                   {/* Pricing */}
                   <div className="mb-6">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-4xl font-bold">${p.price}</span>
-                      <span className="text-white/60 text-sm">/month</span>
-                    </div>
-                    {billing === 'annual' && (
-                      <div className="mt-1 text-xs text-primary-400">
-                        Save ${p.savings} per year
-                      </div>
-                    )}
-                    {billing === 'annual' && (
-                      <div className="mt-1 text-xs text-white/80">
-                        Total for the year: ${p.price * 12}/yr
-                      </div>
+                    {billing === 'monthly' ? (
+                      <>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-white/50 line-through text-sm">${p.monthlyPrice}</span>
+                          <span className="text-4xl font-bold">${p.price}</span>
+                          <span className="text-white/60 text-sm">/month</span>
+                        </div>
+                        <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-400 text-[#0A1628] text-xs font-bold">
+                          50% OFF
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-4xl font-bold">${p.price}</span>
+                          <span className="text-white/60 text-sm">/month</span>
+                        </div>
+                        <div className="mt-1 text-xs text-primary-400">
+                          Save ${p.savings} per year
+                        </div>
+                        <div className="mt-1 text-xs text-white/80">
+                          Total for the year: ${p.price * 12}/yr
+                        </div>
+                      </>
                     )}
                   </div>
                   
@@ -349,8 +360,8 @@ export default function Pricing() {
                         </svg>
                       </div>
                       <div className="text-sm">
-                        <span className="font-bold text-white">{p.id === 'personal-power' ? 'Unlimited' : p.maxConstellationsPerMonth}</span>
-                        <span className="text-white/70"> Starmaps/mo{p.id === 'personal-power' ? ' (fair usage)' : ''}</span>
+                        <span className="font-bold text-white">{p.maxConstellationsPerMonth}</span>
+                        <span className="text-white/70"> Starmaps/mo</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-3">
@@ -748,7 +759,7 @@ export default function Pricing() {
               <a href="mailto:support@smartslate.io" className="text-white/60 hover:text-white transition-colors">Support</a>
             </div>
             <p className="text-white/40 text-xs max-w-2xl mx-auto">
-              Prices shown in USD. Taxes may apply based on your location. Annual billing saves 20%. 
+              Prices shown in USD. Taxes may apply based on your location. Annual billing saves 70%. 
               Feature limits will be enforced once billing is activated. All plans include 14-day free trial.
             </p>
           </div>

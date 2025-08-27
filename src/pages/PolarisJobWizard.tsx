@@ -12,11 +12,7 @@ import {
   type PolarisJob,
   type PolarisJobStage
 } from '@/services/polarisJobsService'
-import { 
-  researchGreeting, 
-  researchOrganization, 
-  researchRequirements 
-} from '@/services/perplexityService'
+import { unifiedAIService } from '@/services/unifiedAIService'
 import { callLLM } from '@/services/llmClient'
 import RenderField from '@/polaris/needs-analysis/RenderField'
 import ReportDisplay from '@/polaris/needs-analysis/ReportDisplay'
@@ -109,7 +105,7 @@ export default function PolarisJobWizard() {
         const { data, error } = await resumeJob(jobId)
         if (error || !data) {
           setError('Failed to resume job')
-          navigate('/polaris/jobs')
+          navigate('/discover')
           return
         }
         
@@ -120,7 +116,7 @@ export default function PolarisJobWizard() {
         const { data, error } = await getJob(jobId)
         if (error || !data) {
           setError('Failed to load job')
-          navigate('/polaris/jobs')
+          navigate('/discover')
           return
         }
         
@@ -237,16 +233,18 @@ export default function PolarisJobWizard() {
       
       await saveSessionState(job.id, sessionState)
       
-      // Update progress
-      await updateJobProgress(
-        job.id,
-        currentStage,
-        pause ? 'paused' : 'draft',
-        false
-      )
+      // Update progress unless the job is already completed
+      if (job.status !== 'completed') {
+        await updateJobProgress(
+          job.id,
+          currentStage,
+          pause ? 'paused' : 'draft',
+          false
+        )
+      }
       
       if (pause) {
-        navigate('/polaris/jobs')
+        navigate('/discover')
       }
     } catch (err) {
       console.error('Error saving progress:', err)
@@ -277,7 +275,9 @@ export default function PolarisJobWizard() {
           timezone: stageAnswers.requester_timezone as string
         }
         
-        const greetingReport = await researchGreeting(greetingData)
+        const greetingPrompt = `Create a "Needs Analysis Intake Brief — Individual" using this data:\n${JSON.stringify(greetingData, null, 2)}\n\nFollow the same sections and rules used in our greeting research brief. Return only Markdown.`
+        const greetingResult = await unifiedAIService.research(greetingPrompt, { maxTokens: 1200, temperature: 0.3 })
+        const greetingReport = greetingResult.content
         await saveJobReport(job.id, 'greeting', greetingReport)
         
         // Save stage data
@@ -299,7 +299,9 @@ export default function PolarisJobWizard() {
           mission: stageAnswers.org_mission as string
         }
         
-        const orgReport = await researchOrganization(orgData)
+        const orgPrompt = `Create a "Needs Analysis Intake Brief — Organization" using this data:\n${JSON.stringify(orgData, null, 2)}\n\nFollow the same sections and rules used in our org research brief. Return only Markdown.`
+        const orgResult = await unifiedAIService.research(orgPrompt, { maxTokens: 1800, temperature: 0.3 })
+        const orgReport = orgResult.content
         await saveJobReport(job.id, 'org', orgReport)
         
         // Save stage data
@@ -323,7 +325,9 @@ export default function PolarisJobWizard() {
           budget: stageAnswers.project_budget_range as string
         }
         
-        const reqReport = await researchRequirements(reqData)
+        const reqPrompt = `Create a "Requirements Brief — L&D Project" using this data:\n${JSON.stringify(reqData, null, 2)}\n\nFollow the same sections and rules used in our requirements brief. Return only Markdown.`
+        const reqResult = await unifiedAIService.research(reqPrompt, { maxTokens: 2000, temperature: 0.3 })
+        const reqReport = reqResult.content
         await saveJobReport(job.id, 'requirement', reqReport)
         
         // Save stage data  
@@ -579,7 +583,6 @@ export default function PolarisJobWizard() {
   }
   
   if (!user) {
-    navigate('/auth')
     return null
   }
   

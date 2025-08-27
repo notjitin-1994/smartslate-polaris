@@ -39,19 +39,7 @@ function allowCors(res: VercelResponse) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key')
 }
 
-function normalizePerplexityModel(input?: string): string {
-  const requested = (input || '').trim().toLowerCase()
-  const canonical = new Set(['sonar', 'sonar-pro', 'sonar-reasoning', 'sonar-reasoning-pro'])
-  if (canonical.has(requested)) return requested
-  const normalized = requested.replace(/\s+/g, '-').replace(/_/g, '-')
-  if (canonical.has(normalized)) return normalized
-  if (requested === 'sonar pro' || requested === 'sonar-large' || requested === 'sonar medium' || requested === 'sonar-medium') return 'sonar-pro'
-  if (requested === 'sonar reasoning' || requested === 'sonar-reasoning') return 'sonar-reasoning'
-  if (requested === 'sonar reasoning pro' || requested === 'sonar-reasoning-pro') return 'sonar-reasoning-pro'
-  if (requested.startsWith('llama-3.1-sonar-small')) return 'sonar'
-  if (requested.startsWith('llama-3.1-sonar-large')) return 'sonar-pro'
-  return 'sonar-pro'
-}
+// Removed unused normalizePerplexityModel
 
 async function runJob(jobId: string, prompt: string, model?: string, temperature: number = 0.2, max_tokens: number = 2600) {
   const store = getStore()
@@ -66,50 +54,120 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
   store.set(jobId, job)
 
   try {
-    const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || process.env.VITE_PERPLEXITY_API_KEY || ''
-    const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || process.env.VITE_PERPLEXITY_BASE_URL || 'https://api.perplexity.ai'
-    const mdl = normalizePerplexityModel(model || process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar-pro')
+    // Compose prompt (kept inline within provider calls)
 
-    if (!PERPLEXITY_API_KEY) throw new Error('Perplexity API key not configured')
-
-    // Compose user message with a short preamble as Perplexity lacks system role
-    const contextualPrompt = `You are a helpful research assistant. Provide comprehensive, accurate information based on current web sources. Focus on facts and cite sources when possible.\n\n${prompt}`
-
-    const controller = new AbortController()
-    // Extended timeout for models
+    // Timeout baseline (aligned to previous Perplexity timeouts)
     const isReasoningModel = (model || '').toLowerCase().includes('reasoning')
     const baseTimeout = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 75000)
     const SERVER_TIMEOUT_MS = isReasoningModel ? Math.min(110000, baseTimeout * 1.5) : baseTimeout
-    const timeoutId = setTimeout(() => {
-      console.warn(`Job ${jobId} timing out after ${SERVER_TIMEOUT_MS}ms`)
-      controller.abort()
-    }, SERVER_TIMEOUT_MS)
 
     job.percent = 15
     job.eta_seconds = Math.ceil(SERVER_TIMEOUT_MS / 1000)
     job.updated_at = Date.now()
     store.set(jobId, job)
 
-    const response = await fetch(`${PERPLEXITY_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: mdl,
-        temperature,
-        max_tokens,
-        messages: [{ role: 'user', content: contextualPrompt }],
-      }),
-      signal: controller.signal,
-    })
+    // Attempt 1: OpenAI
+    async function callOpenAI(): Promise<{ ok: boolean; content?: string; error?: string }> {
+      try {
+        const apiKey = (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '').trim()
+        const baseUrl = ((process.env.OPENAI_BASE_URL || process.env.VITE_OPENAI_BASE_URL || 'https://api.openai.com').trim()).replace(/\/$/, '')
+        if (!apiKey) return { ok: false, error: 'OpenAI API key not configured' }
+        const openaiModel = (process.env.OPENAI_MODEL || process.env.VITE_OPENAI_MODEL || 'gpt-4o-mini').trim()
+        const payload = {
+          model: openaiModel,
+          temperature: typeof temperature === 'number' ? temperature : 0.2,
+          messages: [
+            { role: 'system', content: 'You are a helpful research assistant. Provide comprehensive, accurate information. Cite sources if known.' },
+            { role: 'user', content: prompt }
+          ],
+          max_tokens: Math.min(typeof max_tokens === 'number' ? max_tokens : 2600, 4096),
+        }
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
+        const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        })
+        clearTimeout(timeoutId)
+        const text = await resp.text()
+        if (!resp.ok) return { ok: false, error: text || `HTTP ${resp.status}` }
+        let content = ''
+        try { const data = JSON.parse(text); content = data?.choices?.[0]?.message?.content || '' } catch { content = text }
+        return { ok: true, content }
+      } catch (e: any) {
+        return { ok: false, error: e?.message || 'OpenAI request failed' }
+      }
+    }
 
-    clearTimeout(timeoutId)
+    // Attempt 2: Anthropic if OpenAI fails
+    async function callAnthropic(): Promise<{ ok: boolean; content?: string; error?: string }> {
+      try {
+        const apiKey = (process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || '').trim()
+        const baseUrl = ((process.env.ANTHROPIC_BASE_URL || process.env.VITE_ANTHROPIC_BASE_URL || 'https://api.anthropic.com').trim()).replace(/\/$/, '')
+        const version = (process.env.ANTHROPIC_VERSION || '2023-06-01').trim()
+        if (!apiKey) return { ok: false, error: 'Anthropic API key not configured' }
+        const anthropicModel = (process.env.ANTHROPIC_MODEL || process.env.VITE_ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest').trim()
+        const anthropicMax = Math.min(parseInt(process.env.ANTHROPIC_MAX_TOKENS || process.env.VITE_ANTHROPIC_MAX_TOKENS || '8192'), 8192)
+        const payload: any = {
+          model: anthropicModel,
+          temperature: typeof temperature === 'number' ? temperature : 0.2,
+          system: 'You are a helpful research assistant. Provide comprehensive, accurate information based on your knowledge. Cite sources if known.',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: Math.min(typeof max_tokens === 'number' ? max_tokens : 2600, anthropicMax),
+        }
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Perplexity API error ${response.status}: ${errorText}`)
+        const maxAttempts = Math.max(1, Number(process.env.ANTHROPIC_RETRIES || 2))
+        const baseDelayMs = Math.max(200, Number(process.env.ANTHROPIC_RETRY_BASE_DELAY_MS || 500))
+        let lastErrorText = ''
+        let lastStatus = 0
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const resp = await fetch(`${baseUrl}/v1/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': version },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          })
+          const text = await resp.text()
+          if (resp.ok) {
+            clearTimeout(timeoutId)
+            let content = ''
+            try { const data: any = JSON.parse(text); content = Array.isArray(data?.content) ? (data.content.find((c: any) => c.type === 'text')?.text || '') : (data?.content || '') } catch { content = text }
+            return { ok: true, content }
+          }
+          lastStatus = resp.status
+          lastErrorText = text
+          const shouldRetry = resp.status === 529 || resp.status === 503 || resp.headers.get('x-should-retry') === 'true'
+          if (shouldRetry && attempt < maxAttempts - 1) {
+            const jitter = Math.random() * baseDelayMs
+            const backoff = baseDelayMs * Math.pow(2, attempt) + jitter
+            await new Promise(r => setTimeout(r, backoff))
+            continue
+          }
+          break
+        }
+        clearTimeout(timeoutId)
+        return { ok: false, error: lastErrorText || `HTTP ${lastStatus}` }
+      } catch (e: any) {
+        return { ok: false, error: e?.message || 'Anthropic request failed' }
+      }
+    }
+
+    let content = ''
+    const openaiResult = await callOpenAI()
+    if (openaiResult.ok && openaiResult.content) {
+      content = openaiResult.content
+    } else {
+      const anthropicResult = await callAnthropic()
+      if (anthropicResult.ok && anthropicResult.content) {
+        content = anthropicResult.content
+      } else {
+        const reason = [openaiResult.error, anthropicResult.error].filter(Boolean).join(' | ') || 'All providers failed'
+        throw new Error(reason)
+      }
     }
 
     // Simulate progress updates while waiting to parse
@@ -117,8 +175,6 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
     job.updated_at = Date.now()
     store.set(jobId, job)
 
-    const data: any = await response.json()
-    const content: string = data?.choices?.[0]?.message?.content || ''
     job.result = (content || '').trim()
     job.status = 'succeeded'
     job.percent = 100

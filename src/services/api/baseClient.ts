@@ -141,8 +141,10 @@ export class BaseApiClient {
           throw finalError
         }
         
-        // Wait before retrying with exponential backoff
-        await this.delay(retryDelay * Math.pow(2, attempt))
+        // Wait before retrying with exponential backoff + jitter
+        const jitter = Math.random() * retryDelay
+        const backoff = retryDelay * Math.pow(2, attempt) + jitter
+        await this.delay(backoff)
       }
     }
     

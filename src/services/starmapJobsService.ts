@@ -544,8 +544,8 @@ export async function resumeStarmapJob(jobId: string): Promise<{ data: StarmapJo
     const { data: job, error: getError } = await getStarmapJob(jobId)
     if (getError || !job) return { data: null, error: getError || new Error('Job not found') }
     
-    // If job is processing, don't change status
-    if (job.status === 'processing') {
+    // If job is processing or completed, don't change status
+    if (job.status === 'processing' || job.status === 'completed') {
       return { data: job, error: null }
     }
     

@@ -1,5 +1,6 @@
 // src/polaris/needs-analysis/RenderField.tsx
 import type { NAField, NAResponseValue } from './types';
+import { useState } from 'react';
 
 interface RenderFieldProps {
   field: NAField;
@@ -47,25 +48,51 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
     case 'single_select': {
       const selectField = field as any;
       const opts = selectField.options || [];
-      const listId = `${field.id}-datalist`;
       const current = (value as string) ?? '';
+      const isPreExistingCustom = !!current && !opts.includes(current);
+      const [customMode, setCustomMode] = useState<boolean>(isPreExistingCustom);
+
+      const SELECT_CUSTOM_VALUE = '__CUSTOM__';
+
+      const selectValue = customMode || isPreExistingCustom
+        ? SELECT_CUSTOM_VALUE
+        : (opts.includes(current) ? current : '');
+
       return (
         <div className="mb-4">
           {common}
-          <input
-            list={listId}
-            className="input w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20"
-            placeholder={current ? undefined : 'Select or type custom…'}
-            value={current}
-            onChange={(e) => onChange(field.id, e.target.value)}
-          />
-          <datalist id={listId}>
+          <select
+            className="input w-full"
+            value={selectValue}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === SELECT_CUSTOM_VALUE) {
+                setCustomMode(true);
+                // If switching to custom and there isn't an existing custom value, clear to prompt input
+                if (!isPreExistingCustom) onChange(field.id, '');
+              } else {
+                setCustomMode(false);
+                onChange(field.id, v);
+              }
+            }}
+          >
+            <option value="" disabled>{current ? 'Select' : 'Select an option'}</option>
             {opts.map((o: string) => (
-              <option key={o} value={o} />
+              <option key={o} value={o}>{o}</option>
             ))}
-            <option value="Custom" />
-          </datalist>
-          <div className="mt-1 text-xs text-white/50">Choose from suggestions or type your own.</div>
+            <option value={SELECT_CUSTOM_VALUE}>Custom…</option>
+          </select>
+          { (customMode || isPreExistingCustom) && (
+            <div className="mt-2">
+              <input
+                className="input w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20"
+                placeholder="Type custom value…"
+                value={current}
+                onChange={(e) => onChange(field.id, e.target.value)}
+              />
+            </div>
+          )}
+          <div className="mt-1 text-xs text-white/50">Choose from the list or enter a custom value.</div>
         </div>
       );
     }

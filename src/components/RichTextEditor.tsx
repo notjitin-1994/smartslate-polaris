@@ -1105,6 +1105,7 @@ export function RichTextEditor({
           border-radius: 0.5rem;
           padding: 0 1.75rem 0 0.5rem;
           outline: none;
+          cursor: pointer;
         }
         .brand-select:hover { background: rgba(255,255,255,0.08); }
         .brand-select:focus { box-shadow: 0 0 0 2px rgba(167, 218, 219, 0.35); border-color: rgba(167, 218, 219, 0.35); }

@@ -94,7 +94,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             try {
               const pathname = location?.pathname || (typeof window !== 'undefined' ? window.location.pathname : '/')
               // Root is protected and all first-level portal routes are at root now
-              const isProtected = pathname === '/' || pathname.startsWith('/settings') || pathname.startsWith('/starmaps') || pathname.startsWith('/discover') || pathname.startsWith('/seed')
+              const isProtected = pathname === '/' || pathname.startsWith('/settings') || pathname.startsWith('/discover') || pathname.startsWith('/seed')
               if (isProtected) navigate('/login')
             } catch {
               // no-op

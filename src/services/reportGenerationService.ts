@@ -1,6 +1,7 @@
 import { unifiedAIService } from './unifiedAIService'
 import { promptService } from './promptService'
-import { saveJobReport } from './polarisJobsService'
+import { saveJobReport, getJob, getJobReportContent } from './polarisJobsService'
+import { getStarmapJob, saveJobReport as saveStarmapJobReport } from './starmapJobsService'
 import { AppError } from '@/lib/errors'
 
 export interface ReportContext {
@@ -109,6 +110,198 @@ export class ReportGenerationService {
     
     return {
       content: report,
+      format: 'markdown',
+      metadata
+    }
+  }
+
+  /**
+   * Regenerate the COMPLETE final report for a job by incorporating new user-provided context.
+   * This is non-destructive: it writes a new version to polaris_job_reports and updates the job's final_report.
+   */
+  async regenerateFinalReportWithContextForJob(
+    jobId: string,
+    additions: {
+      newContextText?: string
+      newContextJson?: any
+      focusAreas?: string[]
+      preserveStructure?: boolean
+      updateOnlySelectedSections?: boolean
+    }
+  ): Promise<GeneratedReport> {
+    // Load job and assemble existing context
+    const { data: job, error } = await getJob(jobId)
+    if (error || !job) {
+      throw new AppError('Job not found for regeneration', 'JOB_NOT_FOUND')
+    }
+
+    const originalFinal = getJobReportContent(job, 'final') || ''
+
+    const context: ReportContext = {
+      jobId,
+      userId: job.user_id,
+      experienceLevel: (job.experience_level as any) || 'intermediate',
+      companyName: job.company_name || undefined,
+      // Optional metadata (if available elsewhere in app state)
+      // industry and size aren't stored on the job row consistently; leave undefined if absent
+      greetingData: job.greeting_data || {},
+      orgData: job.org_data || {},
+      requirementsData: job.requirements_data || {},
+      dynamicAnswers: job.dynamic_answers || {},
+      greetingReport: job.greeting_report || undefined,
+      orgReport: job.org_report || undefined,
+      requirementReport: job.requirement_report || undefined,
+      preliminaryReport: job.preliminary_report || undefined
+    }
+
+    // Normalize new context payload
+    const normalizedNewContext = {
+      text: (additions?.newContextText || '').trim() || undefined,
+      json: additions?.newContextJson ?? undefined,
+      focusAreas: additions?.focusAreas && additions.focusAreas.length > 0 ? additions.focusAreas : undefined,
+      options: {
+        preserveStructure: additions?.preserveStructure !== false,
+        updateOnlySelectedSections: additions?.updateOnlySelectedSections === true
+      }
+    }
+
+    // Build strict prompt to recreate COMPLETE report with new context
+    const allData = this.consolidateData(context)
+    const focusText = normalizedNewContext.focusAreas ? `\nFOCUS AREAS:\n- ${normalizedNewContext.focusAreas.join('\n- ')}` : ''
+    const optionsText = `\nOPTIONS:\n- Preserve structure: ${normalizedNewContext.options.preserveStructure ? 'Yes' : 'No'}\n- Update only selected sections: ${normalizedNewContext.options.updateOnlySelectedSections ? 'Yes' : 'No'}`
+
+    const prompt = `You are an expert Learning Experience Designer. Recreate the COMPLETE L&D needs analysis report by integrating NEW CONTEXT.
+
+ORIGINAL FINAL REPORT (Markdown):\n${originalFinal}
+
+RESEARCH INPUTS:\n- Greeting:\n${context.greetingReport || '—'}\n\n- Organization:\n${context.orgReport || '—'}\n\n- Requirements:\n${context.requirementReport || '—'}
+
+DYNAMIC ANSWERS (JSON):\n${JSON.stringify(allData.dynamic || {}, null, 2)}
+
+NEW CONTEXT (verbatim; do not sanitize):\n${normalizedNewContext.text || '(none provided)'}
+${normalizedNewContext.json ? `\nNEW CONTEXT JSON:\n${JSON.stringify(normalizedNewContext.json, null, 2)}` : ''}
+${focusText}
+${optionsText}
+
+REQUIREMENTS (STRICT):
+1) Return the ENTIRE report as Markdown with these exact section headers (keep names):
+   ## Executive Summary
+   ## Current State Analysis
+   ## Recommended Solution
+   ## Learner Experience Design
+   ## Measurement Framework
+   ## Resource Planning
+   ## Risk Assessment
+   ## Next Steps
+2) Maintain professional tone. If contradictions exist between original and new context, integrate sensibly and briefly note contradictions inline.
+3) If UPDATE ONLY SELECTED SECTIONS is Yes, limit changes to the focus areas but still return the FULL report.
+4) Do NOT include any preamble or closing remarks.`
+
+    const response = await unifiedAIService.call({
+      prompt,
+      inputType: 'text',
+      capabilities: ['reasoning'],
+      temperature: 0.3,
+      maxTokens: 8000,
+      preferredProvider: 'anthropic'
+    })
+
+    const regenerated = this.parseReport(response.content, 'final')
+    const metadata = {
+      ...this.extractMetadata(regenerated, response),
+      regenerated: true,
+      addedContext: normalizedNewContext,
+      previousLength: originalFinal.length
+    }
+
+    await this.saveReport(jobId, 'final', regenerated, metadata)
+
+    return {
+      content: regenerated,
+      format: 'markdown',
+      metadata
+    }
+  }
+
+  /**
+   * Regenerate COMPLETE final report for a Starmap job by integrating new context.
+   */
+  async regenerateStarmapFinalReportWithContext(
+    jobId: string,
+    additions: {
+      newContextText?: string
+      newContextJson?: any
+      focusAreas?: string[]
+      preserveStructure?: boolean
+      updateOnlySelectedSections?: boolean
+    }
+  ): Promise<GeneratedReport> {
+    const { data: job, error } = await getStarmapJob(jobId)
+    if (error || !job) {
+      throw new AppError('Starmap job not found for regeneration', 'JOB_NOT_FOUND')
+    }
+
+    const originalFinal = job.final_report || job.preliminary_report || ''
+
+    const context: ReportContext = {
+      jobId,
+      userId: job.user_id,
+      experienceLevel: (job.experience_level as any) || 'intermediate',
+      companyName: job.title || undefined,
+      greetingData: job.stage1_data || {},
+      orgData: job.stage2_data || {},
+      requirementsData: job.stage3_data || {},
+      dynamicAnswers: job.dynamic_answers || {},
+      // starmap flow may not have separate research reports; use placeholders
+      greetingReport: undefined,
+      orgReport: undefined,
+      requirementReport: undefined,
+      preliminaryReport: job.preliminary_report || undefined
+    }
+
+    const normalizedNewContext = {
+      text: (additions?.newContextText || '').trim() || undefined,
+      json: additions?.newContextJson ?? undefined,
+      focusAreas: additions?.focusAreas && additions.focusAreas.length > 0 ? additions.focusAreas : undefined,
+      options: {
+        preserveStructure: additions?.preserveStructure !== false,
+        updateOnlySelectedSections: additions?.updateOnlySelectedSections === true
+      }
+    }
+
+    const allData = this.consolidateData(context)
+    const focusText = normalizedNewContext.focusAreas ? `\nFOCUS AREAS:\n- ${normalizedNewContext.focusAreas.join('\n- ')}` : ''
+    const optionsText = `\nOPTIONS:\n- Preserve structure: ${normalizedNewContext.options.preserveStructure ? 'Yes' : 'No'}\n- Update only selected sections: ${normalizedNewContext.options.updateOnlySelectedSections ? 'Yes' : 'No'}`
+
+    const prompt = `You are an expert Learning Experience Designer. Recreate the COMPLETE L&D needs analysis report by integrating NEW CONTEXT.\n\nORIGINAL REPORT (Markdown):\n${originalFinal}
+\nINPUT DATA (JSON):\n${JSON.stringify(allData, null, 2)}
+\nNEW CONTEXT (verbatim):\n${normalizedNewContext.text || '(none)'}
+${normalizedNewContext.json ? `\nNEW CONTEXT JSON:\n${JSON.stringify(normalizedNewContext.json, null, 2)}` : ''}
+${focusText}
+${optionsText}
+\nREQUIREMENTS (STRICT):\n1) Return the ENTIRE report as Markdown with these exact section headers (keep names):\n   ## Executive Summary\n   ## Current State Analysis\n   ## Recommended Solution\n   ## Learner Experience Design\n   ## Measurement Framework\n   ## Resource Planning\n   ## Risk Assessment\n   ## Next Steps\n2) Maintain professional tone. Integrate new context consistently; note contradictions briefly inline.\n3) If UPDATE ONLY SELECTED SECTIONS is Yes, limit changes to the focus areas but still return the FULL report.\n4) Do NOT include preamble or closing remarks.`
+
+    const response = await unifiedAIService.call({
+      prompt,
+      inputType: 'text',
+      capabilities: ['reasoning'],
+      temperature: 0.3,
+      maxTokens: 8000,
+      preferredProvider: 'anthropic'
+    })
+
+    const regenerated = this.parseReport(response.content, 'final')
+    const metadata = {
+      ...this.extractMetadata(regenerated, response),
+      regenerated: true,
+      addedContext: normalizedNewContext,
+      previousLength: originalFinal.length
+    }
+
+    await saveStarmapJobReport(jobId, 'final', regenerated)
+
+    return {
+      content: regenerated,
       format: 'markdown',
       metadata
     }
@@ -628,3 +821,25 @@ export const generateExecutiveSummary = (fullReport: string, context: ReportCont
 
 export const validateReport = (report: string) =>
   reportGenService.validateReport(report)
+
+export const regenerateFinalReportWithContextForJob = (
+  jobId: string,
+  additions: {
+    newContextText?: string
+    newContextJson?: any
+    focusAreas?: string[]
+    preserveStructure?: boolean
+    updateOnlySelectedSections?: boolean
+  }
+) => reportGenService.regenerateFinalReportWithContextForJob(jobId, additions)
+
+export const regenerateStarmapFinalReportWithContext = (
+  jobId: string,
+  additions: {
+    newContextText?: string
+    newContextJson?: any
+    focusAreas?: string[]
+    preserveStructure?: boolean
+    updateOnlySelectedSections?: boolean
+  }
+) => reportGenService.regenerateStarmapFinalReportWithContext(jobId, additions)

@@ -59,16 +59,47 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const SERVER_TIMEOUT_MS = Number(process.env.ANTHROPIC_SERVER_TIMEOUT_MS || 115000)
     const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
 
-    const upstream = await fetch(`${baseUrl}/v1/messages`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': version,
-      },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    })
+    async function callUpstreamWithRetry(): Promise<Response> {
+      const maxAttempts = Math.max(1, Number(process.env.ANTHROPIC_RETRIES || 2))
+      const baseDelayMs = Math.max(200, Number(process.env.ANTHROPIC_RETRY_BASE_DELAY_MS || 500))
+      let lastError: any = null
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        try {
+          const resp = await fetch(`${baseUrl}/v1/messages`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': apiKey,
+              'anthropic-version': version,
+            },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          })
+          if (resp.status === 529 || resp.status === 503 || resp.headers.get('x-should-retry') === 'true') {
+            lastError = new Error(`Upstream overloaded (${resp.status})`)
+            if (attempt < maxAttempts - 1) {
+              const jitter = Math.random() * baseDelayMs
+              const backoff = baseDelayMs * Math.pow(2, attempt) + jitter
+              await new Promise(r => setTimeout(r, backoff))
+              continue
+            }
+          }
+          return resp
+        } catch (e: any) {
+          lastError = e
+          if (attempt < maxAttempts - 1) {
+            const jitter = Math.random() * baseDelayMs
+            const backoff = baseDelayMs * Math.pow(2, attempt) + jitter
+            await new Promise(r => setTimeout(r, backoff))
+            continue
+          }
+          throw e
+        }
+      }
+      throw lastError || new Error('Anthropic upstream failed after retries')
+    }
+
+    const upstream = await callUpstreamWithRetry()
 
     clearTimeout(timeoutId)
 

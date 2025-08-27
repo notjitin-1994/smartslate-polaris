@@ -66,7 +66,9 @@ function NavSection({ title, items, defaultOpen = true }: NavSectionProps) {
                         tagTone === 'success'
                           ? 'border-green-500/30 text-green-100 bg-green-500/15'
                           : tagTone === 'preview'
-                            ? 'border-primary-400/30 text-primary-500 bg-primary-400/10'
+                            ? (label === 'Constellation'
+                                ? 'border-primary-400/30 text-primary-500 bg-primary-400/10'
+                                : 'border-green-400/70 text-primary-500 bg-primary-400/10 ring-1 ring-green-400/40 shadow-[0_0_10px_rgba(34,197,94,0.45)]')
                             : 'border-white/10 text-white/60 bg-white/5'
                       }`}
                     >
@@ -202,7 +204,8 @@ function SidebarToggleIcon({ className = '' }: { className?: string }) {
 
 
 
-function IconBookOpen({ className = '' }: { className?: string }) {
+// Removed unused IconBookOpen
+/* function IconBookOpen({ className = '' }: { className?: string }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -220,9 +223,10 @@ function IconBookOpen({ className = '' }: { className?: string }) {
       <path d="M12 5.5v12" />
     </svg>
   )
-}
+} */
 
-function IconChart({ className = '' }: { className?: string }) {
+// Removed unused IconChart
+/* function IconChart({ className = '' }: { className?: string }) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -242,7 +246,7 @@ function IconChart({ className = '' }: { className?: string }) {
       <path d="M5 11l3-3 3 3 5-5 3 3" />
     </svg>
   )
-}
+} */
 
 function IconArrowRight({ className = '' }: { className?: string }) {
   return (
@@ -381,7 +385,7 @@ export function PortalPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const isSettings = location.pathname.endsWith('/settings')
-  const isStarmaps = location.pathname.endsWith('/starmaps')
+  const isStarmaps = false
   const isPortalRoot = location.pathname === '/'
   const { user: userParam } = useParams()
   const outlet = useOutlet()
@@ -695,7 +699,7 @@ export function PortalPage() {
                         }`}
                       >
                         <span className="truncate">Polaris</span>
-                        <span className="ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium border-primary-400/30 text-primary-300 bg-primary-400/10">2.5 Preview</span>
+                        <span className="ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium border-green-400/70 text-primary-300 bg-primary-400/10 ring-1 ring-green-400/40 shadow-[0_0_10px_rgba(34,197,94,0.45)]">2.5 Preview</span>
                       </a>
                     </li>
                     {/* Removed "Polaris Jobs" entry per request */}
@@ -704,7 +708,7 @@ export function PortalPage() {
                         <a href={typeof item !== 'string' && item.href ? item.href : '#'} className="flex items-center justify-between px-3 py-1.5 text-sm text-white/75 hover:text-primary-400 hover:bg-white/5 rounded-lg transition pressable">
                           <span className="truncate">{typeof item === 'string' ? item : item.label}</span>
                           {typeof item !== 'string' && item.tagText && (
-                            <span className={`ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${item.tagTone === 'preview' ? 'border-primary-400/30 text-primary-300 bg-primary-400/10' : 'border-white/15 text-white/60 bg-white/5'}`}>{item.tagText}</span>
+                            <span className={`ml-3 shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${item.tagTone === 'preview' ? (item.label === 'Constellation' ? 'border-primary-400/30 text-primary-300 bg-primary-400/10' : 'border-green-400/70 text-primary-300 bg-primary-400/10 ring-1 ring-green-400/40 shadow-[0_0_10px_rgba(34,197,94,0.45)]') : 'border-white/15 text-white/60 bg-white/5'}`}>{item.tagText}</span>
                           )}
                         </a>
                       </li>
@@ -726,7 +730,7 @@ export function PortalPage() {
                   onClick={() => navigate('/pricing')}
                   className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
                 >
-                  <IconSparkle className="w-5 h-5" />
+                  <IconSparkle className="w-5 h-5 text-brand-accent drop-shadow-[0_0_8px_rgba(167,218,219,0.35)]" />
                 </button>
                 <button
                   type="button"
@@ -762,8 +766,8 @@ export function PortalPage() {
                   className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/90 hover:bg-white/5 rounded-lg transition pressable"
                   title="Subscribe to Polaris"
                 >
-                  <IconSparkle className="w-5 h-5" />
-                  <span>Subscribe to Polaris</span>
+                  <IconSparkle className="w-5 h-5 text-brand-accent drop-shadow-[0_0_8px_rgba(167,218,219,0.35)]" />
+                  <span className="text-brand-accent drop-shadow-[0_0_8px_rgba(167,218,219,0.35)]">Subscribe to Polaris</span>
                 </button>
                 <button
                   type="button"
@@ -1143,22 +1147,7 @@ export function PortalPage() {
                     icon={IconSparkle}
                   />
                 </div>
-                <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up animate-delay-75">
-                  <WorkspaceActionCard
-                    href="/starmaps"
-                    label="My Starmaps"
-                    description="View and manage all your discovery starmaps in one place."
-                    icon={IconBookOpen}
-                  />
-                </div>
-                <div className="h-40 sm:h-44 md:h-48 animate-fade-in-up animate-delay-150">
-                  <WorkspaceActionCard
-                    href="/polaris/jobs"
-                    label="Jobs Dashboard"
-                    description="Monitor and track your asynchronous report generation jobs."
-                    icon={IconChart}
-                  />
-                </div>
+                
               </div>
             </section>
           )}
@@ -1235,8 +1224,8 @@ export function PortalPage() {
                       className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
                       title="Subscribe to Polaris"
                     >
-                      <IconSparkle className="w-5 h-5" />
-                      <span>Subscribe to Polaris</span>
+                      <IconSparkle className="w-5 h-5 text-brand-accent drop-shadow-[0_0_8px_rgba(167,218,219,0.35)]" />
+                      <span className="text-brand-accent drop-shadow-[0_0_8px_rgba(167,218,219,0.35)]">Subscribe to Polaris</span>
                     </button>
                   </div>
                   <div className="px-1 py-2 border-t border-white/10">

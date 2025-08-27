@@ -47,12 +47,90 @@ async function callAnthropicMessages(payload: {
     const SERVER_TIMEOUT_MS = Number(process.env.ANTHROPIC_SERVER_TIMEOUT_MS || 115000)
     const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
 
-    const resp = await fetch(`${baseUrl}/v1/messages`, {
+    const maxAttempts = Math.max(1, Number(process.env.ANTHROPIC_RETRIES || 2))
+    const baseDelayMs = Math.max(200, Number(process.env.ANTHROPIC_RETRY_BASE_DELAY_MS || 500))
+    let lastStatus = 0
+    let lastText = ''
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const resp = await fetch(`${baseUrl}/v1/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+            'anthropic-version': version,
+          },
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        })
+
+        const text = await resp.text()
+        lastStatus = resp.status
+        lastText = text
+        if (resp.ok) {
+          try {
+            const data: any = JSON.parse(text)
+            const content = Array.isArray(data?.content) ? (data.content.find((c: any) => c.type === 'text')?.text || '') : (data?.content || '')
+            clearTimeout(timeoutId)
+            return { ok: true, content }
+          } catch {
+            clearTimeout(timeoutId)
+            return { ok: true, content: text }
+          }
+        }
+
+        // Overload or retryable conditions
+        const shouldRetry = resp.status === 529 || resp.status === 503 || resp.headers.get('x-should-retry') === 'true'
+        if (shouldRetry && attempt < maxAttempts - 1) {
+          const jitter = Math.random() * baseDelayMs
+          const backoff = baseDelayMs * Math.pow(2, attempt) + jitter
+          await new Promise(r => setTimeout(r, backoff))
+          continue
+        }
+
+        break
+      } catch (e) {
+        if (attempt < maxAttempts - 1) {
+          const jitter = Math.random() * baseDelayMs
+          const backoff = baseDelayMs * Math.pow(2, attempt) + jitter
+          await new Promise(r => setTimeout(r, backoff))
+          continue
+        }
+        clearTimeout(timeoutId)
+        return { ok: false, error: (e as any)?.message || 'Anthropic request failed' }
+      }
+    }
+
+    clearTimeout(timeoutId)
+    return { ok: false, status: lastStatus, error: lastText || `HTTP ${lastStatus}` }
+  } catch (err: any) {
+    const msg = err?.name === 'AbortError' ? 'Anthropic request timed out' : (err?.message || 'Anthropic request failed')
+    return { ok: false, error: msg }
+  }
+}
+
+// ---------- OpenAI Helper ----------
+async function callOpenAIChat(payload: {
+  model: string
+  temperature: number
+  messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+  max_tokens: number
+}): Promise<{ ok: boolean; content?: string; status?: number; error?: string }> {
+  try {
+    const apiKey = (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '').trim()
+    const baseUrl = ((process.env.OPENAI_BASE_URL || process.env.VITE_OPENAI_BASE_URL || 'https://api.openai.com').trim()).replace(/\/$/, '')
+    if (!apiKey) return { ok: false, error: 'OpenAI API key not configured' }
+
+    const controller = new AbortController()
+    const SERVER_TIMEOUT_MS = Number(process.env.OPENAI_SERVER_TIMEOUT_MS || 75000)
+    const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
+
+    const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': version,
+        'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify(payload),
       signal: controller.signal,
@@ -63,16 +141,15 @@ async function callAnthropicMessages(payload: {
     const text = await resp.text()
     if (!resp.ok) return { ok: false, status: resp.status, error: text || `HTTP ${resp.status}` }
 
-    // Anthropic returns either { content: [{ type: 'text', text: '...' }] } or a string
     try {
       const data: any = JSON.parse(text)
-      const content = Array.isArray(data?.content) ? (data.content.find((c: any) => c.type === 'text')?.text || '') : (data?.content || '')
+      const content = data?.choices?.[0]?.message?.content || ''
       return { ok: true, content }
     } catch {
       return { ok: true, content: text }
     }
   } catch (err: any) {
-    const msg = err?.name === 'AbortError' ? 'Anthropic request timed out' : (err?.message || 'Anthropic request failed')
+    const msg = err?.name === 'AbortError' ? 'OpenAI request timed out' : (err?.message || 'OpenAI request failed')
     return { ok: false, error: msg }
   }
 }
@@ -417,51 +494,73 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
       return
     }
 
-    // Branch 2: Research report job (existing behavior)
-    const PERPLEXITY_API_KEY = process.env.PERPLEXITY_API_KEY || process.env.VITE_PERPLEXITY_API_KEY || ''
-    const PERPLEXITY_BASE_URL = process.env.PERPLEXITY_BASE_URL || process.env.VITE_PERPLEXITY_BASE_URL || 'https://api.perplexity.ai'
+    // Branch 2: Research report job (refactored with unified fallbacks)
     const mdl = normalizePerplexityModel(model || process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar-pro')
 
-    if (!PERPLEXITY_API_KEY) throw new Error('Perplexity API key not configured')
+    // Compose user message with a short preamble as Perplexity lacks system role (kept for reference)
+    // const contextualPrompt = `You are a helpful research assistant. Provide comprehensive, accurate information based on current web sources. Focus on facts and cite sources when possible.\n\n${prompt}`
 
-    // Compose user message with a short preamble as Perplexity lacks system role
-    const contextualPrompt = `You are a helpful research assistant. Provide comprehensive, accurate information based on current web sources. Focus on facts and cite sources when possible.\n\n${prompt}`
+    // Update progress and ETA baseline
+    {
+      const isReasoningModel = mdl.includes('reasoning')
+      const baseTimeout = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 75000)
+      const SERVER_TIMEOUT_MS = isReasoningModel ? Math.min(110000, Math.floor(baseTimeout * 1.5)) : baseTimeout
+      await supabase
+        .from('report_jobs')
+        .update({ percent: 15, eta_seconds: Math.ceil(SERVER_TIMEOUT_MS / 1000) })
+        .eq('job_id', jobId)
+    }
 
-    const controller = new AbortController()
-    const isReasoningModel = mdl.includes('reasoning')
-    const baseTimeout = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 75000)
-    const SERVER_TIMEOUT_MS = isReasoningModel ? Math.min(110000, Math.floor(baseTimeout * 1.5)) : baseTimeout
-    const timeoutId = setTimeout(() => {
-      console.warn(`Job ${jobId} timing out after ${SERVER_TIMEOUT_MS}ms`)
-      controller.abort()
-    }, SERVER_TIMEOUT_MS)
+    let providerUsed: 'perplexity' | 'openai' | 'anthropic' = 'perplexity'
+    let selectedModel: string = mdl
+    let content: string = ''
+    const attemptErrors: string[] = []
 
-    // Update progress
-    await supabase
-      .from('report_jobs')
-      .update({ percent: 15, eta_seconds: Math.ceil(SERVER_TIMEOUT_MS / 1000) })
-      .eq('job_id', jobId)
+    // Skip Perplexity entirely per request: prefer OpenAI → Anthropic
 
-    const response = await fetch(`${PERPLEXITY_BASE_URL}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: mdl,
-        temperature,
-        max_tokens,
-        messages: [{ role: 'user', content: contextualPrompt }],
-      }),
-      signal: controller.signal,
-    })
+    // Attempt 1: OpenAI
+    {
+      const openaiModel = (process.env.OPENAI_MODEL || process.env.VITE_OPENAI_MODEL || 'gpt-4o-mini').trim()
+      const openaiResult = await callOpenAIChat({
+        model: openaiModel,
+        temperature: typeof temperature === 'number' ? temperature : 0.2,
+        messages: [
+          { role: 'system', content: 'You are a helpful research assistant. Provide comprehensive, accurate information. Cite sources if known.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: Math.min(typeof max_tokens === 'number' ? max_tokens : 2600, 4096),
+      })
+      if (openaiResult.ok && openaiResult.content) {
+        content = openaiResult.content.trim()
+        providerUsed = 'openai'
+        selectedModel = openaiModel
+      } else if (!openaiResult.ok) {
+        attemptErrors.push(openaiResult.error || `OpenAI error ${openaiResult.status || ''}`.trim())
+      }
+    }
 
-    clearTimeout(timeoutId)
+    // Attempt 2: Anthropic (if OpenAI failed)
+    if (!content) {
+      const anthropicModel = (process.env.ANTHROPIC_MODEL || process.env.VITE_ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest').trim()
+      const anthropicMax = Math.min(parseInt(process.env.ANTHROPIC_MAX_TOKENS || process.env.VITE_ANTHROPIC_MAX_TOKENS || '8192'), 8192)
+      const anthropic = await callAnthropicMessages({
+        model: anthropicModel,
+        temperature: typeof temperature === 'number' ? temperature : 0.2,
+        system: 'You are a helpful research assistant. Provide comprehensive, accurate information based on your knowledge. Cite sources if known.',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: Math.min(typeof max_tokens === 'number' ? max_tokens : 2600, anthropicMax),
+      })
+      if (anthropic.ok && anthropic.content) {
+        content = anthropic.content.trim()
+        providerUsed = 'anthropic'
+        selectedModel = anthropicModel
+      } else if (!anthropic.ok) {
+        attemptErrors.push(anthropic.error || `Anthropic error ${anthropic.status || ''}`.trim())
+      }
+    }
 
-    if (!response.ok) {
-      const errorText = await response.text()
-      throw new Error(`Perplexity API error ${response.status}: ${errorText}`)
+    if (!content) {
+      throw new Error(`All providers failed: ${attemptErrors.join(' | ')}`)
     }
 
     // Update progress
@@ -470,23 +569,21 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
       .update({ percent: 80 })
       .eq('job_id', jobId)
 
-    const data: any = await response.json()
-    const content: string = data?.choices?.[0]?.message?.content || ''
-    
     // Update job with result
-    const { error: completeError } = await supabase
-      .from('report_jobs')
-      .update({
-        status: 'succeeded',
-        result: content.trim(),
-        percent: 100,
-        eta_seconds: 0,
-        completed_at: new Date().toISOString()
-      })
-      .eq('job_id', jobId)
-
-    if (completeError) {
-      console.error(`Failed to complete job ${jobId}:`, completeError)
+    {
+      const { error: completeError } = await supabase
+        .from('report_jobs')
+        .update({
+          status: 'succeeded',
+          result: content,
+          percent: 100,
+          eta_seconds: 0,
+          completed_at: new Date().toISOString()
+        })
+        .eq('job_id', jobId)
+      if (completeError) {
+        console.error(`Failed to complete job ${jobId}:`, completeError)
+      }
     }
 
     // Notify report completion via webhook
@@ -494,16 +591,16 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
       const researchMetadata = {
         ...(jobRow as any)?.metadata,
         job_id: jobId,
-        model: mdl,
+        model: selectedModel,
         completed_at: new Date().toISOString(),
-        provider: 'perplexity'
+        provider: providerUsed
       }
 
       const webhookResult = await notifyReportCompletion(
         jobId,
         reportId,
         reportType,
-        content.trim(),
+        content,
         'completed',
         researchMetadata
       )
@@ -515,7 +612,7 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
           jobId,
           reportId,
           reportTable,
-          content.trim(),
+          content,
           'completed',
           researchMetadata
         )

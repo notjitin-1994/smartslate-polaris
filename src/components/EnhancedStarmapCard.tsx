@@ -10,6 +10,9 @@ type EnhancedStarmapCardProps = {
   onResume?: (jobId: string) => void
   onDelete?: (jobId: string) => void
   deleting?: boolean
+  selectable?: boolean
+  selected?: boolean
+  onToggleSelect?: (jobId: string, selected: boolean) => void
 }
 
 function classNames(...classes: Array<string | false | null | undefined>): string {
@@ -107,7 +110,7 @@ function getStatusConfig(status: StarmapJob['status'] | string) {
   }
 }
 
-export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting }: EnhancedStarmapCardProps) {
+export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting, selectable = false, selected = false, onToggleSelect }: EnhancedStarmapCardProps) {
   const [isRisksExpanded, setIsRisksExpanded] = useState(false)
   const progressPct = useProgress(job)
   const statusConfig = getStatusConfig(job.status)
@@ -261,6 +264,18 @@ export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting 
       {/* Header Section */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex-1">
+          {selectable && (
+            <label className="inline-flex items-center gap-2 mb-2 text-white/80">
+              <input
+                type="checkbox"
+                aria-label="Select starmap"
+                className="h-4 w-4 rounded border-white/20 bg-transparent text-primary-400 focus:ring-primary-400/30"
+                checked={Boolean(selected)}
+                onChange={() => onToggleSelect?.(job.id, !selected)}
+              />
+              <span className="text-xs">Select</span>
+            </label>
+          )}
           <h3 className="text-xl font-heading font-bold text-white mb-2 flex items-center gap-3">
             {job.title || 'Untitled Starmap'}
             <span className={classNames(

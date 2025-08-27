@@ -4,6 +4,7 @@ import type { User } from '@supabase/supabase-js'
 import { getSupabase } from '@/services/supabase'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { StaticSwirls } from '@/components/StaticSwirls'
+import HeaderSwirlBackground from '@/components/HeaderSwirlBackground'
 
 function resolveUserAvatarUrl(user: User | null): string | null {
   const meta: any = user?.user_metadata ?? {}
@@ -172,8 +173,9 @@ export function PublicProfile() {
         areaPadding={24}
       />
       {/* Header with Smartslate Branding */}
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-[rgb(var(--bg))]/80 backdrop-blur-xl">
-        <div className="mx-auto max-w-4xl px-4 py-4">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-[rgb(var(--bg))]/80 backdrop-blur-xl relative overflow-hidden">
+        <HeaderSwirlBackground />
+        <div className="relative mx-auto max-w-4xl px-4 py-4 z-10">
           <div className="flex items-center justify-between">
             <div className="flex flex-col items-start">
               <img src="/images/logos/logo.png" alt="Smartslate" className="h-8 w-auto" />

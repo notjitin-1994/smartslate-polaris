@@ -57,3 +57,23 @@ export function formatShareMessage(link: string, reportTitle?: string): string {
   const title = reportTitle || 'L&D Needs Analysis Report'
   return `Check out this ${title} from SmartSlate Polaris: ${link}`
 }
+
+/**
+ * Attempt to share via the Web Share API with graceful fallbacks.
+ * - On iPad/iOS Safari and modern mobile browsers, this opens the native share sheet.
+ * - If Web Share is unavailable or fails, we fall back to copying to clipboard.
+ */
+export async function shareLinkNative(options: { url: string; title?: string; text?: string }): Promise<'shared' | 'copied' | 'failed'> {
+  const { url, title = 'SmartSlate Polaris', text } = options
+  try {
+    const canShare = typeof navigator !== 'undefined' && typeof (navigator as any).share === 'function'
+    if (canShare) {
+      await (navigator as any).share({ url, title, text: text ?? formatShareMessage(url) })
+      return 'shared'
+    }
+  } catch (err) {
+    // Some browsers throw if user cancels share; treat as failure and continue to clipboard
+  }
+  const copied = await copyToClipboard(url)
+  return copied ? 'copied' : 'failed'
+}

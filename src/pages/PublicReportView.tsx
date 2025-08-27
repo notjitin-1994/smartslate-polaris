@@ -3,6 +3,9 @@ import { useParams } from 'react-router-dom'
 import { getSupabase } from '@/services/supabase'
 import { convertNaJsonStringToMarkdown } from '@/polaris/needs-analysis/format'
 import EnhancedReportDisplay from '@/components/EnhancedReportDisplay'
+import SiteFooter from '@/components/SiteFooter'
+import HeaderSwirlBackground from '@/components/HeaderSwirlBackground'
+import { shareLinkNative, copyToClipboard } from '@/utils/shareUtils'
 // Removed unused NAReport/PolarisSummary types to satisfy build
 
 // Glassmorphic Card Component with brand-compliant design [[memory:7262075]]
@@ -88,6 +91,14 @@ export default function PublicReportView() {
   const [reportTitle, setReportTitle] = useState<string>('Needs Analysis Report')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showCopied, setShowCopied] = useState(false)
+  const [requesterFirstName, setRequesterFirstName] = useState<string | null>(null)
+
+  useEffect(() => {
+    const previous = document.title
+    document.title = 'Smartslate | Polaris Starmap'
+    return () => { document.title = previous }
+  }, [])
 
   useEffect(() => {
     async function loadReport() {
@@ -148,6 +159,22 @@ export default function PublicReportView() {
           setReportMarkdown(markdown || '')
         }
         setReportTitle((data as any)?.report_title || (data as any)?.company_name || 'Needs Analysis Report')
+        // Derive creator's first name from stage1_answers or report_title convention
+        try {
+          const stage1 = (data as any)?.stage1_answers
+          let fullName: string | null = null
+          if (stage1 && typeof stage1.requester_name === 'string') {
+            fullName = stage1.requester_name
+          } else if ((data as any)?.report_title && typeof (data as any).report_title === 'string') {
+            const parts = String((data as any).report_title).split('-')
+            const maybeName = parts[parts.length - 1]?.trim()
+            if (maybeName) fullName = maybeName
+          }
+          if (fullName) {
+            const first = fullName.trim().split(/\s+/)[0]
+            setRequesterFirstName(first || null)
+          }
+        } catch {}
       } catch (err) {
         console.error('Error loading report:', err)
         setError('Failed to load report')
@@ -161,13 +188,13 @@ export default function PublicReportView() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#020C1B] to-[#0A1628] flex items-center justify-center">
-        <div className="text-center">
-          <div className="relative w-16 h-16 mx-auto">
-            <div className="w-16 h-16 border-4 border-white/20 rounded-full"></div>
-            <div className="absolute top-0 left-0 w-16 h-16 border-4 border-primary-400 rounded-full animate-spin border-t-transparent"></div>
+      <div className="min-h-screen bg-gradient-to-br from-[#020C1B] to-[#0A1628] flex items-center justify-center px-4">
+        <div className="glass-card p-6 max-w-sm w-full text-center" role="status" aria-live="polite">
+          <div className="relative w-14 h-14 mx-auto">
+            <div className="w-14 h-14 border-4 border-white/15 rounded-full"></div>
+            <div className="absolute inset-0 border-4 border-primary-400 rounded-full animate-spin border-t-transparent"></div>
           </div>
-          <p className="mt-4 text-white/60 text-sm animate-pulse font-['Lato']">Loading report...</p>
+          <p className="mt-4 text-white/70 text-sm font-['Lato']">Loading report…</p>
         </div>
       </div>
     )
@@ -175,15 +202,15 @@ export default function PublicReportView() {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-[#020C1B] to-[#0A1628] flex items-center justify-center">
-        <div className="text-center max-w-md">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
-            <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <div className="min-h-screen bg-gradient-to-br from-[#020C1B] to-[#0A1628] flex items-center justify-center px-4">
+        <div className="glass-card p-6 max-w-md w-full text-center" role="alert" aria-live="assertive">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-red-500/10 flex items-center justify-center">
+            <svg className="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="text-xl font-['Quicksand'] font-semibold text-white mb-2">Report Not Available</h2>
-          <p className="text-white/60 font-['Lato']">{error}</p>
+          <h2 className="text-lg font-['Quicksand'] font-semibold text-white mb-1">Report Not Available</h2>
+          <p className="text-white/70 text-sm font-['Lato']">{error}</p>
         </div>
       </div>
     )
@@ -199,20 +226,56 @@ export default function PublicReportView() {
     )
   }
 
+  const handleShare = async () => {
+    try {
+      const url = window.location.href
+      const text = `Smartslate | Polaris Starmap:\n${requesterFirstName || 'Someone'} created the Polaris Starmap ${reportTitle} and wants to share it with you!`
+      const outcome = await shareLinkNative({ url, title: reportTitle, text })
+      if (outcome === 'copied') {
+        setShowCopied(true)
+        setTimeout(() => setShowCopied(false), 1800)
+      } else if (outcome === 'failed') {
+        const copied = await copyToClipboard(url)
+        if (copied) {
+          setShowCopied(true)
+          setTimeout(() => setShowCopied(false), 1800)
+        }
+      }
+    } catch {}
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#020C1B] to-[#0A1628] relative overflow-x-hidden">
       {/* Animated Swirl Background */}
       <SwirlBackground />
       
       {/* Main Content */}
-      <div className="relative z-10">
+      <div className="relative z-10 pt-20">
         {/* Header */}
-        <header className="sticky top-0 z-40 backdrop-blur-xl bg-gradient-to-b from-black/40 to-transparent border-b border-white/10 overflow-hidden">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex items-center gap-3">
-              <img src="/images/logos/logo.png" alt="SmartSlate" className="h-8 w-auto" />
+        <header className="fixed top-0 left-0 right-0 z-40 w-full backdrop-blur-xl bg-gradient-to-b from-black/40 to-transparent border-b border-white/10 overflow-hidden">
+          <HeaderSwirlBackground />
+          <div className="relative container mx-auto px-4 py-3 z-10">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col items-start">
+                <img src="/images/logos/logo.png" alt="SmartSlate" className="h-8 w-auto logo-glow" />
+                <span className="mt-1 font-['Lato'] font-semibold text-white/80 text-[0.78rem]">Polaris Starmaps</span>
+              </div>
+              <div className="hidden md:flex items-center gap-2">
+                <button
+                  onClick={handleShare}
+                  aria-label="Share link"
+                  title="Share"
+                  className="icon-btn"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="18" cy="5" r="2" />
+                    <circle cx="18" cy="19" r="2" />
+                    <circle cx="6" cy="12" r="2" />
+                    <path d="M8 12l8-7M8 12l8 7" />
+                  </svg>
+                </button>
+              </div>
             </div>
-            <h1 className="mt-2 font-['Lato'] font-semibold text-white text-[0.78rem]">Polaris Starmaps</h1>
           </div>
         </header>
 
@@ -220,15 +283,57 @@ export default function PublicReportView() {
         <div className="container mx-auto px-4 py-8 max-w-7xl">
           <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.35)] overflow-hidden">
             <div className="p-4 md:p-8">
-              <EnhancedReportDisplay reportMarkdown={reportMarkdown} reportTitle={reportTitle} />
+              <EnhancedReportDisplay 
+                reportMarkdown={reportMarkdown}
+                reportTitle={reportTitle}
+                showGeneratedDate={false}
+                className="needs-analysis-report-content"
+              />
             </div>
           </div>
-          <div className="mt-12 text-center text-white/50 text-sm font-['Lato']">
-            <p>This is a public overview of the comprehensive needs analysis report</p>
-            <p className="mt-2">© {new Date().getFullYear()} SmartSlate. All rights reserved.</p>
+          
+        </div>
+
+        {/* Floating mobile share button (bottom-right, aligned to report container) */}
+        <div className="fixed bottom-6 left-0 right-0 z-40 md:hidden pointer-events-none">
+          <div className="mx-auto max-w-7xl px-4">
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  const url = window.location.href
+                  void (async () => {
+                    const copied = await copyToClipboard(url)
+                    if (copied) {
+                      setShowCopied(true)
+                      setTimeout(() => setShowCopied(false), 1800)
+                    }
+                  })()
+                }}
+                className="icon-btn icon-btn-primary w-12 h-12 rounded-full pointer-events-auto float-button fab-shadow"
+                aria-label="Copy public link"
+                title="Copy link"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="18" cy="5" r="2" />
+                  <circle cx="18" cy="19" r="2" />
+                  <circle cx="6" cy="12" r="2" />
+                  <path d="M8 12l8-7M8 12l8 7" />
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
+
+      {/* Copied toast */}
+      {showCopied && (
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[999] px-4 py-2 rounded-xl border border-white/15 bg-white/10 backdrop-blur-md shadow-2xl text-white/90">
+          Link copied to clipboard
+        </div>
+      )}
+
+      {/* Footer */}
+      <SiteFooter className="relative z-10 mt-8" />
 
       {/* Add glassmorphic styles */}
       <style>{`

@@ -69,20 +69,24 @@ export default function StarmapJobViewer() {
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       {markdown ? (
-        <EnhancedReportDisplay 
-          reportMarkdown={markdown}
-          reportTitle={job.title || 'Needs Analysis Report'}
-          editableTitle
-          onSaveTitle={async (newTitle: string) => {
-            const trimmed = newTitle.trim()
-            if (!trimmed || !job) return
-            const { error } = await updateStarmapJobTitle(job.id, trimmed)
-            if (!error) setJob({ ...job, title: trimmed })
-          }}
-          prelimReport={job.preliminary_report || undefined}
-          summaryId={job.legacy_summary_id}
-          starmapJobId={job.id}
-        />
+        <div className="rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl shadow-[0_10px_40px_rgba(0,0,0,0.35)] overflow-hidden">
+          <div className="p-4 md:p-8">
+            <EnhancedReportDisplay 
+              reportMarkdown={markdown}
+              reportTitle={job.title || 'Needs Analysis Report'}
+              editableTitle
+              onSaveTitle={async (newTitle: string) => {
+                const trimmed = newTitle.trim()
+                if (!trimmed || !job) return
+                const { error } = await updateStarmapJobTitle(job.id, trimmed)
+                if (!error) setJob({ ...job, title: trimmed })
+              }}
+              prelimReport={job.preliminary_report || undefined}
+              summaryId={job.legacy_summary_id}
+              starmapJobId={job.id}
+            />
+          </div>
+        </div>
       ) : (
         <div className="text-center text-white/60 py-20">
           <svg className="w-16 h-16 mx-auto mb-4 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">

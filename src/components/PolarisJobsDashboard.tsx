@@ -106,7 +106,7 @@ function JobCard({ job, onDelete, onResume, onView }: JobCardProps) {
         {job.status === 'paused' && (
           <button
             onClick={() => onResume(job.id)}
-            className="flex-1 btn-primary text-sm"
+            className="flex-1 text-sm rounded-lg bg-secondary-500 text-white px-4 py-2 hover:bg-secondary-400 transition-colors"
           >
             Resume
           </button>

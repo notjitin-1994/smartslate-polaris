@@ -4,7 +4,7 @@ import { useState, useCallback, useMemo, memo } from 'react'
 import type { ReactNode } from 'react'
 import { parseMarkdownToReport } from './parse'
 import { convertNaJsonStringToMarkdown } from './format'
-import { generateShareLink, copyToClipboard } from '@/utils/shareUtils'
+import { generateShareLink, copyToClipboard, shareLinkNative } from '@/utils/shareUtils'
 import { getReportPublicStatus, toggleReportPublicStatus } from '@/services/polarisSummaryService'
 
 interface ReportDisplayProps {
@@ -165,12 +165,20 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
     if (!summaryId) return
     await ensurePublic()
     const shareLink = generateShareLink(summaryId)
-    const copied = await copyToClipboard(shareLink)
-    if (copied) {
+    // titleInput is declared later; capture current computed title directly
+    const fallbackTitle = reportTitle || 'Needs Analysis Report'
+    const outcome = await shareLinkNative({ url: shareLink, title: fallbackTitle })
+    if (outcome === 'copied') {
       setShowCopySuccess(true)
       setTimeout(() => setShowCopySuccess(false), 2000)
+    } else if (outcome === 'failed') {
+      const copied = await copyToClipboard(shareLink)
+      if (copied) {
+        setShowCopySuccess(true)
+        setTimeout(() => setShowCopySuccess(false), 2000)
+      }
     }
-  }, [summaryId, ensurePublic])
+  }, [summaryId, ensurePublic, reportTitle])
 
   // --- Lightweight markdown helpers for non-structured reports (greeting/org/requirement) ---
   type Section = { title: string; lines: string[] }
@@ -499,7 +507,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
             <div className="relative">
               <button
                 onClick={handleShare}
-                className={`p-2 rounded-lg transition-all hover:bg-white/10 text-white/60 hover:text-white`}
+                className={`p-2 rounded-full transition-all hover:bg-white/10 text-white/60 hover:text-white touch-manipulation`}
                 title="Copy link"
               >
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

@@ -1,4 +1,5 @@
 import { useState, useEffect, type JSX } from 'react'
+import HeaderSwirlBackground from '@/components/HeaderSwirlBackground'
 import { useParams, useNavigate } from 'react-router-dom'
 import { 
   getJob,
@@ -296,8 +297,9 @@ export default function PolarisJobViewer() {
     <div className="min-h-screen bg-[rgb(var(--bg))] text-white">
       
       {/* Header */}
-      <div className="relative border-b border-white/10 bg-[rgb(var(--bg))]/60 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <div className="relative border-b border-white/10 bg-[rgb(var(--bg))]/60 backdrop-blur-xl overflow-hidden">
+        <HeaderSwirlBackground />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 z-10">
           <div className="flex justify-between items-start">
             <div className="flex items-center gap-4">
               <button

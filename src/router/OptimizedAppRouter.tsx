@@ -23,6 +23,7 @@ const Pricing = withLazyLoad(() => import('@/pages/Pricing'))
 const SeedJitinStarmap = withLazyLoad(() => import('@/pages/SeedJitinStarmap'))
 const ReportsDebug = withLazyLoad(() => import('@/pages/ReportsDebug'))
 const ApiDebug = withLazyLoad(() => import('@/pages/ApiDebug'))
+const CardComparison = withLazyLoad(() => import('@/pages/CardComparison'))
 
 // Job-based Polaris routes (lazy)
 const PolarisJobsDashboard = withLazyLoad(() => import('@/components/PolarisJobsDashboard'))
@@ -59,7 +60,10 @@ export function OptimizedAppRouter() {
             <Route path="/report/public/:id" element={<PublicReportView />} />
             <Route path="/report/public/starmap/:id" element={<PublicReportView />} />
             {import.meta.env.DEV && (
-              <Route path="/dev/debug" element={<ApiDebug />} />
+              <>
+                <Route path="/dev/debug" element={<ApiDebug />} />
+                <Route path="/dev/card-comparison" element={<CardComparison />} />
+              </>
             )}
             
             

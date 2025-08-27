@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { parseMarkdownToReport } from '@/polaris/needs-analysis/parse'
 import { convertNaJsonStringToMarkdown } from '@/polaris/needs-analysis/format'
 import type { NAReport } from '@/polaris/needs-analysis/report'
-import { generateShareLink, copyToClipboard } from '@/utils/shareUtils'
+import { generateShareLink, copyToClipboard, shareLinkNative } from '@/utils/shareUtils'
 import { getReportPublicStatus, toggleReportPublicStatus } from '@/services/polarisSummaryService'
 import { getStarmapPublicStatus, toggleStarmapPublicStatus } from '@/services/starmapJobsService'
 
@@ -21,6 +21,7 @@ interface EnhancedReportDisplayProps {
   prelimReport?: string
   summaryId?: string // Optional summary ID for share functionality
   starmapJobId?: string // Optional starmap job id for share functionality
+  showGeneratedDate?: boolean
 }
 
 // Visual data card component
@@ -254,7 +255,8 @@ const EnhancedReportDisplay = memo(({
   requirementReport: _unusedRequirementReport,
   prelimReport: _unusedPrelimReport,
   summaryId,
-  starmapJobId
+  starmapJobId,
+  showGeneratedDate = true
 }: EnhancedReportDisplayProps) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleInput, setTitleInput] = useState(reportTitle)
@@ -291,17 +293,23 @@ const EnhancedReportDisplay = memo(({
 
   const handleShare = useCallback(async () => {
     if (!summaryId && !starmapJobId) return
-    // Ensure the resource is public before sharing
     await ensurePublic()
     const link = summaryId
       ? generateShareLink(summaryId, { kind: 'summary' })
       : generateShareLink(starmapJobId!, { kind: 'starmap' })
-    const copied = await copyToClipboard(link)
-    if (copied) {
+    const outcome = await shareLinkNative({ url: link, title: titleInput })
+    if (outcome === 'copied') {
       setShowCopySuccess(true)
       setTimeout(() => setShowCopySuccess(false), 2000)
+    } else if (outcome === 'failed') {
+      // Last resort fallback
+      const copied = await copyToClipboard(link)
+      if (copied) {
+        setShowCopySuccess(true)
+        setTimeout(() => setShowCopySuccess(false), 2000)
+      }
     }
-  }, [summaryId, starmapJobId, ensurePublic])
+  }, [summaryId, starmapJobId, ensurePublic, titleInput])
   
   // Parse report and filter test data
   const report = useMemo(() => {
@@ -388,7 +396,7 @@ const EnhancedReportDisplay = memo(({
         <div
           role="status"
           aria-live="polite"
-          className="fixed top-5 left-1/2 -translate-x-1/2 z-[999] px-4 py-2 rounded-xl border border-white/15 bg-white/10 backdrop-blur-md shadow-2xl text-white/90"
+          className="fixed top-5 left-1/2 -translate-x-1/2 z-[999] px-4 py-2 rounded-xl border border-white/15 bg-white/10 backdrop-blur-md shadow-2xl text-white/90 pointer-events-none"
         >
           Share link copied to clipboard!
         </div>
@@ -440,7 +448,7 @@ const EnhancedReportDisplay = memo(({
                       <button
                         onClick={handleShare}
                         aria-label="Copy share link"
-                        className="w-9 h-9 inline-flex items-center justify-center text-primary-300 hover:text-primary-200 focus:outline-none focus:ring-2 focus:ring-primary-400/60 transition"
+                        className="w-11 h-11 inline-flex items-center justify-center rounded-full text-primary-300 hover:text-primary-200 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-primary-400/60 transition"
                         title="Copy link"
                       >
                         <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none">
@@ -453,9 +461,11 @@ const EnhancedReportDisplay = memo(({
                       {/* success toast moved to global fixed position */}
                     </div>
                   )}
-                  <div className="text-sm text-white/60">
-                    Generated {new Date().toLocaleDateString()}
-                  </div>
+                  {showGeneratedDate && (
+                    <div className="text-sm text-white/60">
+                      Generated {new Date().toLocaleDateString()}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ComponentType } from 'react'
 import { useLocation, useNavigate, useParams, useOutlet } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { getSupabase } from '@/services/supabase'
+import HeaderSwirlBackground from '@/components/HeaderSwirlBackground'
  
 import { paths, portalUserPath, publicProfilePath } from '@/routes/paths'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
@@ -809,8 +810,9 @@ export function PortalPage() {
         </aside>
 
         <main className="flex-1 min-w-0 h-full overflow-y-auto">
-          <header className="sticky top-0 z-40 border-b border-[#141620] bg-[rgb(var(--bg))]/80 backdrop-blur-xl overflow-hidden mb-12 md:mb-0">
-            <div className="relative mx-auto max-w-7xl px-4 py-3 sm:py-4">
+          <header className="sticky top-0 z-40 border-b border-[#141620] bg-[rgb(var(--bg))]/80 backdrop-blur-xl overflow-hidden mb-12 md:mb-0 relative">
+            <HeaderSwirlBackground />
+            <div className="relative mx-auto max-w-7xl px-4 py-3 sm:py-4 z-10">
               {!isPortalRoot && (
                 <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 -top-24 h-48 bg-gradient-to-br from-primary-400/10 via-fuchsia-400/5 to-transparent blur-2xl" />
               )}

@@ -14,3 +14,4 @@ export { SolaraLodestar } from './SolaraLodestar'
 // Enhanced UI Components for Starmap Creation
 export { StepIndicator, WizardContainer, FieldCard, ActionButtons, ProgressBar } from './StarmapWizard'
 export { default as EnhancedReportDisplay } from './EnhancedReportDisplay'
+export { default as SiteFooter } from './SiteFooter'

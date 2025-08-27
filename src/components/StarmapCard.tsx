@@ -40,11 +40,49 @@ export default function StarmapCard({ summary, onOpen, onDelete, deleting }: Sta
   // tier 1: < 520px (minimal)
   const tier = width >= 900 ? 3 : width >= 520 ? 2 : 1
 
+  const segments = useMemo(() => {
+    if (!info) return [] as Array<{ key: string; value: number; className: string }>
+    const c = info.counts || ({} as any)
+    const values = [
+      { key: 'Modalities', value: Number(c.modalities || 0), className: 'from-primary-400 to-primary-500' },
+      { key: 'Phases', value: Number(c.phases || 0), className: 'from-fuchsia-400 to-fuchsia-500' },
+      { key: 'Metrics', value: Number(c.metrics || 0), className: 'from-emerald-400 to-emerald-500' },
+      { key: 'Objectives', value: Number(c.objectives || 0), className: 'from-cyan-400 to-cyan-500' },
+    ]
+    const total = values.reduce((sum, s) => sum + s.value, 0) || 1
+    return values.map(v => ({ ...v, value: Math.max(0, Math.min(100, Math.round((v.value / total) * 100))) }))
+  }, [info])
+
   return (
     <div
       ref={ref}
       className="glass-card p-5 md:p-6 rounded-xl border border-white/10 hover:border-primary-400/30 hover:bg-white/8 transition-all duration-300 group"
     >
+      {/* Animated top bar infographic for tier 3 */}
+      {tier === 3 && segments.length > 0 && (
+        <div className="mb-4">
+          <div className="h-2 w-full rounded-full bg-white/5 overflow-hidden">
+            <div className="flex w-full h-full">
+              {segments.map((s, idx) => (
+                <div
+                  key={idx}
+                  className={`h-full bg-gradient-to-r ${s.className} transition-all duration-700`}
+                  style={{ width: `${s.value}%` }}
+                  title={`${s.key}: ${s.value}%`}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-white/60">
+            {segments.map((s, idx) => (
+              <span key={idx} className="inline-flex items-center gap-1">
+                <span className={`inline-block w-2 h-2 rounded-sm bg-gradient-to-r ${s.className}`} />
+                {s.key}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3">
         <button
           type="button"
@@ -98,10 +136,10 @@ export default function StarmapCard({ summary, onOpen, onDelete, deleting }: Sta
               <div className="rounded-lg border border-white/10 bg-white/5 p-3 md:p-4">
                 <div className="text-[11px] tracking-wide uppercase text-white/60 mb-2">Key counts</div>
                 <div className="grid grid-cols-2 gap-2 text-[12px] text-white/80">
-                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-white/40" /><span className="text-white/60">Modalities:</span> <span className="font-semibold text-white/90">{info.counts.modalities}</span></div>
-                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-white/40" /><span className="text-white/60">Objectives:</span> <span className="font-semibold text-white/90">{info.counts.objectives}</span></div>
-                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-white/40" /><span className="text-white/60">Phases:</span> <span className="font-semibold text-white/90">{info.counts.phases}</span></div>
-                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-white/40" /><span className="text-white/60">Metrics:</span> <span className="font-semibold text-white/90">{info.counts.metrics}</span></div>
+                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-primary-400/70" /><span className="text-white/60">Modalities:</span> <span className="font-semibold text-white/90">{info.counts.modalities}</span></div>
+                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-fuchsia-400/70" /><span className="text-white/60">Objectives:</span> <span className="font-semibold text-white/90">{info.counts.objectives}</span></div>
+                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400/70" /><span className="text-white/60">Phases:</span> <span className="font-semibold text-white/90">{info.counts.phases}</span></div>
+                  <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-cyan-400/70" /><span className="text-white/60">Metrics:</span> <span className="font-semibold text-white/90">{info.counts.metrics}</span></div>
                 </div>
               </div>
               <div className="rounded-lg border border-white/10 bg-white/5 p-3 md:p-4">

@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Import enhanced animations */
+@import './styles/animations.css';
+
 @layer base {
   :root {
     --bg: 2 12 27; /* #020C1B */

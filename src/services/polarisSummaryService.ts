@@ -333,6 +333,28 @@ export async function getUserSummaryCount(): Promise<{ count: number | null; err
   return { count, error }
 }
 
+// Exact saved starmaps count for display purposes (no unlimited gating)
+export async function getUserSavedCountExact(): Promise<{ count: number | null; error: any }> {
+  const supabase = getSupabase()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { count: null, error: new Error('User not authenticated') }
+  }
+
+  // Prefer exact count; also fetch a small page to cross-check length to avoid off-by-one issues
+  const { data, count, error } = await supabase
+    .from('polaris_summaries')
+    .select('id', { count: 'exact' })
+    .eq('user_id', user.id)
+    .limit(1000)
+
+  if (error) return { count: null, error }
+  // Prefer concrete row count from returned data when available (safer for recent deletes)
+  const numericCount = Array.isArray(data) ? data.length : (typeof count === 'number' ? count : 0)
+  return { count: numericCount, error: null }
+}
+
 export async function updateSummaryEditedContent(
   id: string, 
   editedContent: string

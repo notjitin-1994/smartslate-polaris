@@ -73,7 +73,21 @@ export async function createStarmapJob(data?: {
   try {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) return { data: null, error: new Error('Not authenticated') }
-    
+    // Idempotence guard: if a recent draft exists (created within last 30s), reuse it
+    const thirtySecondsAgo = new Date(Date.now() - 30_000).toISOString()
+    const { data: existingDraft } = await supabase
+      .from('starmap_jobs')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'draft')
+      .gte('created_at', thirtySecondsAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (existingDraft && existingDraft.length > 0) {
+      return { data: existingDraft[0] as StarmapJob, error: null }
+    }
+
     const { data: job, error } = await supabase
       .from('starmap_jobs')
       .insert({
@@ -181,6 +195,50 @@ export async function getUserStarmapJobs(
   } catch (err) {
     console.error('Error getting user starmap jobs:', err)
     return { data: [], error: err }
+  }
+}
+
+/**
+ * Get user's starmap jobs with pagination and total count
+ */
+export async function getUserStarmapJobsPaginated(
+  page: number,
+  pageSize: number,
+  status?: StarmapJobStatus | 'in_progress',
+  search?: string
+): Promise<{ data: StarmapJob[]; count: number; error: any }> {
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return { data: [], count: 0, error: new Error('Not authenticated') }
+
+    const from = Math.max(0, (page - 1) * pageSize)
+    const to = from + pageSize - 1
+
+    let query = supabase
+      .from('starmap_jobs')
+      .select('*', { count: 'exact' })
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .range(from, to)
+
+    if (status) {
+      if (status === 'in_progress') {
+        query = query.in('status', ['draft', 'queued', 'processing'])
+      } else {
+        query = query.eq('status', status)
+      }
+    }
+
+    if (search && search.trim().length > 0) {
+      query = query.ilike('title', `%${search.trim()}%`)
+    }
+
+    const { data, error, count } = await query
+    if (error) return { data: [], count: 0, error }
+    return { data: data || [], count: count || 0, error: null }
+  } catch (err) {
+    console.error('Error getting paginated starmap jobs:', err)
+    return { data: [], count: 0, error: err }
   }
 }
 

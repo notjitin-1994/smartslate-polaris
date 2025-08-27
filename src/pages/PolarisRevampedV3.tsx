@@ -48,6 +48,7 @@ export default function PolarisRevampedV3() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { user } = useAuth()
+  const initOnceRef = useRef(false)
   
   // Job state
   const [job, setJob] = useState<StarmapJob | null>(null)
@@ -79,9 +80,12 @@ export default function PolarisRevampedV3() {
   const pollTimerRef = useRef<NodeJS.Timeout | null>(null)
   const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null)
   
-  // Load or create job on mount
+  // Load or create job on mount (guard against StrictMode double-invocation)
   useEffect(() => {
-    initializeJob()
+    if (!initOnceRef.current) {
+      initOnceRef.current = true
+      initializeJob()
+    }
     
     return () => {
       if (pollTimerRef.current) {

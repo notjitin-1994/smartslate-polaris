@@ -92,7 +92,7 @@ export default function PublicReportView() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCopied, setShowCopied] = useState(false)
-  const [requesterFirstName, setRequesterFirstName] = useState<string | null>(null)
+  // const [requesterFirstName, setRequesterFirstName] = useState<string | null>(null)
 
   useEffect(() => {
     const previous = document.title
@@ -160,21 +160,21 @@ export default function PublicReportView() {
         }
         setReportTitle((data as any)?.report_title || (data as any)?.company_name || 'Needs Analysis Report')
         // Derive creator's first name from stage1_answers or report_title convention
-        try {
-          const stage1 = (data as any)?.stage1_answers
-          let fullName: string | null = null
-          if (stage1 && typeof stage1.requester_name === 'string') {
-            fullName = stage1.requester_name
-          } else if ((data as any)?.report_title && typeof (data as any).report_title === 'string') {
-            const parts = String((data as any).report_title).split('-')
-            const maybeName = parts[parts.length - 1]?.trim()
-            if (maybeName) fullName = maybeName
-          }
-          if (fullName) {
-            const first = fullName.trim().split(/\s+/)[0]
-            setRequesterFirstName(first || null)
-          }
-        } catch {}
+        // try {
+        //   const stage1 = (data as any)?.stage1_answers
+        //   let fullName: string | null = null
+        //   if (stage1 && typeof stage1.requester_name === 'string') {
+        //     fullName = stage1.requester_name
+        //   } else if ((data as any)?.report_title && typeof (data as any).report_title === 'string') {
+        //     const parts = String((data as any).report_title).split('-')
+        //     const maybeName = parts[parts.length - 1]?.trim()
+        //     if (maybeName) fullName = maybeName
+        //   }
+        //   // if (fullName) {
+        //   //   const first = fullName.trim().split(/\s+/)[0]
+        //   //   setRequesterFirstName(first || null)
+        //   // }
+        // } catch {}
       } catch (err) {
         console.error('Error loading report:', err)
         setError('Failed to load report')

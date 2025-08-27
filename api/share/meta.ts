@@ -38,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Defaults
     let userName = 'User'
     let starmapTitle = 'Untitled Starmap'
-    let isPublic = false
+    // let isPublic = false
 
     // Compute base/public URLs up front
     const siteBase = `${url.protocol}//${url.host}`
@@ -56,7 +56,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .single()
 
         if (data && !error) {
-          isPublic = Boolean((data as any)?.is_public)
+          // isPublic = Boolean((data as any)?.is_public)
           starmapTitle = (data as any)?.title || starmapTitle
           if (data.user_id) {
             const { data: profile } = await supabase
@@ -75,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           .single()
 
         if (data && !error) {
-          isPublic = Boolean((data as any)?.is_public)
+          // isPublic = Boolean((data as any)?.is_public)
           starmapTitle = (data as any)?.report_title || starmapTitle
           const stage1 = (data as any)?.stage1_answers
           if (stage1 && typeof stage1.requester_name === 'string' && stage1.requester_name.trim()) {

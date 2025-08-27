@@ -52,7 +52,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
  * @param reportTitle Optional report title
  * @returns Formatted share message
  */
-export function formatShareMessage(link: string, reportTitle?: string): string {
+export function formatShareMessage(link: string, _reportTitle?: string): string {
   // WhatsApp requirement: only send the link to avoid unwanted preface text
   return link
 }

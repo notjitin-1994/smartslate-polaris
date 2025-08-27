@@ -38,6 +38,17 @@ export default defineConfig(({ mode }) => {
       try { res.setHeader('Content-Type', 'application/json') } catch {}
       res.end(JSON.stringify(obj))
     }
+    wrapper.send = (body: any) => {
+      // Minimal compatibility for VercelResponse.send
+      if (typeof body === 'string' || body instanceof Buffer) {
+        res.end(body)
+      } else if (body != null) {
+        try { res.setHeader('Content-Type', 'application/json') } catch {}
+        res.end(JSON.stringify(body))
+      } else {
+        res.end()
+      }
+    }
     // Ensure these methods are callable on the wrapper too
     wrapper.setHeader = (...args: any[]) => res.setHeader?.(...args)
     wrapper.end = (...args: any[]) => res.end?.(...args)
@@ -140,8 +151,29 @@ export default defineConfig(({ mode }) => {
     }
   }
 
+  // Dev-only middleware to handle /api/share/meta locally
+  const localShareMetaPlugin = {
+    name: 'local-share-meta-middleware',
+    configureServer(server: any) {
+      server.middlewares.use(async (req: any, res: any, next: any) => {
+        const url = req.url || ''
+        if (!url.startsWith('/api/share/meta')) return next()
+
+        try {
+          const mod = await import('./api/share/meta.ts')
+          const resCompat = toVercelResponse(res)
+          return mod.default(req, resCompat)
+        } catch (e: any) {
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'text/plain')
+          res.end(e?.message || 'Internal error')
+        }
+      })
+    }
+  }
+
   return {
-    plugins: [react(), localReportJobsDbPlugin, localPerplexityPlugin],
+    plugins: [react(), localReportJobsDbPlugin, localPerplexityPlugin, localShareMetaPlugin],
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),

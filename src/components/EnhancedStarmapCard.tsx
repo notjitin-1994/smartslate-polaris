@@ -23,6 +23,11 @@ const Icons = {
       <path d="M23 8c0 1.1-.9 2-2 2-.18 0-.35-.02-.51-.07l-3.56 3.55c.05.16.07.34.07.52 0 1.1-.9 2-2 2s-2-.9-2-2c0-.18.02-.36.07-.52l-2.55-2.55c-.16.05-.34.07-.52.07s-.36-.02-.52-.07l-4.55 4.56c.05.16.07.33.07.51 0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2c.18 0 .35.02.51.07l4.56-4.55C8.02 9.36 8 9.18 8 9c0-1.1.9-2 2-2s2 .9 2 2c0 .18-.02.36-.07.52l2.55 2.55c.16-.05.34-.07.52-.07s.36.02.52.07l3.55-3.56C19.02 8.35 19 8.18 19 8c0-1.1.9-2 2-2s2 .9 2 2z"/>
     </svg>
   ),
+  Summary: () => (
+    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM13 3.5L18.5 9H13V3.5z"/>
+    </svg>
+  ),
   Metrics: () => (
     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
       <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6h-6z"/>
@@ -103,7 +108,6 @@ function getStatusConfig(status: StarmapJob['status'] | string) {
 }
 
 export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting }: EnhancedStarmapCardProps) {
-  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false)
   const [isRisksExpanded, setIsRisksExpanded] = useState(false)
   const progressPct = useProgress(job)
   const statusConfig = getStatusConfig(job.status)
@@ -136,7 +140,7 @@ export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting 
     }
   }, [reportSource])
   
-  // Extract timeline data
+  // Extract timeline data (still used for duration computation)
   const timelineData = useMemo(() => {
     const phases = parsed?.delivery_plan?.phases || []
     const timeline = parsed?.delivery_plan?.timeline || []
@@ -245,6 +249,13 @@ export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting 
   
   const totalDuration = timelineData.reduce((sum, phase) => sum + phase.duration, 0)
   
+  // Executive summary data
+  const summaryProblem = parsed?.summary?.problem_statement || ''
+  const summaryObjectives: string[] = (parsed?.summary?.objectives || []).slice(0, 3)
+  const summaryPhases = parsed?.delivery_plan?.phases?.length || 0
+  const summaryModalities = (parsed?.solution?.delivery_modalities || []).slice(0, 3).map((m: any) => m.modality)
+  const summaryMetrics = parsed?.measurement?.success_metrics?.length || 0
+  
   return (
     <div className="group relative glass-card rounded-2xl p-6 border border-white/10 hover:border-primary-400/30 transition-all duration-500 hover:shadow-2xl hover:shadow-primary-400/10">
       {/* Header Section */}
@@ -313,70 +324,32 @@ export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
         
-        {/* Timeline Section */}
+        {/* Executive Summary Section (static, no animations) */}
         <div className="bg-gradient-to-br from-white/5 to-white/10 rounded-xl p-4 border border-white/10">
-          <div className="flex items-center gap-2 mb-4">
-            <Icons.Timeline />
-            <h4 className="font-heading font-semibold text-white">Timeline</h4>
+          <div className="flex items-center gap-2 mb-3">
+            <Icons.Summary />
+            <h4 className="font-heading font-semibold text-white">Executive Summary</h4>
             <span className="ml-auto text-xs text-white/60">{totalDuration} weeks</span>
           </div>
-          
-          <div className="space-y-3">
-            {(isTimelineExpanded ? timelineData : timelineData.slice(0, 3)).map((phase, idx, arr) => (
-              <div key={phase.id} className="relative">
-                {idx < arr.length - 1 && (
-                  <div className="absolute left-2 top-8 bottom-0 w-0.5 bg-gradient-to-b from-primary-400/50 to-transparent" />
-                )}
-                
-                <div className="flex items-start gap-3">
-                  <div className={classNames(
-                    'mt-1 w-4 h-4 rounded-full border-2 transition-all duration-500',
-                    phase.status === 'active' 
-                      ? 'bg-primary-400 border-primary-400 shadow-lg shadow-primary-400/50 animate-pulse' 
-                      : phase.status === 'upcoming'
-                      ? 'bg-white/20 border-primary-400/50'
-                      : 'bg-transparent border-white/30'
-                  )} />
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <h5 className="text-sm font-medium text-white truncate">{phase.name}</h5>
-                      <span className="text-xs text-white/50">{phase.duration}w</span>
-                    </div>
-                    
-                    {/* Progress bar for phase */}
-                    <div className="mt-2 h-1 bg-white/10 rounded-full overflow-hidden">
-                      <div 
-                        className={classNames(
-                          'h-full rounded-full transition-all duration-1000',
-                          phase.status === 'active' 
-                            ? 'bg-gradient-to-r from-primary-400 to-primary-500 animate-pulse'
-                            : 'bg-white/20'
-                        )}
-                        style={{ 
-                          width: phase.status === 'active' ? '60%' : phase.status === 'upcoming' ? '0%' : '0%',
-                          animation: phase.status === 'active' ? 'progress 2s ease-in-out infinite' : 'none'
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-            
-            {timelineData.length > 3 && (
-              <button
-                onClick={() => setIsTimelineExpanded(!isTimelineExpanded)}
-                className="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
-              >
-                {isTimelineExpanded ? (
-                  <span>Show less</span>
-                ) : (
-                  <span>+{timelineData.length - 3} more phases</span>
-                )}
-              </button>
+          {summaryProblem && (
+            <p className="text-sm text-white/80 mb-3 leading-relaxed">{summaryProblem}</p>
+          )}
+          <div className="flex flex-wrap gap-2 mb-3">
+            <span className="px-2 py-1 rounded-full text-[10px] bg-white/10 text-white/70 border border-white/10">Phases: {summaryPhases}</span>
+            <span className="px-2 py-1 rounded-full text-[10px] bg-white/10 text-white/70 border border-white/10">Metrics: {summaryMetrics}</span>
+            {summaryModalities.length > 0 && (
+              <span className="px-2 py-1 rounded-full text-[10px] bg-white/10 text-white/70 border border-white/10">Modalities: {summaryModalities.join(', ')}</span>
             )}
           </div>
+          {summaryObjectives.length > 0 && (
+            <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+              {summaryObjectives.map((o, idx) => (
+                <div key={idx} className="w-full min-h-[48px] p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white/80">
+                  {o}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
                     {/* Success Metrics Section */}

@@ -10,10 +10,9 @@
 export function generateShareLink(reportId: string, options?: { kind?: 'summary' | 'starmap' }): string {
   const baseUrl = window.location.origin
   const kind = options?.kind || 'summary'
-  if (kind === 'starmap') {
-    return `${baseUrl}/report/public/starmap/${reportId}`
-  }
-  return `${baseUrl}/report/public/${reportId}`
+  // Use meta endpoint to serve OG tags for richer previews; it will redirect to public view
+  const params = new URLSearchParams({ id: reportId, kind })
+  return `${baseUrl}/api/share/meta?${params.toString()}`
 }
 
 /**
@@ -54,8 +53,8 @@ export async function copyToClipboard(text: string): Promise<boolean> {
  * @returns Formatted share message
  */
 export function formatShareMessage(link: string, reportTitle?: string): string {
-  const title = reportTitle || 'L&D Needs Analysis Report'
-  return `Check out this ${title} from SmartSlate Polaris: ${link}`
+  // WhatsApp requirement: only send the link to avoid unwanted preface text
+  return link
 }
 
 /**

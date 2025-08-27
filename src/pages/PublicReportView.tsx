@@ -228,9 +228,9 @@ export default function PublicReportView() {
 
   const handleShare = async () => {
     try {
-      const url = window.location.href
-      const text = `Smartslate | Polaris Starmap:\n${requesterFirstName || 'Someone'} created the Polaris Starmap ${reportTitle} and wants to share it with you!`
-      const outcome = await shareLinkNative({ url, title: reportTitle, text })
+      // Use meta endpoint for better OG previews and share link-only
+      const url = `${window.location.origin}/api/share/meta?${new URLSearchParams({ id: id || '', kind: 'summary' }).toString()}`
+      const outcome = await shareLinkNative({ url, title: reportTitle, text: undefined })
       if (outcome === 'copied') {
         setShowCopied(true)
         setTimeout(() => setShowCopied(false), 1800)
@@ -300,7 +300,7 @@ export default function PublicReportView() {
             <div className="flex justify-end">
               <button
                 onClick={() => {
-                  const url = window.location.href
+                  const url = `${window.location.origin}/api/share/meta?${new URLSearchParams({ id: id || '', kind: 'summary' }).toString()}`
                   void (async () => {
                     const copied = await copyToClipboard(url)
                     if (copied) {

@@ -130,32 +130,116 @@ const ProgressIndicator = memo(({
 
 ProgressIndicator.displayName = 'ProgressIndicator'
 
+// Small grid of card-style items for replacing bullet lists
+const ItemGrid = memo(({ items, columns = 2 }: { items: string[]; columns?: number }) => {
+  // Use auto-fit to expand cards to fill available space with a sensible min width
+  const minWidth = columns <= 1 ? '280px' : columns >= 3 ? '180px' : '220px'
+  return (
+    <div
+      className="grid gap-3 w-full items-stretch"
+      style={{ gridTemplateColumns: `repeat(auto-fit, minmax(${minWidth}, 1fr))`, gridAutoRows: 'minmax(48px, auto)' }}
+    >
+      {items.map((text, i) => (
+        <div key={i} className="w-full h-full min-h-[48px] p-3.5 sm:p-4 rounded-xl bg-white/5 border border-white/10 text-sm text-white/80 flex items-start">
+          {text}
+        </div>
+      ))}
+    </div>
+  )
+})
+
+ItemGrid.displayName = 'ItemGrid'
+
+// Numbered step cards to replace ordered lists
+const StepCards = memo(({ steps }: { steps: string[] }) => (
+  <div className="space-y-2 w-full">
+    {steps.map((s, i) => (
+      <div key={i} className="w-full flex items-start gap-3 px-3.5 py-3 sm:p-4 rounded-xl bg-white/5 border border-white/10 min-h-[48px]">
+        <div className="w-6 h-6 rounded-full bg-primary-400/15 text-primary-300 flex items-center justify-center text-xs font-bold flex-shrink-0">{i + 1}</div>
+        <div className="text-sm text-white/80 leading-relaxed flex-1">{s}</div>
+      </div>
+    ))}
+  </div>
+))
+
+StepCards.displayName = 'StepCards'
+
 // Timeline component
-const Timeline = memo(({ items }: { items: Array<{ label: string; start: string; end: string }> }) => {
+const Timeline = memo(({ items }: { items: Array<{ label: string; start?: string | null; end?: string | null }> }) => {
+  // Helpers
+  const dayMs = 1000 * 60 * 60 * 24
+  const parse = (v?: string | null) => {
+    if (!v) return null
+    const t = Date.parse(v)
+    return Number.isFinite(t) ? new Date(t) : null
+  }
+  const fmt = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+  const clampInclusiveDays = (start?: Date | null, end?: Date | null) => {
+    if (!start && !end) return 0
+    if (start && !end) return 1
+    if (!start && end) return 1
+    const a = start as Date
+    const b = end as Date
+    const diff = Math.round((b.getTime() - a.getTime()) / dayMs)
+    return Math.max(1, diff + 1)
+  }
+
+  const normalized = items.map((it) => {
+    let s = parse(it.start)
+    let e = parse(it.end)
+    // Swap if out of order
+    if (s && e && e.getTime() < s.getTime()) [s, e] = [e, s]
+    return { label: it.label, startDate: s, endDate: e }
+  })
+
+  // Compute overall range for summary
+  const allStarts = normalized.map(n => n.startDate?.getTime()).filter((t): t is number => Number.isFinite(t as number))
+  const allEnds = normalized.map(n => n.endDate?.getTime()).filter((t): t is number => Number.isFinite(t as number))
+  const overallStart = allStarts.length ? new Date(Math.min(...allStarts)) : (allEnds.length ? new Date(Math.min(...allEnds)) : null)
+  const overallEnd = allEnds.length ? new Date(Math.max(...allEnds)) : (allStarts.length ? new Date(Math.max(...allStarts)) : null)
+  const overallDays = clampInclusiveDays(overallStart, overallEnd)
+
   return (
     <div className="relative">
       <div className="absolute left-8 top-0 bottom-0 w-0.5 bg-white/10" />
+      {/* Overall summary */}
+      {overallStart && overallEnd && (
+        <div className="mb-4 ml-20 text-xs text-white/70 flex items-center gap-2">
+          <span className="px-2 py-0.5 rounded-full bg-white/10 text-white/70">Overall</span>
+          <span>{fmt(overallStart)}</span>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 12h14"/></svg>
+          <span>{fmt(overallEnd)}</span>
+          <span className="ml-2 px-2 py-0.5 rounded-full bg-primary-400/10 text-primary-300">{overallDays} {overallDays === 1 ? 'day' : 'days'}</span>
+        </div>
+      )}
       <div className="space-y-6">
-        {items.map((item, index) => {
-          const startDate = new Date(item.start)
-          const endDate = new Date(item.end)
-          const duration = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
-          
+        {normalized.map((item, index) => {
+          const { startDate, endDate } = item
+          const isMilestone = (!!startDate && !endDate) || (!!endDate && !startDate) || (startDate && endDate && startDate.toDateString() === endDate.toDateString())
+          const dur = clampInclusiveDays(startDate, endDate)
           return (
             <div key={index} className="relative flex items-start gap-4">
-              <div className="relative z-10 w-16 h-16 rounded-2xl bg-primary-400 flex items-center justify-center">
-                <span className="text-secondary-500 font-bold text-lg">{index + 1}</span>
+              <div className="relative z-10 w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-400 to-secondary-400 flex items-center justify-center">
+                <span className="text-secondary-900 font-bold text-lg">{index + 1}</span>
               </div>
               <div className="flex-1 pt-2">
                 <h4 className="text-white/90 font-medium mb-1">{item.label}</h4>
                 <div className="flex items-center gap-4 text-sm text-white/60">
-                  <span>{startDate.toLocaleDateString()}</span>
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 12h14" />
-                  </svg>
-                  <span>{endDate.toLocaleDateString()}</span>
+                  {startDate && endDate && !isMilestone && (
+                    <>
+                      <span>{fmt(startDate)}</span>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 12h14"/></svg>
+                      <span>{fmt(endDate)}</span>
+                    </>
+                  )}
+                  {isMilestone && (
+                    <>
+                      <span>{fmt(startDate || endDate as Date)}</span>
+                      <span className="ml-2 px-2 py-0.5 rounded-full bg-white/10 text-white/70">Milestone</span>
+                    </>
+                  )}
                   <span className="ml-2 px-2 py-0.5 rounded-full bg-primary-400/10 text-primary-300 text-xs font-medium">
-                    {duration} days
+                    {dur} {dur === 1 ? 'day' : 'days'}
                   </span>
                 </div>
               </div>
@@ -499,9 +583,17 @@ const EnhancedReportDisplay = memo(({
               <div className="text-2xl font-bold text-white">{stats.totalRisks}</div>
               <div className="text-xs text-white/60">Risks</div>
             </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-emerald-400">{stats.confidence}%</div>
-              <div className="text-xs text-white/60">Confidence</div>
+            <div className="text-left md:text-center w-full col-span-2 md:col-span-1">
+              <div className="hidden md:block">
+                <div className="text-2xl font-bold text-emerald-400">{stats.confidence}%</div>
+                <div className="text-xs text-white/60">Confidence</div>
+              </div>
+              <div className="md:hidden w-full">
+                <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-400" style={{ width: `${stats.confidence}%` }} />
+                </div>
+                <div className="mt-1 text-[11px] text-white/70">{stats.confidence}% • Confidence</div>
+              </div>
             </div>
           </div>
         </div>
@@ -535,20 +627,13 @@ const EnhancedReportDisplay = memo(({
                     {report.summary?.objectives && report.summary.objectives.length > 0 && (
                       <div>
                         <div className="text-white/60 text-xs uppercase tracking-wider mb-2">Key Objectives</div>
-                        <div className="space-y-2">
-                          {report.summary.objectives.map((obj, i) => (
-                            <div key={i} className="flex items-start gap-2">
-                              <div className="w-1.5 h-1.5 rounded-full bg-primary-400 mt-1.5 flex-shrink-0" />
-                              <div className="text-white/80">{obj}</div>
-                            </div>
-                          ))}
-                        </div>
+                        <ItemGrid items={report.summary.objectives} columns={2} />
                       </div>
                     )}
                   </div>
                 </DataCard>
               ),
-              (report.delivery_plan?.timeline && report.delivery_plan.timeline.length > 0) ? (
+              (((report.delivery_plan?.timeline?.length || 0) >= 3) || (((report.delivery_plan?.timeline?.length || 0) > 0) && ((report.delivery_plan?.phases?.length || 0) === 0))) ? (
                 <DataCard
                   key="timeline"
                   title="Delivery Timeline"
@@ -559,10 +644,10 @@ const EnhancedReportDisplay = memo(({
                   }
                   variant="success"
                 >
-                  <Timeline items={report.delivery_plan.timeline.filter(t => t.start && t.end) as Array<{label: string; start: string; end: string}>} />
+                  <Timeline items={report.delivery_plan.timeline.filter(t => (t.start || t.end)) as Array<{label: string; start?: string | null; end?: string | null}>} />
                 </DataCard>
               ) : null,
-              ((!report.delivery_plan?.timeline || report.delivery_plan.timeline.length === 0) && report.delivery_plan?.phases?.length > 0) ? (
+              (((report.delivery_plan?.timeline?.length || 0) < 3) && ((report.delivery_plan?.phases?.length || 0) > 0)) ? (
                 <DataCard
                   key="phases"
                   title="Implementation Roadmap"
@@ -660,9 +745,7 @@ const EnhancedReportDisplay = memo(({
                     title="Target Audiences"
                     icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>}
                   >
-                    <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                      {report.solution.target_audiences.map((a, i) => <li key={i}>{a}</li>)}
-                    </ul>
+                    <ItemGrid items={report.solution.target_audiences} columns={2} />
                   </DataCard>
                 ) : null,
 
@@ -687,9 +770,7 @@ const EnhancedReportDisplay = memo(({
                     title="Key Competencies"
                     icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4"/></svg>}
                   >
-                    <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                      {report.solution.key_competencies.map((c, i) => <li key={i}>{c}</li>)}
-                    </ul>
+                    <ItemGrid items={report.solution.key_competencies} columns={3} />
                   </DataCard>
                 ) : null,
 
@@ -698,9 +779,7 @@ const EnhancedReportDisplay = memo(({
                     title="Proposed Curriculum Structure"
                     icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18"/></svg>}
                   >
-                    <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                      {report.solution.content_outline.map((c, i) => <li key={i}>{c}</li>)}
-                    </ul>
+                    <ItemGrid items={report.solution.content_outline} columns={2} />
                   </DataCard>
                 ) : null,
 
@@ -709,9 +788,7 @@ const EnhancedReportDisplay = memo(({
                     title="Accessibility & Inclusion"
                     icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>}
                   >
-                    <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                      {report.solution.accessibility_and_inclusion.standards.map((s, i) => <li key={i}>{s}</li>)}
-                    </ul>
+                    <ItemGrid items={report.solution.accessibility_and_inclusion.standards} columns={2} />
                     {report.solution.accessibility_and_inclusion.notes && (
                       <p className="text-sm text-white/60 mt-2">{report.solution.accessibility_and_inclusion.notes}</p>
                     )}
@@ -730,16 +807,16 @@ const EnhancedReportDisplay = memo(({
                       title="Learner Profiles"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>}
                     >
-                      <div className="space-y-3 text-sm">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
                         {report.learner_analysis.profiles.map((p, i) => (
                           <div key={i} className="p-3 rounded-lg bg-white/5 border border-white/10">
-                            <div className="font-medium text-white/90">{p.segment}</div>
-                            <div className="text-white/60 text-xs mt-1">Roles: {p.roles.join(', ')}</div>
+                            <div className="font-medium text-white/90 mb-1">{p.segment}</div>
+                            <div className="text-white/70 text-xs">Roles: {p.roles.join(', ') || '—'}</div>
                             {p.motivators?.length > 0 && (
-                              <div className="text-white/60 text-xs mt-1">Motivators: {p.motivators.join(', ')}</div>
+                              <div className="text-white/70 text-xs">Motivators: {p.motivators.join(', ')}</div>
                             )}
                             {p.constraints?.length > 0 && (
-                              <div className="text-white/60 text-xs mt-1">Constraints: {p.constraints.join(', ')}</div>
+                              <div className="text-white/70 text-xs">Constraints: {p.constraints.join(', ')}</div>
                             )}
                           </div>
                         ))}
@@ -752,9 +829,7 @@ const EnhancedReportDisplay = memo(({
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>}
                       variant="warning"
                     >
-                      <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                        {report.learner_analysis.readiness_risks.map((r, i) => <li key={i}>{r}</li>)}
-                      </ul>
+                      <ItemGrid items={report.learner_analysis.readiness_risks} columns={2} />
                     </DataCard>
                   ) : null,
                 ])}
@@ -776,17 +851,13 @@ const EnhancedReportDisplay = memo(({
                         {report.technology_talent.technology.current_stack?.length > 0 && (
                           <div>
                             <div className="text-white/60 text-xs uppercase tracking-wider mb-1">Current Stack</div>
-                            <ul className="list-disc pl-5 text-white/80 space-y-0.5">
-                              {report.technology_talent.technology.current_stack.map((t, i) => <li key={i}>{t}</li>)}
-                            </ul>
+                            <ItemGrid items={report.technology_talent.technology.current_stack} columns={2} />
                           </div>
                         )}
                         {report.technology_talent.technology.gaps?.length > 0 && (
                           <div>
                             <div className="text-white/60 text-xs uppercase tracking-wider mb-1">Gaps</div>
-                            <ul className="list-disc pl-5 text-white/80 space-y-0.5">
-                              {report.technology_talent.technology.gaps.map((g, i) => <li key={i}>{g}</li>)}
-                            </ul>
+                            <ItemGrid items={report.technology_talent.technology.gaps} columns={2} />
                           </div>
                         )}
                         {report.technology_talent.technology.recommendations?.length > 0 && (
@@ -816,25 +887,19 @@ const EnhancedReportDisplay = memo(({
                         {report.technology_talent.talent.available_roles?.length > 0 && (
                           <div>
                             <div className="text-white/60 text-xs uppercase tracking-wider mb-1">Available Roles</div>
-                            <ul className="list-disc pl-5 text-white/80 space-y-0.5">
-                              {report.technology_talent.talent.available_roles.map((r, i) => <li key={i}>{r}</li>)}
-                            </ul>
+                            <ItemGrid items={report.technology_talent.talent.available_roles} columns={2} />
                           </div>
                         )}
                         {report.technology_talent.talent.gaps?.length > 0 && (
                           <div>
                             <div className="text-white/60 text-xs uppercase tracking-wider mb-1">Gaps</div>
-                            <ul className="list-disc pl-5 text-white/80 space-y-0.5">
-                              {report.technology_talent.talent.gaps.map((g, i) => <li key={i}>{g}</li>)}
-                            </ul>
+                            <ItemGrid items={report.technology_talent.talent.gaps} columns={2} />
                           </div>
                         )}
                         {report.technology_talent.talent.recommendations?.length > 0 && (
                           <div>
                             <div className="text-white/60 text-xs uppercase tracking-wider mb-1">Recommendations</div>
-                            <ul className="list-disc pl-5 text-white/80 space-y-0.5">
-                              {report.technology_talent.talent.recommendations.map((r, i) => <li key={i}>{r}</li>)}
-                            </ul>
+                            <ItemGrid items={report.technology_talent.talent.recommendations} columns={2} />
                           </div>
                         )}
                       </div>
@@ -854,9 +919,7 @@ const EnhancedReportDisplay = memo(({
                       title="Assessment Strategy"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>}
                     >
-                      <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                        {report.measurement.assessment_strategy.map((a, i) => <li key={i}>{a}</li>)}
-                      </ul>
+                      <ItemGrid items={report.measurement.assessment_strategy} columns={2} />
                     </DataCard>
                   ) || null,
                   
@@ -865,9 +928,7 @@ const EnhancedReportDisplay = memo(({
                       title="Data Sources"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/></svg>}
                     >
-                      <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                        {report.measurement.data_sources.map((d, i) => <li key={i}>{d}</li>)}
-                      </ul>
+                      <ItemGrid items={report.measurement.data_sources} columns={2} />
                     </DataCard>
                   ) : null,
                   
@@ -882,9 +943,7 @@ const EnhancedReportDisplay = memo(({
                         {report.measurement.learning_analytics.levels?.length > 0 && (
                           <div>
                             <div className="text-white/60 text-xs uppercase tracking-wider mb-1">Levels</div>
-                            <ul className="list-disc pl-5 text-white/80 space-y-0.5">
-                              {report.measurement.learning_analytics.levels.map((l, i) => <li key={i}>{l}</li>)}
-                            </ul>
+                            <ItemGrid items={report.measurement.learning_analytics.levels} columns={3} />
                           </div>
                         )}
                         {report.measurement.learning_analytics.reporting_cadence && (
@@ -944,11 +1003,7 @@ const EnhancedReportDisplay = memo(({
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>}
                       variant="success"
                     >
-                      <ol className="list-decimal pl-6 text-sm text-white/80 space-y-2">
-                        {report.next_steps.map((step, i) => (
-                          <li key={i} className="pl-2">{step}</li>
-                        ))}
-                      </ol>
+                      <StepCards steps={report.next_steps} />
                     </DataCard>
                   )
                 ])}
@@ -967,9 +1022,7 @@ const EnhancedReportDisplay = memo(({
                       title="Current State"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"/></svg>}
                     >
-                      <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                        {report.summary.current_state.map((item, i) => <li key={i}>{item}</li>)}
-                      </ul>
+                      <ItemGrid items={report.summary.current_state} columns={2} />
                     </DataCard>
                   ) || null,
                   
@@ -979,9 +1032,7 @@ const EnhancedReportDisplay = memo(({
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>}
                       variant="warning"
                     >
-                      <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                        {report.summary.root_causes.map((item, i) => <li key={i}>{item}</li>)}
-                      </ul>
+                      <ItemGrid items={report.summary.root_causes} columns={2} />
                     </DataCard>
                   ) : null,
                   
@@ -990,9 +1041,7 @@ const EnhancedReportDisplay = memo(({
                       title="Assumptions"
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
                     >
-                      <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                        {report.summary.assumptions.map((item, i) => <li key={i}>{item}</li>)}
-                      </ul>
+                      <ItemGrid items={report.summary.assumptions} columns={2} />
                     </DataCard>
                   ) : null,
                   
@@ -1002,9 +1051,7 @@ const EnhancedReportDisplay = memo(({
                       icon={<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
                       variant="danger"
                     >
-                      <ul className="list-disc pl-6 text-sm text-white/80 space-y-1">
-                        {report.summary.unknowns.map((item, i) => <li key={i}>{item}</li>)}
-                      </ul>
+                      <ItemGrid items={report.summary.unknowns} columns={2} />
                     </DataCard>
                   ) : null,
                 ])}

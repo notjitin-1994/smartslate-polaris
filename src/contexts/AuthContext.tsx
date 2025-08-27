@@ -75,8 +75,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Handle different auth events
         switch (event) {
           case 'SIGNED_IN':
-            // Navigate to home after successful sign in
-            navigate(paths.home)
+            // Only redirect to home if we are coming from auth routes
+            try {
+              const pathname = location?.pathname || (typeof window !== 'undefined' ? window.location.pathname : '/')
+              const isAuthRoute = pathname === '/login' || pathname.startsWith('/auth/callback')
+              if (isAuthRoute) navigate(paths.home, { replace: true })
+            } catch {
+              // no-op
+            }
             break
           case 'SIGNED_OUT':
             // Clear state; redirect to login only if currently on protected areas
@@ -109,7 +115,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       mounted = false
       subscription.unsubscribe()
     }
-  }, [navigate])
+  }, [navigate, location])
   
   // Clear error
   const clearError = useCallback(() => {

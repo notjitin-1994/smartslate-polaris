@@ -537,6 +537,11 @@ export async function updateJobProgress(
     const { data: job, error: getError } = await getJob(jobId)
     if (getError || !job) return { error: getError || new Error('Job not found') }
     
+    // Never downgrade a completed job's status back to draft/paused/processing
+    if (job.status === 'completed' && status !== 'completed') {
+      return { error: null }
+    }
+    
     const stagesCompleted = [...job.stages_completed]
     if (markStageComplete && !stagesCompleted.includes(stage)) {
       stagesCompleted.push(stage)
@@ -579,12 +584,16 @@ export async function saveSessionState(
   state: Record<string, any>
 ): Promise<{ error: any }> {
   try {
+    // Do not downgrade status if the job is already completed
+    const { data: job } = await getJob(jobId)
+    const updateData: any = { session_state: state }
+    if (!job || job.status !== 'completed') {
+      updateData.status = 'paused'
+    }
+
     const { error } = await supabase
       .from('polaris_jobs')
-      .update({ 
-        session_state: state,
-        status: 'paused'
-      })
+      .update(updateData)
       .eq('id', jobId)
     
     if (error) return { error }

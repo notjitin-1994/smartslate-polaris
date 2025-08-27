@@ -36,7 +36,7 @@ const DataCard = memo(({
   title: string
   icon: ReactNode
   children: ReactNode
-  variant?: 'default' | 'primary' | 'success' | 'warning' | 'danger'
+  variant?: 'default' | 'primary' | 'success' | 'warning' | 'danger' | 'transparent'
   expandable?: boolean
 }) => {
   const [isExpanded, setIsExpanded] = useState(!expandable)
@@ -46,7 +46,8 @@ const DataCard = memo(({
     primary: 'border-primary-400/20 bg-primary-400/5',
     success: 'border-emerald-400/20 bg-emerald-400/5',
     warning: 'border-amber-400/20 bg-amber-400/5',
-    danger: 'border-red-400/20 bg-red-400/5'
+    danger: 'border-red-400/20 bg-red-400/5',
+    transparent: 'border-transparent bg-transparent'
   }
   
   const iconBgStyles = {
@@ -54,7 +55,8 @@ const DataCard = memo(({
     primary: 'bg-primary-400/10',
     success: 'bg-emerald-400/10',
     warning: 'bg-amber-400/10',
-    danger: 'bg-red-400/10'
+    danger: 'bg-red-400/10',
+    transparent: 'bg-white/10'
   }
   
   const iconTextStyles = {
@@ -62,7 +64,8 @@ const DataCard = memo(({
     primary: 'text-primary-400',
     success: 'text-emerald-400',
     warning: 'text-amber-400',
-    danger: 'text-red-400'
+    danger: 'text-red-400',
+    transparent: 'text-white/70'
   }
   
   return (
@@ -607,36 +610,79 @@ const EnhancedReportDisplay = memo(({
       {/* Content (always show overview) */}
       <div className="space-y-6">
         <div className="space-y-6">
-            {/* Grid for primary cards */}
-            {renderResponsiveGrid([
-              (
-                <DataCard
-                  key="exec-summary"
-                  title="Executive Summary"
-                  icon={
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                  }
-                  variant="primary"
-                >
-                  <div className="space-y-4 text-sm">
-                    {report.summary?.problem_statement && (
-                      <div>
-                        <div className="text-white/60 text-xs uppercase tracking-wider mb-1">Problem Statement</div>
-                        <div className="text-white/90">{report.summary.problem_statement}</div>
-                      </div>
-                    )}
-                    {report.summary?.objectives && report.summary.objectives.length > 0 && (
-                      <div>
-                        <div className="text-white/60 text-xs uppercase tracking-wider mb-2">Key Objectives</div>
-                        <ItemGrid items={report.summary.objectives} columns={2} />
-                      </div>
-                    )}
+            {/* Executive Summary - full width */}
+            <DataCard
+              key="exec-summary"
+              title="Executive Summary"
+              icon={
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              }
+              variant="transparent"
+            >
+              <div className="space-y-4 text-sm">
+                {report.summary?.problem_statement && (
+                  <div>
+                    <div className="text-white/60 text-xs uppercase tracking-wider mb-1">Problem Statement</div>
+                    <div className="text-white/90">{report.summary.problem_statement}</div>
                   </div>
-                </DataCard>
-              ),
-              (((report.delivery_plan?.timeline?.length || 0) >= 3) || (((report.delivery_plan?.timeline?.length || 0) > 0) && ((report.delivery_plan?.phases?.length || 0) === 0))) ? (
+                )}
+                {report.summary?.objectives && report.summary.objectives.length > 0 && (
+                  <div>
+                    <div className="text-white/60 text-xs uppercase tracking-wider mb-2">Key Objectives</div>
+                    <ItemGrid items={report.summary.objectives} columns={2} />
+                  </div>
+                )}
+              </div>
+            </DataCard>
+
+            {/* Implementation Roadmap - placed directly below Executive Summary */}
+            {(report.delivery_plan?.phases?.length || 0) > 0 && (
+              <DataCard
+                key="phases"
+                title="Implementation Roadmap"
+                icon={
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
+                  </svg>
+                }
+                variant="success"
+              >
+                <div className="space-y-3">
+                  {report.delivery_plan.phases.map((p, i) => (
+                    <div key={i} className="p-3 rounded-lg bg-white/5 border border-white/10">
+                      <div className="flex items-center justify-between text-sm text-white/80">
+                        <span className="font-medium">{p.name}</span>
+                        {p.duration_weeks ? (
+                          <span className="text-white/60">{p.duration_weeks} weeks</span>
+                        ) : null}
+                      </div>
+                      {p.goals?.length > 0 && (
+                        <div className="mt-2 text-xs text-white/70">
+                          <div className="text-white/60 mb-1">Goals</div>
+                          <ul className="list-disc pl-5 space-y-0.5">
+                            {p.goals.map((g, idx) => <li key={idx}>{g}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                      {p.activities?.length > 0 && (
+                        <div className="mt-2 text-xs text-white/70">
+                          <div className="text-white/60 mb-1">Activities</div>
+                          <ul className="list-disc pl-5 space-y-0.5">
+                            {p.activities.map((a, idx) => <li key={idx}>{a}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </DataCard>
+            )}
+
+            {/* Grid for remaining primary cards */}
+            {renderResponsiveGrid([
+              (((report.delivery_plan?.timeline?.length || 0) > 0)) ? (
                 <DataCard
                   key="timeline"
                   title="Delivery Timeline"
@@ -648,47 +694,6 @@ const EnhancedReportDisplay = memo(({
                   variant="success"
                 >
                   <Timeline items={report.delivery_plan.timeline.filter(t => (t.start || t.end)) as Array<{label: string; start?: string | null; end?: string | null}>} />
-                </DataCard>
-              ) : null,
-              (((report.delivery_plan?.timeline?.length || 0) < 3) && ((report.delivery_plan?.phases?.length || 0) > 0)) ? (
-                <DataCard
-                  key="phases"
-                  title="Implementation Roadmap"
-                  icon={
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7h18M3 12h18M3 17h18" />
-                    </svg>
-                  }
-                  variant="success"
-                >
-                  <div className="space-y-3">
-                    {report.delivery_plan.phases.map((p, i) => (
-                      <div key={i} className="p-3 rounded-lg bg-white/5 border border-white/10">
-                        <div className="flex items-center justify-between text-sm text-white/80">
-                          <span className="font-medium">{p.name}</span>
-                          {p.duration_weeks ? (
-                            <span className="text-white/60">{p.duration_weeks} weeks</span>
-                          ) : null}
-                        </div>
-                        {p.goals?.length > 0 && (
-                          <div className="mt-2 text-xs text-white/70">
-                            <div className="text-white/60 mb-1">Goals</div>
-                            <ul className="list-disc pl-5 space-y-0.5">
-                              {p.goals.map((g, idx) => <li key={idx}>{g}</li>)}
-                            </ul>
-                          </div>
-                        )}
-                        {p.activities?.length > 0 && (
-                          <div className="mt-2 text-xs text-white/70">
-                            <div className="text-white/60 mb-1">Activities</div>
-                            <ul className="list-disc pl-5 space-y-0.5">
-                              {p.activities.map((a, idx) => <li key={idx}>{a}</li>)}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
                 </DataCard>
               ) : null,
               (report.measurement?.success_metrics && report.measurement.success_metrics.length > 0) ? (

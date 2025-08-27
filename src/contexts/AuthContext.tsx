@@ -5,6 +5,7 @@ import { getSupabase } from '@/services/supabase'
 import * as authService from '@/services/auth/authService'
 import { AuthError, ValidationError } from '@/lib/errors'
 import { paths } from '@/routes/paths'
+import { setUserContext } from '@/dev/errorTracker'
 
 interface AuthContextType {
   user: User | null
@@ -52,6 +53,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         if (mounted) {
           setSession(currentSession)
           setUser(currentSession?.user ?? null)
+          try { if (import.meta.env.DEV) setUserContext(currentSession?.user ? { id: currentSession.user.id, email: currentSession.user.email || undefined } : null) } catch {}
         }
       } catch (error) {
         console.error('Failed to initialize auth:', error)
@@ -71,6 +73,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         
         setSession(newSession)
         setUser(newSession?.user ?? null)
+        try { if (import.meta.env.DEV) setUserContext(newSession?.user ? { id: newSession.user.id, email: newSession.user.email || undefined } : null) } catch {}
         
         // Handle different auth events
         switch (event) {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { apiDebugStore } from '@/dev/apiDebug'
+import { errorTrackerStore } from '@/dev/errorTracker'
 
 export function DevDebugButton() {
   const [errorCount, setErrorCount] = useState(0)
@@ -8,9 +9,15 @@ export function DevDebugButton() {
 
   useEffect(() => {
     if (!import.meta.env.DEV) return
-    const compute = () => setErrorCount(apiDebugStore.get().filter(l => l.ok === false || (typeof l.status === 'number' && l.status >= 400)).length)
+    const compute = () => {
+      const apiErrors = apiDebugStore.get().filter(l => l.ok === false || (typeof l.status === 'number' && l.status >= 400)).length
+      const runtimeErrors = errorTrackerStore.get().length
+      setErrorCount(apiErrors + runtimeErrors)
+    }
     compute()
-    return apiDebugStore.subscribe(compute)
+    const unsubA = apiDebugStore.subscribe(compute)
+    const unsubB = errorTrackerStore.subscribe(compute)
+    return () => { unsubA(); unsubB() }
   }, [])
 
   if (!import.meta.env.DEV) return null

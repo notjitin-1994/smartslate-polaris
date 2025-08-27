@@ -34,15 +34,16 @@ import { tryExtractJson } from '@/polaris/needs-analysis/json'
 import { formatReportAsMarkdown } from '@/polaris/needs-analysis/format'
 import type { NAField, NAResponseMap } from '@/polaris/needs-analysis/types'
 import { useAuth } from '@/contexts/AuthContext'
+import { StepIndicator, WizardContainer, ActionButtons } from '@/components/StarmapWizard'
 
-// Stage configuration
-const STAGES: { id: PolarisJobStage; label: string; fields?: NAField[] }[] = [
-  { id: 'greeting', label: 'Initial Information', fields: STAGE1_REQUESTER_FIELDS },
-  { id: 'organization', label: 'Organization Details', fields: STAGE2_ORGANIZATION_FIELDS },
-  { id: 'requirements', label: 'Project Requirements', fields: STAGE3_PROJECT_FIELDS },
-  { id: 'preliminary', label: 'Preliminary Report' },
-  { id: 'dynamic_questions', label: 'Dynamic Questionnaire' },
-  { id: 'final_report', label: 'Final Report' }
+// Stage configuration (with UX metadata)
+const STAGES: { id: PolarisJobStage; label: string; description?: string; icon?: string; fields?: NAField[] }[] = [
+  { id: 'greeting', label: 'Requester & Context', icon: '🎯', description: 'Tell us about yourself so we can personalize the analysis.', fields: STAGE1_REQUESTER_FIELDS },
+  { id: 'organization', label: 'Organization Details', icon: '🏢', description: 'Share org info to calibrate scope, scale, and constraints.', fields: STAGE2_ORGANIZATION_FIELDS },
+  { id: 'requirements', label: 'Project Requirements', icon: '🧭', description: 'Clarify objectives, timeline, budget, and success criteria.', fields: STAGE3_PROJECT_FIELDS },
+  { id: 'preliminary', label: 'Preliminary Report', icon: '📝', description: 'We’ll generate a draft synthesis for your review.' },
+  { id: 'dynamic_questions', label: 'Dynamic Questionnaire', icon: '🔍', description: 'Answer targeted follow-ups to refine recommendations.' },
+  { id: 'final_report', label: 'Final Report', icon: '📋', description: 'Review the final starmap report and share as needed.' }
 ]
 
 export default function PolarisJobWizard() {
@@ -391,6 +392,16 @@ export default function PolarisJobWizard() {
     setShowReportPreview(false)
     await handleStageComplete()
   }
+
+  function areDynamicAnswersValid(): boolean {
+    if (STAGES[currentStageIndex].id !== 'dynamic_questions') return true
+    if (!dynamicQuestions || dynamicQuestions.length === 0) return false
+    return dynamicQuestions.every(q => {
+      const v = (dynamicAnswers as any)[q.id]
+      if (Array.isArray(v)) return v.length > 0
+      return v !== undefined && v !== null && v !== ''
+    })
+  }
   
   async function generatePreliminaryReport() {
     if (!job) return
@@ -581,6 +592,34 @@ export default function PolarisJobWizard() {
   }
   
   const currentStage = STAGES[currentStageIndex]
+  const completedSteps = (job?.stages_completed || []).map(s => STAGES.findIndex(st => st.id === s)).filter(i => i >= 0)
+  const stepsForIndicator = STAGES.map(s => ({ key: s.id, label: s.label, icon: s.icon, description: s.description }))
+  const maxNavigableIndex = Math.max(currentStageIndex, ...(completedSteps.length ? completedSteps : [0]))
+  const nextLabel = (() => {
+    if (showReportPreview) return 'Continue'
+    switch (currentStage.id) {
+      case 'requirements':
+        return 'Generate Preliminary Report'
+      case 'preliminary':
+        return generating ? 'Generating…' : 'Generate Dynamic Questions'
+      case 'dynamic_questions':
+        return 'Generate Final Report'
+      case 'final_report':
+        return 'Finish'
+      default:
+        return 'Next'
+    }
+  })()
+  const nextDisabled = (() => {
+    if (generating) return true
+    if (showReportPreview) return false
+    if (currentStage.fields) {
+      const valid = isStageValid() && (currentStageIndex !== 0 || !!experienceLevel)
+      return !valid
+    }
+    if (currentStage.id === 'dynamic_questions') return !areDynamicAnswersValid()
+    return false
+  })()
   
   return (
     <div className="min-h-screen bg-[rgb(var(--bg))] text-[rgb(var(--text))]">
@@ -608,39 +647,23 @@ export default function PolarisJobWizard() {
           </div>
         </div>
       </div>
-      
-      {/* Progress Bar */}
-      <div className="border-b border-white/10 bg-[rgb(var(--bg))]/40 backdrop-blur-xl">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            {STAGES.map((stage, index) => (
-              <div key={stage.id} className="flex items-center">
-                <div className={`
-                  w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium
-                  ${index < currentStageIndex
-                    ? 'bg-green-500 text-white'
-                    : index === currentStageIndex
-                      ? 'bg-secondary-500 text-white'
-                      : 'bg-white/10 text-white/60'
-                  }
-                `}>
-                  {index < currentStageIndex ? '✓' : index + 1}
-                </div>
-                {index < STAGES.length - 1 && (
-                  <div className={`
-                    w-full h-1 mx-2
-                    ${index < currentStageIndex ? 'bg-green-500' : 'bg-white/10'}
-                  `} style={{ width: '100px' }} />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 text-center">
-            <p className="text-sm font-medium text-white">{currentStage.label}</p>
-          </div>
+
+      {/* Step Indicator */}
+      <div className="bg-[rgb(var(--bg))]/40 backdrop-blur-xl border-b border-white/10">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <StepIndicator
+            steps={stepsForIndicator}
+            currentStep={currentStageIndex}
+            completedSteps={completedSteps}
+            onStepClick={(idx) => {
+              if (idx <= maxNavigableIndex) {
+                setCurrentStageIndex(idx)
+              }
+            }}
+          />
         </div>
       </div>
-      
+
       {/* Main Content */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {error && (
@@ -648,119 +671,79 @@ export default function PolarisJobWizard() {
             {error}
           </div>
         )}
-        
-        {generating ? (
-          <div className="glass-card rounded-lg p-12">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-400 mx-auto mb-4"></div>
-              <p className="text-lg font-medium text-white">{generationProgress}</p>
+
+        <WizardContainer title={currentStage.label} subtitle={currentStage.description}>
+          {generating ? (
+            <div className="py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-400 mx-auto mb-4"></div>
+                <p className="text-lg font-medium text-white">{generationProgress || 'Working…'}</p>
+              </div>
             </div>
-          </div>
-        ) : showReportPreview ? (
-          <div className="glass-card rounded-lg p-6">
-            <h2 className="text-xl font-bold mb-4 text-white">Report Preview</h2>
-            <div className="mb-6">
-              <ReportDisplay reportMarkdown={currentReport} />
+          ) : showReportPreview ? (
+            <div>
+              <div className="mb-6">
+                <ReportDisplay reportMarkdown={currentReport} />
+              </div>
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handlePreviewContinue}
-                className="btn-primary px-6 py-2"
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        ) : currentStage.fields ? (
-          <div className="glass-card rounded-lg p-6">
-            <h2 className="text-xl font-bold mb-6 text-white">{currentStage.label}</h2>
-            
-            {/* Experience Level Selection (for first stage) */}
-            {currentStageIndex === 0 && !experienceLevel && (
-              <div className="mb-8">
-                <h3 className="text-lg font-semibold mb-4 text-white">Select Your Experience Level</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {(EXPERIENCE_LEVELS[0] as any).options?.map((option: string, index: number) => (
-                    <button
-                      key={index}
-                      onClick={() => setExperienceLevel(option)}
-                      className="p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-all text-left"
-                    >
-                      <h4 className="font-semibold text-white">{option}</h4>
-                    </button>
+          ) : currentStage.fields ? (
+            <div>
+              {/* Experience Level Selection (for first stage) */}
+              {currentStageIndex === 0 && !experienceLevel && (
+                <div className="mb-8">
+                  <h3 className="text-lg font-semibold mb-4 text-white">Select Your Experience Level</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {(EXPERIENCE_LEVELS[0] as any).options?.map((option: string, index: number) => (
+                      <button
+                        key={index}
+                        onClick={() => setExperienceLevel(option)}
+                        className="p-4 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 transition-all text-left"
+                      >
+                        <h4 className="font-semibold text-white">{option}</h4>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Stage Fields */}
+              {(currentStageIndex > 0 || experienceLevel) && (
+                <div className="space-y-6">
+                  {currentStage.fields.map(field => (
+                    <RenderField
+                      key={field.id}
+                      field={field}
+                      value={stageAnswers[field.id]}
+                      onChange={(id, value) => setStageAnswers({
+                        ...stageAnswers,
+                        [id]: value
+                      })}
+                    />
                   ))}
                 </div>
-              </div>
-            )}
-            
-            {/* Stage Fields */}
-            {(currentStageIndex > 0 || experienceLevel) && (
+              )}
+            </div>
+          ) : currentStage.id === 'dynamic_questions' && dynamicQuestions.length > 0 ? (
+            <div>
+              <p className="text-white/70 mb-6">
+                Based on your initial inputs, please answer these additional questions to refine the recommendations.
+              </p>
               <div className="space-y-6">
-                {currentStage.fields.map(field => (
+                {dynamicQuestions.map(field => (
                   <RenderField
                     key={field.id}
                     field={field}
-                    value={stageAnswers[field.id]}
-                    onChange={(id, value) => setStageAnswers({
-                      ...stageAnswers,
+                    value={dynamicAnswers[field.id]}
+                    onChange={(id, value) => setDynamicAnswers({
+                      ...dynamicAnswers,
                       [id]: value
                     })}
                   />
                 ))}
               </div>
-            )}
-            
-            {/* Navigation */}
-            <div className="mt-8 flex justify-between">
-              <button
-                onClick={() => setCurrentStageIndex(Math.max(0, currentStageIndex - 1))}
-                disabled={currentStageIndex === 0}
-                className="px-6 py-2 btn-ghost text-white/90 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={handleStageComplete}
-                disabled={!isStageValid() || (currentStageIndex === 0 && !experienceLevel)}
-                className="btn-primary px-6 py-2 disabled:opacity-50"
-              >
-                {currentStageIndex === STAGES.length - 1 ? 'Complete' : 'Next'}
-              </button>
             </div>
-          </div>
-        ) : currentStage.id === 'dynamic_questions' && dynamicQuestions.length > 0 ? (
-          <div className="glass-card rounded-lg p-6">
-            <h2 className="text-xl font-bold mb-6 text-white">Additional Questions</h2>
-            <p className="text-white/70 mb-6">
-              Based on your initial inputs, please answer these additional questions to refine the recommendations.
-            </p>
-            
-            <div className="space-y-6">
-              {dynamicQuestions.map(field => (
-                <RenderField
-                  key={field.id}
-                  field={field}
-                  value={dynamicAnswers[field.id]}
-                  onChange={(id, value) => setDynamicAnswers({
-                    ...dynamicAnswers,
-                    [id]: value
-                  })}
-                />
-              ))}
-            </div>
-            
-            <div className="mt-8 flex justify-end">
-              <button
-                onClick={handleStageComplete}
-                className="btn-primary px-6 py-2"
-              >
-                Generate Final Report
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="glass-card rounded-lg p-12">
-            <div className="text-center">
+          ) : (
+            <div className="py-12 text-center">
               <p className="text-lg text-white/80">Processing stage...</p>
               {currentStage.id === 'dynamic_questions' && (
                 <div className="mt-4">
@@ -773,8 +756,29 @@ export default function PolarisJobWizard() {
                 </div>
               )}
             </div>
-          </div>
-        )}
+          )}
+
+          <ActionButtons
+            onPrevious={() => {
+              if (showReportPreview) {
+                setShowReportPreview(false)
+                setPreviewStage(null)
+                return
+              }
+              setCurrentStageIndex(Math.max(0, currentStageIndex - 1))
+            }}
+            onNext={async () => {
+              if (showReportPreview) {
+                await handlePreviewContinue()
+                return
+              }
+              await handleStageComplete()
+            }}
+            isLoading={saving || generating}
+            nextDisabled={nextDisabled}
+            nextLabel={nextLabel}
+          />
+        </WizardContainer>
       </div>
     </div>
   )

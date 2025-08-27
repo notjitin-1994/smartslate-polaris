@@ -98,6 +98,13 @@ export default function PolarisRevampedV3() {
     }
   }, [])
   
+  // Smoothly scroll to top on step change for clearer transitions
+  useEffect(() => {
+    try {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    } catch {}
+  }, [active])
+  
   // Auto-save on changes
   useEffect(() => {
     if (!job) return
@@ -469,26 +476,41 @@ export default function PolarisRevampedV3() {
     }
   }
   
+  function isFieldAnswered(field: NAField, value: unknown): boolean {
+    if (!field.required) return true
+    switch (field.type) {
+      case 'text':
+      case 'textarea':
+      case 'single_select':
+        return typeof value === 'string' && value.trim().length > 0
+      case 'multi_select':
+        return Array.isArray(value) && value.length > 0
+      case 'calendar_date':
+        return typeof value === 'string' && value.length > 0
+      case 'calendar_range': {
+        const v = (value || {}) as { start?: string; end?: string }
+        return typeof v.start === 'string' && v.start.length > 0 && typeof v.end === 'string' && v.end.length > 0
+      }
+      case 'number':
+      case 'slider':
+        return value !== null && value !== undefined && value !== ''
+      default:
+        return Boolean(value)
+    }
+  }
+  
   function canProceedToNext(): boolean {
     switch (active) {
       case 'experience':
-        return EXPERIENCE_LEVELS.every(f => !f.required || !!experienceAnswer[f.id])
+        return EXPERIENCE_LEVELS.every(f => isFieldAnswered(f, experienceAnswer[f.id]))
       case 'stage1':
-        return STAGE1_REQUESTER_FIELDS.every(f => 
-          !f.required || stage1Answers[f.id]
-        )
+        return STAGE1_REQUESTER_FIELDS.every(f => isFieldAnswered(f, stage1Answers[f.id]))
       case 'stage2':
-        return STAGE2_ORGANIZATION_FIELDS.every(f => 
-          !f.required || stage2Answers[f.id]
-        )
+        return STAGE2_ORGANIZATION_FIELDS.every(f => isFieldAnswered(f, stage2Answers[f.id]))
       case 'stage3':
-        return STAGE3_PROJECT_FIELDS.every(f => 
-          !f.required || stage3Answers[f.id]
-        )
+        return STAGE3_PROJECT_FIELDS.every(f => isFieldAnswered(f, stage3Answers[f.id]))
       case 'dynamic':
-        return dynamicQuestions.length === 0 || dynamicQuestions.every(f => 
-          !f.required || dynamicAnswers[f.id]
-        )
+        return dynamicQuestions.length === 0 || dynamicQuestions.every(f => isFieldAnswered(f, dynamicAnswers[f.id]))
       default:
         return true
     }

@@ -1,6 +1,7 @@
 import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { formatErrorMessage } from '@/lib/errors'
+import { reportError } from '@/dev/errorTracker'
 
 interface Props {
   children: ReactNode
@@ -48,6 +49,11 @@ export class ErrorBoundary extends Component<Props, State> {
     // Call custom error handler if provided
     this.props.onError?.(error, errorInfo)
     
+    // Report to local dev error tracker
+    try {
+      reportError(error, { type: 'boundary', origin: 'ErrorBoundary', context: { componentStack: errorInfo.componentStack } })
+    } catch {}
+
     // Send error to monitoring service in production
     if (import.meta.env.PROD) {
       this.logErrorToService(error, errorInfo)

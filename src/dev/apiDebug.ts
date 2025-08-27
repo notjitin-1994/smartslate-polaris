@@ -21,10 +21,16 @@ class ApiDebugStore {
   private logs: ApiLogEntry[] = []
   private subscribers: Set<Subscriber> = new Set()
   private max = 500
+  private paused = false
+  private sincePaused = 0
 
   add(entry: ApiLogEntry) {
     this.logs.unshift(entry)
     if (this.logs.length > this.max) this.logs.length = this.max
+    if (this.paused) {
+      this.sincePaused += 1
+      return
+    }
     this.emit()
   }
 
@@ -45,9 +51,27 @@ class ApiDebugStore {
   private emit() {
     for (const fn of this.subscribers) fn()
   }
+
+  setPaused(paused: boolean) {
+    this.paused = paused
+    if (!paused) {
+      const had = this.sincePaused
+      this.sincePaused = 0
+      if (had > 0) this.emit()
+    }
+  }
+
+  getPaused(): boolean {
+    return this.paused
+  }
+
+  getSincePaused(): number {
+    return this.sincePaused
+  }
 }
 
 export const apiDebugStore = new ApiDebugStore()
+import { breadcrumbs, reportError } from '@/dev/errorTracker'
 
 let installed = false
 let originalFetch: typeof fetch | null = null
@@ -109,6 +133,16 @@ export function installApiDebugInterceptor() {
         timestamp: new Date().toISOString(),
       })
 
+      // Add breadcrumb for the API call
+      try {
+        breadcrumbs.add({
+          category: 'api',
+          message: `${method} ${url}`,
+          data: { status: res.status, ok: res.ok, durationMs: Math.round(end - start) },
+          level: res.ok ? 'info' : 'error',
+        })
+      } catch {}
+
       return res
     } catch (e: any) {
       const end = performance.now()
@@ -124,6 +158,11 @@ export function installApiDebugInterceptor() {
           error: e?.message || String(e),
           timestamp: new Date().toISOString(),
         })
+
+        // Report API network-level error to tracker
+        try {
+          reportError(e, { type: 'api', origin: 'fetch', context: { method, url, durationMs: Math.round(end - start) } })
+        } catch {}
       }
       throw e
     }

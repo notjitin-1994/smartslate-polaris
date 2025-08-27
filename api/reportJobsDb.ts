@@ -30,13 +30,21 @@ function generateWebhookSignature(payload: string, secret: string): string {
 
 // ---------- Dynamic Questionnaire Helpers ----------
 
+type ProviderMeta = {
+  id?: string
+  finish_reason?: string
+  stop_reason?: string
+  usage?: any
+}
+
 async function callAnthropicMessages(payload: {
   model: string
   temperature: number
   system?: string
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
   max_tokens: number
-}): Promise<{ ok: boolean; content?: string; status?: number; error?: string }> {
+  response_format?: any
+}): Promise<{ ok: boolean; content?: string; status?: number; error?: string; meta?: ProviderMeta }> {
   try {
     const apiKey = (process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || '').trim()
     const baseUrl = ((process.env.ANTHROPIC_BASE_URL || process.env.VITE_ANTHROPIC_BASE_URL || 'https://api.anthropic.com').trim()).replace(/\/$/, '')
@@ -71,9 +79,13 @@ async function callAnthropicMessages(payload: {
         if (resp.ok) {
           try {
             const data: any = JSON.parse(text)
+            const stopReason = data?.stop_reason
+            if (stopReason && stopReason === 'max_tokens') {
+              return { ok: false, status: 507, error: 'Truncated output from Anthropic (max_tokens). Reduce inputs and try again.' }
+            }
             const content = Array.isArray(data?.content) ? (data.content.find((c: any) => c.type === 'text')?.text || '') : (data?.content || '')
             clearTimeout(timeoutId)
-            return { ok: true, content }
+            return { ok: true, content, meta: { id: data?.id, stop_reason: stopReason, usage: data?.usage } }
           } catch {
             clearTimeout(timeoutId)
             return { ok: true, content: text }
@@ -116,7 +128,8 @@ async function callOpenAIChat(payload: {
   temperature: number
   messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
   max_tokens: number
-}): Promise<{ ok: boolean; content?: string; status?: number; error?: string }> {
+  response_format?: any
+}): Promise<{ ok: boolean; content?: string; status?: number; error?: string; meta?: ProviderMeta }> {
   try {
     const apiKey = (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '').trim()
     const baseUrl = ((process.env.OPENAI_BASE_URL || process.env.VITE_OPENAI_BASE_URL || 'https://api.openai.com').trim()).replace(/\/$/, '')
@@ -143,8 +156,16 @@ async function callOpenAIChat(payload: {
 
     try {
       const data: any = JSON.parse(text)
-      const content = data?.choices?.[0]?.message?.content || ''
-      return { ok: true, content }
+      const choice = data?.choices?.[0]
+      const content = choice?.message?.content || ''
+      const finishReason = choice?.finish_reason
+      if (finishReason && (finishReason === 'length' || finishReason === 'max_tokens')) {
+        return { ok: false, status: 507, error: 'Truncated output from OpenAI (length/max_tokens). Reduce inputs and try again.' }
+      }
+      if (!content) {
+        return { ok: false, status: 500, error: 'Empty content from OpenAI' }
+      }
+      return { ok: true, content, meta: { id: data?.id, finish_reason: finishReason, usage: data?.usage } }
     } catch {
       return { ok: true, content: text }
     }
@@ -204,14 +225,24 @@ async function generateDynamicQuestionnaire(summaryId: string): Promise<{ stages
   const prompt = await buildDynamicQuestionnairePrompt(summaryId)
 
   const model = (process.env.ANTHROPIC_MODEL || process.env.VITE_ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest').trim()
-  const maxTokens = Math.min(parseInt(process.env.ANTHROPIC_MAX_TOKENS || process.env.VITE_ANTHROPIC_MAX_TOKENS || '12000'), 8192)
+  const contextLimit = Number(process.env.VITE_ANTHROPIC_CONTEXT || 200000)
+  const desiredMax = Number(process.env.VITE_MAX_OUTPUT_TOKENS || 8096)
+  const reserve = 512
+  const approxTokens = (s: string) => Math.ceil((s || '').length / 4)
+  const inputTokens = [system, prompt].reduce((n, s) => n + approxTokens(s), 0)
+  const headroom = Math.max(0, contextLimit - inputTokens - reserve)
+  const computedMax = Math.max(0, Math.min(desiredMax, headroom))
+  if (computedMax < 1024) {
+    throw new Error('Payload too large for model context; reduce inputs and try again')
+  }
 
   const result = await callAnthropicMessages({
     model,
     temperature: 0.6,
     system,
     messages: [{ role: 'user', content: prompt }],
-    max_tokens: maxTokens,
+    max_tokens: computedMax,
+    // Avoid response_format for Anthropic Messages to prevent extra inputs error
   })
 
   if (!result.ok || !result.content) {
@@ -423,7 +454,7 @@ function getReportTableFromType(type?: string): string | null {
   return null
 }
 
-async function runJob(jobId: string, prompt: string, model?: string, temperature: number = 0.2, max_tokens: number = 2600) {
+async function runJob(jobId: string, prompt: string, model?: string, temperature: number = 0.2, _max_tokens: number = 2600) {
   if (!supabase) {
     console.error('Supabase not initialized')
     return
@@ -494,7 +525,7 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
       return
     }
 
-    // Branch 2: Research report job (refactored with unified fallbacks)
+    // Branch 2: Research report job (single-provider policy)
     const mdl = normalizePerplexityModel(model || process.env.PERPLEXITY_MODEL || process.env.VITE_PERPLEXITY_MODEL || 'sonar-pro')
 
     // Compose user message with a short preamble as Perplexity lacks system role (kept for reference)
@@ -511,57 +542,69 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
         .eq('job_id', jobId)
     }
 
-    let providerUsed: 'perplexity' | 'openai' | 'anthropic' = 'perplexity'
-    let selectedModel: string = mdl
-    let content: string = ''
-    const attemptErrors: string[] = []
+    let content = ''
+    let providerUsed: 'openai' | 'anthropic' = (process.env.VITE_LLM_PROVIDER as any)?.includes('openai') ? 'openai' : 'anthropic'
+    const openaiPreferred = providerUsed === 'openai'
 
-    // Skip Perplexity entirely per request: prefer OpenAI → Anthropic
+    // Compute dynamic max tokens
+    const approxTokens = (s: string) => Math.ceil((s || '').length / 4)
+    const inputMessagesOpenAI = [
+      { role: 'system', content: 'You are a helpful research assistant. Provide comprehensive, accurate information. Cite sources if known.' },
+      { role: 'user', content: prompt }
+    ]
+    const inputTextOpenAI = inputMessagesOpenAI.map(m => m.content).join('\n\n')
+    const inputTokensOpenAI = approxTokens(inputTextOpenAI)
+    const openaiContext = Number(process.env.VITE_OPENAI_CONTEXT || 128000)
+    const desiredMax = Number(process.env.VITE_MAX_OUTPUT_TOKENS || 8096)
+    const reserve = 512
+    const openaiMaxOut = Math.max(0, Math.min(desiredMax, Math.max(0, openaiContext - inputTokensOpenAI - reserve)))
+    if (openaiPreferred && openaiMaxOut < 1024) {
+      throw new Error('Payload too large for OpenAI context; reduce inputs and try again')
+    }
 
-    // Attempt 1: OpenAI
-    {
+    const anthropicSystem = 'You are a helpful research assistant. Provide comprehensive, accurate information based on your knowledge. Cite sources if known.'
+    const inputTextAnthropic = `${anthropicSystem}\n\n${prompt}`
+    const anthropicContext = Number(process.env.VITE_ANTHROPIC_CONTEXT || 200000)
+    const anthropicMaxOut = Math.max(0, Math.min(desiredMax, Math.max(0, anthropicContext - approxTokens(inputTextAnthropic) - reserve)))
+    if (!openaiPreferred && anthropicMaxOut < 1024) {
+      throw new Error('Payload too large for Anthropic context; reduce inputs and try again')
+    }
+
+    let providerRequestId: string | undefined
+    let finishReason: string | undefined
+    let stopReason: string | undefined
+    const callStartedAt = Date.now()
+
+    if (openaiPreferred) {
       const openaiModel = (process.env.OPENAI_MODEL || process.env.VITE_OPENAI_MODEL || 'gpt-4o-mini').trim()
       const openaiResult = await callOpenAIChat({
         model: openaiModel,
         temperature: typeof temperature === 'number' ? temperature : 0.2,
-        messages: [
-          { role: 'system', content: 'You are a helpful research assistant. Provide comprehensive, accurate information. Cite sources if known.' },
-          { role: 'user', content: prompt }
-        ],
-        max_tokens: Math.min(typeof max_tokens === 'number' ? max_tokens : 2600, 4096),
+        messages: inputMessagesOpenAI as any,
+        max_tokens: openaiMaxOut,
       })
-      if (openaiResult.ok && openaiResult.content) {
-        content = openaiResult.content.trim()
-        providerUsed = 'openai'
-        selectedModel = openaiModel
-      } else if (!openaiResult.ok) {
-        attemptErrors.push(openaiResult.error || `OpenAI error ${openaiResult.status || ''}`.trim())
-      }
-    }
-
-    // Attempt 2: Anthropic (if OpenAI failed)
-    if (!content) {
+      if (!openaiResult.ok) throw new Error(openaiResult.error || 'OpenAI call failed')
+      content = (openaiResult.content || '').trim()
+      providerUsed = 'openai'
+      providerRequestId = openaiResult.meta?.id
+      finishReason = openaiResult.meta?.finish_reason
+    } else {
       const anthropicModel = (process.env.ANTHROPIC_MODEL || process.env.VITE_ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest').trim()
-      const anthropicMax = Math.min(parseInt(process.env.ANTHROPIC_MAX_TOKENS || process.env.VITE_ANTHROPIC_MAX_TOKENS || '8192'), 8192)
       const anthropic = await callAnthropicMessages({
         model: anthropicModel,
         temperature: typeof temperature === 'number' ? temperature : 0.2,
-        system: 'You are a helpful research assistant. Provide comprehensive, accurate information based on your knowledge. Cite sources if known.',
+        system: anthropicSystem,
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: Math.min(typeof max_tokens === 'number' ? max_tokens : 2600, anthropicMax),
+        max_tokens: anthropicMaxOut,
       })
-      if (anthropic.ok && anthropic.content) {
-        content = anthropic.content.trim()
-        providerUsed = 'anthropic'
-        selectedModel = anthropicModel
-      } else if (!anthropic.ok) {
-        attemptErrors.push(anthropic.error || `Anthropic error ${anthropic.status || ''}`.trim())
-      }
+      if (!anthropic.ok) throw new Error(anthropic.error || 'Anthropic call failed')
+      content = (anthropic.content || '').trim()
+      providerUsed = 'anthropic'
+      providerRequestId = anthropic.meta?.id
+      stopReason = anthropic.meta?.stop_reason
     }
-
-    if (!content) {
-      throw new Error(`All providers failed: ${attemptErrors.join(' | ')}`)
-    }
+    const callEndedAt = Date.now()
+    const latencyMs = callEndedAt - callStartedAt
 
     // Update progress
     await supabase
@@ -591,9 +634,16 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
       const researchMetadata = {
         ...(jobRow as any)?.metadata,
         job_id: jobId,
-        model: selectedModel,
+        model: providerUsed === 'openai' ? (process.env.OPENAI_MODEL || process.env.VITE_OPENAI_MODEL || 'gpt-4o-mini').trim() : (process.env.ANTHROPIC_MODEL || process.env.VITE_ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest').trim(),
         completed_at: new Date().toISOString(),
-        provider: providerUsed
+        provider: providerUsed,
+        provider_request_id: providerRequestId,
+        input_token_estimate: openaiPreferred ? inputTokensOpenAI : approxTokens(inputTextAnthropic),
+        max_output_tokens: openaiPreferred ? openaiMaxOut : anthropicMaxOut,
+        finish_reason: finishReason,
+        stop_reason: stopReason,
+        latency_ms: latencyMs,
+        content_size: content.length
       }
 
       const webhookResult = await notifyReportCompletion(
@@ -658,7 +708,7 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
           job_id: jobId,
           error: err?.message || 'Job failed',
           failed_at: new Date().toISOString(),
-          provider: 'perplexity'
+          provider: (process.env.VITE_LLM_PROVIDER as any)?.includes('openai') ? 'openai' : 'anthropic'
         }
 
         const webhookResult = await notifyReportCompletion(

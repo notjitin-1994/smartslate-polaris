@@ -46,17 +46,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body = rawBody
     }
 
-    const payload = {
+    const payload: any = {
       model: body.model || defaultModel,
       temperature: body.temperature ?? 0.2,
       system: body.system,
       messages: body.messages,
       max_tokens: typeof body.max_tokens === 'number' ? body.max_tokens : defaultMax,
     }
+    if (body.response_format) payload.response_format = body.response_format
 
     // Server-side timeout below platform max
     const controller = new AbortController()
-    const SERVER_TIMEOUT_MS = Number(process.env.ANTHROPIC_SERVER_TIMEOUT_MS || 115000)
+    const SERVER_TIMEOUT_MS = Number(process.env.ANTHROPIC_SERVER_TIMEOUT_MS || 240000)
     const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
 
     async function callUpstreamWithRetry(): Promise<Response> {

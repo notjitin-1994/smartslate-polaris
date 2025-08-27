@@ -1,6 +1,7 @@
 import { BaseApiClient } from './baseClient'
 import { env } from '@/config/env'
 import { AppError } from '@/lib/errors'
+import { budgetOutputTokens, assertSufficientBudget } from '@/services/ai/budget'
 
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant'
@@ -11,6 +12,9 @@ export interface LLMConfig {
   temperature?: number
   maxTokens?: number
   model?: string
+  provider?: 'openai' | 'anthropic'
+  // When expecting JSON, enable provider-native JSON modes where available
+  responseFormat?: 'json_object' | { type: 'json_schema'; json_schema: any }
 }
 
 /**
@@ -24,13 +28,13 @@ class LLMService {
     // Initialize API clients for different providers
     this.openaiClient = new BaseApiClient({
       baseUrl: '/api',
-      timeout: 115000, // keep below Vercel 120s limit
+      timeout: 240000,
       retries: 2,
     })
     
     this.anthropicClient = new BaseApiClient({
       baseUrl: '/api',
-      timeout: 115000,
+      timeout: 240000,
       retries: 2,
     })
   }
@@ -42,25 +46,11 @@ class LLMService {
     messages: ChatMessage[],
     config: LLMConfig = {}
   ): Promise<{ content: string; model?: string }> {
-    const provider = env.llmProvider || 'openai'
-    
-    try {
-      if (provider === 'anthropic') {
-        return await this.callAnthropic(messages, config)
-      }
-      
-      return await this.callOpenAI(messages, config)
-    } catch (error) {
-      console.error(`LLM call failed with provider ${provider}:`, error)
-      
-      // Optionally fallback to another provider
-      if (provider === 'anthropic' && env.openaiApiKey) {
-        console.log('Falling back to OpenAI...')
-        return await this.callOpenAI(messages, config)
-      }
-      
-      throw error
+    const provider = config.provider || env.llmProvider || 'openai'
+    if (provider === 'anthropic') {
+      return await this.callAnthropic(messages, config)
     }
+    return await this.callOpenAI(messages, config)
   }
   
   /**
@@ -72,21 +62,42 @@ class LLMService {
   ): Promise<{ content: string; model?: string }> {
     const model = config.model || env.openaiModel || 'gpt-4o-mini'
     const temperature = config.temperature ?? 0.2
-    const maxTokens = config.maxTokens || 4096
-    
-    const response = await this.openaiClient.post<any>('/openai', {
+    const inputStrings: string[] = messages.map(m => m.content)
+    const computedMax = budgetOutputTokens({
+      modelContextLimit: env.modelContextLimits.openai,
+      inputStrings,
+      desiredMax: typeof config.maxTokens === 'number' ? config.maxTokens : env.maxOutputTokens,
+    })
+    assertSufficientBudget(computedMax)
+
+    const payload: any = {
       model,
       temperature,
       messages,
-      max_tokens: maxTokens,
-    })
-    
-    const content = response.data?.choices?.[0]?.message?.content
-    
-    if (!content) {
-      throw new AppError('No response from OpenAI', 'LLM_NO_RESPONSE')
+      max_tokens: computedMax,
+      stream: false,
     }
-    
+    // For OpenAI: response_format must be used with Responses API; handled by server proxy
+
+    const response = await this.openaiClient.post<any>('/openai', payload)
+
+    const choice = response.data?.choices?.[0]
+    const content = choice?.message?.content || ''
+    const finishReason: string | undefined = choice?.finish_reason
+
+    if (!content) {
+      throw new AppError('Empty content from OpenAI', 'LLM_NO_RESPONSE')
+    }
+    if (finishReason && (finishReason === 'length' || finishReason === 'max_tokens')) {
+      const err = new AppError('Model output truncated; reduce inputs and try again', 'LLM_TRUNCATED')
+      ;(err as any).statusCode = 507
+      throw err
+    }
+    if (finishReason && finishReason !== 'stop') {
+      const err = new AppError(`Unexpected finish reason: ${finishReason}`, 'LLM_UNEXPECTED_FINISH')
+      throw err
+    }
+
     return { content, model }
   }
   
@@ -99,12 +110,13 @@ class LLMService {
   ): Promise<{ content: string; model?: string }> {
     const model = config.model || env.anthropicModel || 'claude-3-5-sonnet-latest'
     const temperature = config.temperature ?? 0.2
-    // Determine requested max, then clamp to model's allowed output tokens
-    const requestedMax = typeof config.maxTokens === 'number'
-      ? config.maxTokens
-      : (env.anthropicMaxTokens ? Number(env.anthropicMaxTokens) : 4096)
-    const modelMax = getAnthropicModelOutputLimit(model)
-    const maxTokens = Math.min(Number.isFinite(requestedMax) ? requestedMax : 4096, modelMax)
+    const inputStrings: string[] = messages.map(m => m.content)
+    const computedMax = budgetOutputTokens({
+      modelContextLimit: env.modelContextLimits.anthropic,
+      inputStrings,
+      desiredMax: typeof config.maxTokens === 'number' ? config.maxTokens : env.maxOutputTokens,
+    })
+    assertSufficientBudget(computedMax)
     
     // Convert OpenAI-style messages to Anthropic format
     const systemParts = messages
@@ -119,22 +131,37 @@ class LLMService {
         content: m.content,
       }))
     
-    const response = await this.anthropicClient.post<any>('/anthropic', {
+    const payload: any = {
       model,
       temperature,
       system,
       messages: nonSystemMessages,
-      max_tokens: maxTokens,
-    })
-    
+      max_tokens: computedMax,
+    }
+    if (config.responseFormat) {
+      ;(payload as any).response_format = config.responseFormat
+    }
+
+    const response = await this.anthropicClient.post<any>('/anthropic', payload)
+
+    const stopReason: string | undefined = response.data?.stop_reason
     const content = Array.isArray(response.data?.content)
       ? response.data.content.find((c: any) => c.type === 'text')?.text
       : response.data?.content
-    
+
     if (!content) {
-      throw new AppError('No response from Anthropic', 'LLM_NO_RESPONSE')
+      throw new AppError('Empty content from Anthropic', 'LLM_NO_RESPONSE')
     }
-    
+    if (stopReason && stopReason === 'max_tokens') {
+      const err = new AppError('Model output truncated; reduce inputs and try again', 'LLM_TRUNCATED')
+      ;(err as any).statusCode = 507
+      throw err
+    }
+    if (stopReason && stopReason !== 'end_turn' && stopReason !== 'stop_sequence' && stopReason !== 'unknown') {
+      const err = new AppError(`Unexpected stop reason: ${stopReason}`, 'LLM_UNEXPECTED_FINISH')
+      throw err
+    }
+
     return { content, model }
   }
   
@@ -151,61 +178,8 @@ class LLMService {
     yield response.content
   }
   
-  /**
-   * Call LLM with automatic retry and fallback
-   */
-  async callLLMWithFallback(
-    messages: ChatMessage[],
-    config: LLMConfig = {},
-    options: {
-      primaryProvider?: 'openai' | 'anthropic'
-      fallbackProvider?: 'openai' | 'anthropic'
-    } = {}
-  ): Promise<{ content: string; model?: string; provider: string }> {
-    const primary = options.primaryProvider || env.llmProvider || 'openai'
-    const fallback = options.fallbackProvider || (primary === 'openai' ? 'anthropic' : 'openai')
-    
-    try {
-      const result = primary === 'anthropic'
-        ? await this.callAnthropic(messages, config)
-        : await this.callOpenAI(messages, config)
-      
-      return { ...result, provider: primary }
-    } catch (primaryError) {
-      console.error(`Primary LLM provider (${primary}) failed:`, primaryError)
-      
-      // Try fallback provider
-      try {
-        const result = fallback === 'anthropic'
-          ? await this.callAnthropic(messages, config)
-          : await this.callOpenAI(messages, config)
-        
-        console.log(`Successfully used fallback provider (${fallback})`)
-        return { ...result, provider: fallback }
-      } catch (fallbackError) {
-        console.error(`Fallback LLM provider (${fallback}) also failed:`, fallbackError)
-        
-        // Throw the original error as it's more relevant
-        throw primaryError
-      }
-    }
-  }
+  // Intentionally no cross-provider fallback to honor single-call policy
 
-  /**
-   * Utility: Max output tokens per Anthropic model (conservative defaults)
-   */
-}
-
-function getAnthropicModelOutputLimit(model: string): number {
-  const m = (model || '').toLowerCase()
-  // Claude Sonnet 3.5 current output cap ~8192
-  if (m.includes('sonnet')) return 8192
-  // Haiku is typically lower; set to 4096 conservatively
-  if (m.includes('haiku')) return 4096
-  // Opus can be similar to Sonnet for output; keep 8192 conservative
-  if (m.includes('opus')) return 8192
-  // Default conservative cap
-  return 8192
 }
 
 // Export singleton instance

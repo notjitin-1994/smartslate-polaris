@@ -41,7 +41,7 @@ function allowCors(res: VercelResponse) {
 
 // Removed unused normalizePerplexityModel
 
-async function runJob(jobId: string, prompt: string, model?: string, temperature: number = 0.2, max_tokens: number = 2600) {
+async function runJob(jobId: string, prompt: string, _model?: string, temperature: number = 0.2, _max_tokens: number = 2600) {
   const store = getStore()
   const job = store.get(jobId)
   if (!job) {
@@ -54,120 +54,88 @@ async function runJob(jobId: string, prompt: string, model?: string, temperature
   store.set(jobId, job)
 
   try {
-    // Compose prompt (kept inline within provider calls)
+    // Single-provider policy
+    const preferred = (process.env.VITE_LLM_PROVIDER || 'anthropic').toLowerCase().includes('openai') ? 'openai' : 'anthropic'
 
-    // Timeout baseline (aligned to previous Perplexity timeouts)
-    const isReasoningModel = (model || '').toLowerCase().includes('reasoning')
-    const baseTimeout = Number(process.env.PPLX_SERVER_TIMEOUT_MS || 75000)
-    const SERVER_TIMEOUT_MS = isReasoningModel ? Math.min(110000, baseTimeout * 1.5) : baseTimeout
-
+    // Timeout baseline
+    const SERVER_TIMEOUT_MS = Number(process.env.LLM_SERVER_TIMEOUT_MS || 240000)
     job.percent = 15
     job.eta_seconds = Math.ceil(SERVER_TIMEOUT_MS / 1000)
     job.updated_at = Date.now()
     store.set(jobId, job)
 
-    // Attempt 1: OpenAI
-    async function callOpenAI(): Promise<{ ok: boolean; content?: string; error?: string }> {
-      try {
-        const apiKey = (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '').trim()
-        const baseUrl = ((process.env.OPENAI_BASE_URL || process.env.VITE_OPENAI_BASE_URL || 'https://api.openai.com').trim()).replace(/\/$/, '')
-        if (!apiKey) return { ok: false, error: 'OpenAI API key not configured' }
-        const openaiModel = (process.env.OPENAI_MODEL || process.env.VITE_OPENAI_MODEL || 'gpt-4o-mini').trim()
-        const payload = {
-          model: openaiModel,
-          temperature: typeof temperature === 'number' ? temperature : 0.2,
-          messages: [
-            { role: 'system', content: 'You are a helpful research assistant. Provide comprehensive, accurate information. Cite sources if known.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: Math.min(typeof max_tokens === 'number' ? max_tokens : 2600, 4096),
-        }
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
-        const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-          body: JSON.stringify(payload),
-          signal: controller.signal,
-        })
-        clearTimeout(timeoutId)
-        const text = await resp.text()
-        if (!resp.ok) return { ok: false, error: text || `HTTP ${resp.status}` }
-        let content = ''
-        try { const data = JSON.parse(text); content = data?.choices?.[0]?.message?.content || '' } catch { content = text }
-        return { ok: true, content }
-      } catch (e: any) {
-        return { ok: false, error: e?.message || 'OpenAI request failed' }
-      }
-    }
-
-    // Attempt 2: Anthropic if OpenAI fails
-    async function callAnthropic(): Promise<{ ok: boolean; content?: string; error?: string }> {
-      try {
-        const apiKey = (process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || '').trim()
-        const baseUrl = ((process.env.ANTHROPIC_BASE_URL || process.env.VITE_ANTHROPIC_BASE_URL || 'https://api.anthropic.com').trim()).replace(/\/$/, '')
-        const version = (process.env.ANTHROPIC_VERSION || '2023-06-01').trim()
-        if (!apiKey) return { ok: false, error: 'Anthropic API key not configured' }
-        const anthropicModel = (process.env.ANTHROPIC_MODEL || process.env.VITE_ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest').trim()
-        const anthropicMax = Math.min(parseInt(process.env.ANTHROPIC_MAX_TOKENS || process.env.VITE_ANTHROPIC_MAX_TOKENS || '8192'), 8192)
-        const payload: any = {
-          model: anthropicModel,
-          temperature: typeof temperature === 'number' ? temperature : 0.2,
-          system: 'You are a helpful research assistant. Provide comprehensive, accurate information based on your knowledge. Cite sources if known.',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: Math.min(typeof max_tokens === 'number' ? max_tokens : 2600, anthropicMax),
-        }
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
-
-        const maxAttempts = Math.max(1, Number(process.env.ANTHROPIC_RETRIES || 2))
-        const baseDelayMs = Math.max(200, Number(process.env.ANTHROPIC_RETRY_BASE_DELAY_MS || 500))
-        let lastErrorText = ''
-        let lastStatus = 0
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-          const resp = await fetch(`${baseUrl}/v1/messages`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': version },
-            body: JSON.stringify(payload),
-            signal: controller.signal,
-          })
-          const text = await resp.text()
-          if (resp.ok) {
-            clearTimeout(timeoutId)
-            let content = ''
-            try { const data: any = JSON.parse(text); content = Array.isArray(data?.content) ? (data.content.find((c: any) => c.type === 'text')?.text || '') : (data?.content || '') } catch { content = text }
-            return { ok: true, content }
-          }
-          lastStatus = resp.status
-          lastErrorText = text
-          const shouldRetry = resp.status === 529 || resp.status === 503 || resp.headers.get('x-should-retry') === 'true'
-          if (shouldRetry && attempt < maxAttempts - 1) {
-            const jitter = Math.random() * baseDelayMs
-            const backoff = baseDelayMs * Math.pow(2, attempt) + jitter
-            await new Promise(r => setTimeout(r, backoff))
-            continue
-          }
-          break
-        }
-        clearTimeout(timeoutId)
-        return { ok: false, error: lastErrorText || `HTTP ${lastStatus}` }
-      } catch (e: any) {
-        return { ok: false, error: e?.message || 'Anthropic request failed' }
-      }
-    }
+    // Dynamic token budgeting
+    const approx = (s: string) => Math.ceil(String(s || '').length / 4)
+    const desiredMax = Number(process.env.VITE_MAX_OUTPUT_TOKENS || 8096)
+    const reserve = 512
 
     let content = ''
-    const openaiResult = await callOpenAI()
-    if (openaiResult.ok && openaiResult.content) {
-      content = openaiResult.content
-    } else {
-      const anthropicResult = await callAnthropic()
-      if (anthropicResult.ok && anthropicResult.content) {
-        content = anthropicResult.content
-      } else {
-        const reason = [openaiResult.error, anthropicResult.error].filter(Boolean).join(' | ') || 'All providers failed'
-        throw new Error(reason)
+    if (preferred === 'openai') {
+      const apiKey = (process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY || '').trim()
+      const baseUrl = ((process.env.OPENAI_BASE_URL || process.env.VITE_OPENAI_BASE_URL || 'https://api.openai.com').trim()).replace(/\/$/, '')
+      if (!apiKey) throw new Error('OpenAI API key not configured')
+      const openaiModel = (process.env.OPENAI_MODEL || process.env.VITE_OPENAI_MODEL || 'gpt-4o-mini').trim()
+      const messages = [
+        { role: 'system', content: 'You are a helpful research assistant. Provide comprehensive, accurate information. Cite sources if known.' },
+        { role: 'user', content: prompt }
+      ]
+      const inputTokens = approx(messages.map(m => (m as any).content).join('\n\n'))
+      const contextLimit = Number(process.env.VITE_OPENAI_CONTEXT || 128000)
+      const maxOut = Math.max(0, Math.min(desiredMax, Math.max(0, contextLimit - inputTokens - reserve)))
+      if (maxOut < 1024) throw new Error('Payload too large for OpenAI context')
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
+      const resp = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+        body: JSON.stringify({ model: openaiModel, temperature: typeof temperature === 'number' ? temperature : 0.2, messages, max_tokens: maxOut, stream: false }),
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+      const text = await resp.text()
+      if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`)
+      const data: any = JSON.parse(text)
+      const choice = data?.choices?.[0]
+      const finishReason = choice?.finish_reason
+      if (finishReason && (finishReason === 'length' || finishReason === 'max_tokens')) {
+        const err = new Error('Truncated output from OpenAI (length/max_tokens). Reduce inputs and try again.')
+        ;(err as any).statusCode = 507
+        throw err
       }
+      content = choice?.message?.content || ''
+      if (!content) throw new Error('Empty content from OpenAI')
+    } else {
+      const apiKey = (process.env.ANTHROPIC_API_KEY || process.env.VITE_ANTHROPIC_API_KEY || '').trim()
+      const baseUrl = ((process.env.ANTHROPIC_BASE_URL || process.env.VITE_ANTHROPIC_BASE_URL || 'https://api.anthropic.com').trim()).replace(/\/$/, '')
+      const version = (process.env.ANTHROPIC_VERSION || '2023-06-01').trim()
+      if (!apiKey) throw new Error('Anthropic API key not configured')
+      const anthropicModel = (process.env.ANTHROPIC_MODEL || process.env.VITE_ANTHROPIC_MODEL || 'claude-3-5-sonnet-latest').trim()
+      const system = 'You are a helpful research assistant. Provide comprehensive, accurate information based on your knowledge. Cite sources if known.'
+      const inputText = `${system}\n\n${prompt}`
+      const inputTokens = approx(inputText)
+      const contextLimit = Number(process.env.VITE_ANTHROPIC_CONTEXT || 200000)
+      const maxOut = Math.max(0, Math.min(desiredMax, Math.max(0, contextLimit - inputTokens - reserve)))
+      if (maxOut < 1024) throw new Error('Payload too large for Anthropic context')
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
+      const resp = await fetch(`${baseUrl}/v1/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': version },
+        body: JSON.stringify({ model: anthropicModel, temperature: typeof temperature === 'number' ? temperature : 0.2, system, messages: [{ role: 'user', content: prompt }], max_tokens: maxOut }),
+        signal: controller.signal,
+      })
+      clearTimeout(timeoutId)
+      const text = await resp.text()
+      if (!resp.ok) throw new Error(text || `HTTP ${resp.status}`)
+      const data: any = JSON.parse(text)
+      const stopReason = data?.stop_reason
+      if (stopReason && stopReason === 'max_tokens') {
+        const err = new Error('Truncated output from Anthropic (max_tokens). Reduce inputs and try again.')
+        ;(err as any).statusCode = 507
+        throw err
+      }
+      content = Array.isArray(data?.content) ? (data.content.find((c: any) => c.type === 'text')?.text || '') : (data?.content || '')
+      if (!content) throw new Error('Empty content from Anthropic')
     }
 
     // Simulate progress updates while waiting to parse

@@ -30,6 +30,7 @@ interface AIRequest {
   maxTokens?: number
   systemPrompt?: string
   messages?: Array<{ role: string; content: string }>
+  expectsJson?: boolean
 }
 
 interface AIResponse {
@@ -243,22 +244,23 @@ export class UnifiedAIService {
             content: m.content
           }))
           
-          const llmResult = await llmService.callLLMWithFallback(
+          const expectsJson = !!request.expectsJson
+          const llmResult = await llmService.callLLM(
             messages,
             {
               temperature: request.temperature ?? 0.7,
               maxTokens: request.maxTokens ?? 4096,
-              model: config.model
-            },
-            {
-              primaryProvider: provider,
-              fallbackProvider: provider === 'openai' ? 'anthropic' : 'openai'
+              model: config.model,
+              provider: provider,
+              // OpenAI: use json_object; Anthropic: omit to avoid unsupported parameter error
+              responseFormat: expectsJson && provider === 'openai' ? { type: 'json_object' } as any : undefined,
             }
           )
-          
+          const selectedProvider = provider
+
           response = {
             content: llmResult.content,
-            provider: llmResult.provider as AIProvider,
+            provider: selectedProvider as AIProvider,
             model: llmResult.model || config.model!
           }
           break
@@ -285,41 +287,11 @@ export class UnifiedAIService {
     } catch (error) {
       console.error(`[UnifiedAI] Error with provider ${provider}:`, error)
       
-      // Try fallback providers
-      const fallbackProviders = this.getFallbackProviders(provider)
-      
-      for (const fallback of fallbackProviders) {
-        try {
-          console.log(`[UnifiedAI] Trying fallback provider: ${fallback}`)
-          const fallbackRequest = { ...request, preferredProvider: fallback }
-          return await this.call(fallbackRequest)
-        } catch (fallbackError) {
-          console.error(`[UnifiedAI] Fallback ${fallback} also failed:`, fallbackError)
-          continue
-        }
-      }
-
       throw error
     }
   }
 
-  /**
-   * Get fallback providers for a given provider
-   */
-  private getFallbackProviders(provider: AIProvider): AIProvider[] {
-    switch (provider) {
-      case 'openai':
-        return ['anthropic', 'google']
-      case 'anthropic':
-        return ['openai', 'google']
-      case 'google':
-        return ['anthropic', 'openai']
-      case 'perplexity':
-        return ['openai', 'anthropic']
-      default:
-        return ['anthropic', 'openai']
-    }
-  }
+  // Single-call policy: no cross-provider fallback method retained
 
   /**
    * Clean expired cache entries

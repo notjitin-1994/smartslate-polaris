@@ -5,6 +5,9 @@ type AppEnv = {
   VITE_AUTH_REDIRECT_URL?: string
   VITE_GOOGLE_REDIRECT_URL?: string
   VITE_LLM_PROVIDER?: string
+  VITE_MAX_OUTPUT_TOKENS?: string
+  VITE_ANTHROPIC_CONTEXT?: string
+  VITE_OPENAI_CONTEXT?: string
   VITE_OPENAI_API_KEY?: string
   VITE_OPENAI_BASE_URL?: string
   VITE_OPENAI_MODEL?: string
@@ -41,6 +44,11 @@ export const env = {
   authRedirectUrl: read('VITE_AUTH_REDIRECT_URL'),
   googleRedirectUrl: read('VITE_GOOGLE_REDIRECT_URL'),
   llmProvider: (read('VITE_LLM_PROVIDER') || 'anthropic').toLowerCase(),
+  maxOutputTokens: Number(read('VITE_MAX_OUTPUT_TOKENS') || '8096'),
+  modelContextLimits: {
+    anthropic: Number(read('VITE_ANTHROPIC_CONTEXT') || '200000'),
+    openai: Number(read('VITE_OPENAI_CONTEXT') || '128000'),
+  },
   openaiApiKey: read('VITE_OPENAI_API_KEY'),
   openaiBaseUrl: read('VITE_OPENAI_BASE_URL'),
   // Use a valid default for OpenAI

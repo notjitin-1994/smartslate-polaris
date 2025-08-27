@@ -4,7 +4,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/**/*.ts": { 
-      "maxDuration": 120
+      "maxDuration": 240
     }
   },
   "routes": [

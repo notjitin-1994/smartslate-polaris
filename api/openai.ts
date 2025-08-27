@@ -28,6 +28,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Use a valid default model
     const defaultModel = (process.env.OPENAI_MODEL || process.env.VITE_OPENAI_MODEL || 'gpt-4o-mini').trim()
     const defaultMax = Number(process.env.OPENAI_MAX_TOKENS || process.env.VITE_OPENAI_MAX_TOKENS) || 4096
+    const SERVER_TIMEOUT_MS = Number(process.env.OPENAI_SERVER_TIMEOUT_MS || 240000)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), SERVER_TIMEOUT_MS)
 
     const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {}
     // Normalize requested max tokens: accept max_completion_tokens, max_output_tokens, or max_tokens
@@ -40,12 +43,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (Number.isFinite(c3) && c3 > 0) return c3
       return defaultMax
     })()
-    const payload = {
+    const payload: any = {
       model: body.model || defaultModel,
       temperature: body.temperature ?? 0.2,
       messages: body.messages,
       max_tokens: requestedMax,
     }
+    if (body.response_format) payload.response_format = body.response_format
 
     // Helpers for Responses API
     function messagesToPrompt(messages: any[]): string {
@@ -72,6 +76,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (typeof payload.temperature === 'number') {
         responsesPayload.temperature = payload.temperature
       }
+      if (payload.response_format) {
+        responsesPayload.response_format = payload.response_format
+      }
 
       const resp = await fetch(`${baseUrl}/v1/responses`, {
         method: 'POST',
@@ -80,6 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify(responsesPayload),
+        signal: controller.signal,
       })
 
       const raw = await resp.text()
@@ -111,9 +119,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // If model requires Responses API (e.g., gpt-5, o1, o3, omni), route directly
+    // If model requires Responses API (e.g., gpt-5, o1, o3, omni) OR response_format is requested, route directly
     const modelLower = String(payload.model || '').toLowerCase()
-    if (modelLower.startsWith('gpt-5') || modelLower.startsWith('o1') || modelLower.startsWith('o3') || modelLower.includes('omni')) {
+    const hasResponseFormat = !!payload.response_format
+    if (hasResponseFormat || modelLower.startsWith('gpt-5') || modelLower.startsWith('o1') || modelLower.startsWith('o3') || modelLower.includes('omni')) {
       const resp = await callResponsesDirect()
       res.status(resp.status)
       res.setHeader('Content-Type', 'application/json')
@@ -128,17 +137,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify(payload),
+      signal: controller.signal,
     })
 
     let text = await upstream.text()
-    // If chat.completions rejected unsupported parameters (e.g., max_tokens), try Responses API
+    // If chat.completions rejected unsupported parameters (e.g., max_tokens, response_format), try Responses API
     if (!upstream.ok) {
       let shouldFallback = false
       try {
         const err = JSON.parse(text)
         const msg = err?.error?.message || err?.message || ''
         const code = err?.error?.code || err?.code || ''
-        if ((/unsupported_parameter/i.test(msg) || /unsupported_parameter/i.test(code)) && /max_tokens/i.test(msg + code)) {
+        const unsupported = /unsupported_parameter|invalid_request_error/i.test(msg + ' ' + code)
+        if (unsupported && (/max_tokens/i.test(msg + code) || /response_format/i.test(msg + code))) {
           shouldFallback = true
         }
         const m = String((payload as any).model || '').toLowerCase()
@@ -156,6 +167,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    clearTimeout(timeoutId)
     res.status(upstream.status)
     res.setHeader('Content-Type', 'application/json')
     if (!upstream.ok) {

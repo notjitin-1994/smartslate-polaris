@@ -93,7 +93,7 @@ export class ReportGenerationService {
       inputType: 'text',
       capabilities: ['reasoning'],
       temperature: 0.3, // Lower temperature for more consistent reports
-      maxTokens: 8000,
+      maxTokens: 8096,
       preferredProvider: 'anthropic' // Claude is best for long-form content
     })
     
@@ -202,7 +202,7 @@ REQUIREMENTS (STRICT):
       inputType: 'text',
       capabilities: ['reasoning'],
       temperature: 0.3,
-      maxTokens: 8000,
+      maxTokens: 8096,
       preferredProvider: 'anthropic'
     })
 
@@ -408,7 +408,7 @@ Return ONLY the JSON object, no other text.`
       inputType: 'text',
       capabilities: ['reasoning'],
       temperature: 0.2,
-      maxTokens: 6000,
+      maxTokens: 8096,
       preferredProvider: 'anthropic'
     })
     
@@ -502,7 +502,7 @@ Target audience: ${context.experienceLevel} level executive`
       prompt,
       inputType: 'text',
       temperature: 0.4,
-      maxTokens: 1000,
+      maxTokens: 2000,
       preferredProvider: 'anthropic'
     })
     
@@ -556,7 +556,7 @@ Return the enhanced report in the same format as the original.`
       inputType: 'text',
       capabilities: ['reasoning'],
       temperature: 0.5,
-      maxTokens: 8000,
+      maxTokens: 8096,
       preferredProvider: 'anthropic'
     })
     

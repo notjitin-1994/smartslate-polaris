@@ -9,11 +9,12 @@ import {
   checkAsyncJobStatus,
   saveSessionState,
   resumeStarmapJob,
+  updateStarmapJobTitle,
   type StarmapJob
 } from '@/services/starmapJobsService'
 import { callLLM } from '@/services/llmClient'
 import RenderField from '@/polaris/needs-analysis/RenderField'
-import { EnhancedReportDisplay } from '@/components'
+import { EnhancedReportDisplay, IconButton } from '@/components'
 import { EXPERIENCE_LEVELS } from '@/polaris/needs-analysis/experience'
 import { 
   STAGE1_REQUESTER_FIELDS, 
@@ -519,6 +520,19 @@ export default function PolarisRevampedV3() {
     }
   }
   
+  async function handleSaveAndExit() {
+    try {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current)
+      }
+      await saveProgress()
+    } catch (err) {
+      console.error('Error during save and exit:', err)
+    } finally {
+      navigate('/starmaps')
+    }
+  }
+  
   if (!user) {
     navigate('/auth')
     return null
@@ -540,35 +554,7 @@ export default function PolarisRevampedV3() {
   
   return (
     <div className="min-h-screen bg-[rgb(var(--bg))]">
-      {/* Header */}
-      <div className="border-b border-white/10 bg-black/20 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-white">Starmap Discovery</h1>
-              {job && (
-                <p className="text-sm text-white/60 mt-1">
-                  Job ID: {job.id.slice(0, 8)}... 
-                  {saving && <span className="ml-2 text-primary-400">Saving...</span>}
-                </p>
-              )}
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => navigate('/starmaps')}
-                className="px-4 py-2 text-white/80 hover:text-white transition-colors"
-              >
-                View All Starmaps
-              </button>
-              {job && job.status === 'processing' && (
-                <div className="px-4 py-2 bg-primary-500/20 rounded-lg text-primary-300">
-                  Processing... {asyncProgress}%
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Header removed per design update */}
       
       {/* Step Indicator */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -661,16 +647,72 @@ export default function PolarisRevampedV3() {
             <EnhancedReportDisplay 
               reportMarkdown={report}
               prelimReport={job?.preliminary_report || undefined}
+              reportTitle={job?.title || 'Needs Analysis Report'}
+              editableTitle
+              onSaveTitle={async (newTitle) => {
+                if (!job) return
+                const { error } = await updateStarmapJobTitle(job.id, newTitle)
+                if (!error) {
+                  setJob(prev => prev ? { ...prev, title: newTitle } : prev)
+                }
+              }}
+              showGeneratedDate={false}
+              headerActions={(
+                <IconButton
+                  ariaLabel="Save and Exit"
+                  title="Save and Exit"
+                  variant="primary"
+                  className="icon-btn-lg"
+                  onClick={handleSaveAndExit}
+                  disabled={saving}
+                >
+                  {saving ? (
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4" />
+                      <path d="M10 17l5-5-5-5" />
+                      <path d="M15 12H3" />
+                    </svg>
+                  )}
+                </IconButton>
+              )}
             />
           </div>
         ) : (
           <WizardContainer 
             title={currentStep?.label || ''} 
             description={currentStep?.description || ''}
+            headerActions={(
+              <IconButton
+                ariaLabel="Save and Exit"
+                title="Save and Exit"
+                variant="primary"
+                className="icon-btn-lg"
+                onClick={handleSaveAndExit}
+                disabled={saving}
+              >
+                {saving ? (
+                  <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4" />
+                    <path d="M10 17l5-5-5-5" />
+                    <path d="M15 12H3" />
+                  </svg>
+                )}
+              </IconButton>
+            )}
           >
             {/* Experience Level */}
             {active === 'experience' && (
-              <div className="max-w-xl mx-auto">
+              <div className="max-w-xl">
                 {EXPERIENCE_LEVELS.map(field => (
                   <div key={field.id}>
                     <RenderField
@@ -785,6 +827,7 @@ export default function PolarisRevampedV3() {
                 label="Fields completed"
               />
             )}
+            {/* Save & Exit moved to header; bottom button removed */}
           </WizardContainer>
         )}
       </div>

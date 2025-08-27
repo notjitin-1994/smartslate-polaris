@@ -22,6 +22,7 @@ interface EnhancedReportDisplayProps {
   summaryId?: string // Optional summary ID for share functionality
   starmapJobId?: string // Optional starmap job id for share functionality
   showGeneratedDate?: boolean
+  headerActions?: ReactNode
 }
 
 // Visual data card component
@@ -256,7 +257,8 @@ const EnhancedReportDisplay = memo(({
   prelimReport: _unusedPrelimReport,
   summaryId,
   starmapJobId,
-  showGeneratedDate = true
+  showGeneratedDate = true,
+  headerActions
 }: EnhancedReportDisplayProps) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleInput, setTitleInput] = useState(reportTitle)
@@ -465,6 +467,9 @@ const EnhancedReportDisplay = memo(({
                     <div className="text-sm text-white/60">
                       Generated {new Date().toLocaleDateString()}
                     </div>
+                  )}
+                  {headerActions && (
+                    <div className="ml-2 flex-shrink-0">{headerActions}</div>
                   )}
                 </div>
               </div>

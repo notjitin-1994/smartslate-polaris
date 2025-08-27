@@ -47,19 +47,25 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
     case 'single_select': {
       const selectField = field as any;
       const opts = selectField.options || [];
+      const listId = `${field.id}-datalist`;
+      const current = (value as string) ?? '';
       return (
         <div className="mb-4">
           {common}
-          <select 
-            className="input w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20" 
-            value={(value as string) ?? ''} 
-            onChange={(e) => onChange(field.id, e.target.value || null)}
-          >
-            <option value="" className="bg-slate-900">Select…</option>
+          <input
+            list={listId}
+            className="input w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20"
+            placeholder={current ? undefined : 'Select or type custom…'}
+            value={current}
+            onChange={(e) => onChange(field.id, e.target.value)}
+          />
+          <datalist id={listId}>
             {opts.map((o: string) => (
-              <option key={o} value={o} className="bg-slate-900">{o}</option>
+              <option key={o} value={o} />
             ))}
-          </select>
+            <option value="Custom" />
+          </datalist>
+          <div className="mt-1 text-xs text-white/50">Choose from suggestions or type your own.</div>
         </div>
       );
     }
@@ -68,29 +74,64 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
       const multiField = field as any;
       const opts = multiField.options || [];
       const sel: string[] = Array.isArray(value) ? value : [];
+      const selectedSet = new Set(sel);
       return (
         <div className="mb-4">
           {common}
+          {/* Selected chips (includes custom values) */}
+          {sel.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {sel.map((v) => (
+                <span
+                  key={`sel-${v}`}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary-400 bg-primary-400/20 text-primary-200"
+                >
+                  {v}
+                  <button
+                    type="button"
+                    aria-label={`Remove ${v}`}
+                    className="text-primary-200/80 hover:text-primary-100"
+                    onClick={() => onChange(field.id, sel.filter(s => s !== v))}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Available options (hide already selected) */}
           <div className="flex flex-wrap gap-2">
-            {opts.map((o: string) => (
+            {opts.filter((o: string) => !selectedSet.has(o)).map((o: string) => (
               <button
                 type="button"
                 key={o}
-                className={`px-3 py-1.5 rounded-full border transition-all duration-200 ${
-                  sel.includes(o) 
-                    ? 'border-primary-400 bg-primary-400/20 text-primary-200' 
-                    : 'border-white/15 text-white/85 hover:bg-white/10'
-                }`}
-                onClick={() => {
-                  onChange(field.id, sel.includes(o) 
-                    ? sel.filter(v => v !== o) 
-                    : [...sel, o]
-                  );
-                }}
+                className="px-3 py-1.5 rounded-full border border-white/15 text-white/85 hover:bg-white/10 transition-all duration-200"
+                onClick={() => onChange(field.id, [...sel, o])}
               >
                 {o}
               </button>
             ))}
+          </div>
+
+          {/* Custom add input */}
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              className="flex-1 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20"
+              placeholder="Add a custom option"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const input = (e.target as HTMLInputElement);
+                  const val = input.value.trim();
+                  if (val && !sel.includes(val)) {
+                    onChange(field.id, [...sel, val]);
+                  }
+                  input.value = '';
+                }
+              }}
+            />
+            <span className="text-xs text-white/50">press Enter</span>
           </div>
         </div>
       );
@@ -163,6 +204,19 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
               <span className="text-xs text-white/50">{min}{unit ? ` ${unit}` : ''}</span>
               <span className="text-sm font-medium text-primary-300">{num}{unit ? ` ${unit}` : ''}</span>
               <span className="text-xs text-white/50">{max}{unit ? ` ${unit}` : ''}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                className="w-28 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20"
+                placeholder="Custom"
+                value={typeof value === 'number' && (value < min || value > max) ? value : ''}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? null : Number(e.target.value);
+                  onChange(field.id, v);
+                }}
+              />
+              <span className="text-xs text-white/50">custom value</span>
             </div>
           </div>
         </div>

@@ -70,7 +70,7 @@ class LLMService {
     messages: ChatMessage[],
     config: LLMConfig = {}
   ): Promise<{ content: string; model?: string }> {
-    const model = config.model || env.openaiModel || 'gpt-4-turbo-preview'
+    const model = config.model || env.openaiModel || 'gpt-4o-mini'
     const temperature = config.temperature ?? 0.2
     const maxTokens = config.maxTokens || 4096
     

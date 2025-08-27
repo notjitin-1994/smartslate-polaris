@@ -6,7 +6,7 @@ export async function callOpenAI(messages: ChatMessage[], { temperature = 0.2 }:
   const apiKey = env.openaiApiKey
   if (!apiKey) throw new Error('VITE_OPENAI_API_KEY is not set')
   const baseUrl = (env.openaiBaseUrl && env.openaiBaseUrl.trim()) || 'https://api.openai.com/v1'
-  const model = env.openaiModel || 'gpt-5'
+  const model = env.openaiModel || 'gpt-4o-mini'
 
   const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',

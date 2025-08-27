@@ -24,12 +24,12 @@ export function StepIndicator({ steps, currentStep, completedSteps, onStepClick 
                 {/* Connection Line */}
                 {index < steps.length - 1 && (
                   <div className="absolute left-1/2 top-8 w-full h-0.5">
-                    <div className="w-full h-full bg-white/10" />
-                                      <div 
-                    className={`absolute inset-0 bg-primary-500 transition-all duration-500 ${
-                      completed.includes(index) ? 'w-full' : 'w-0'
-                    }`}
-                  />
+                    <div className="w-full h-full bg-transparent" />
+                    <div 
+                      className={`absolute inset-0 bg-primary-500 transition-all duration-500 ${
+                        completed.includes(index) ? 'w-full' : 'w-0'
+                      }`}
+                    />
                   </div>
                 )}
                 
@@ -46,7 +46,7 @@ export function StepIndicator({ steps, currentStep, completedSteps, onStepClick 
                     ${isActive 
                       ? 'bg-primary-500 shadow-lg shadow-primary-500/30 scale-110' 
                       : isCompleted 
-                      ? 'bg-gradient-to-br from-emerald-500 to-teal-500 shadow-md shadow-emerald-400/20'
+                      ? 'bg-gradient-to-br from-emerald-400 to-green-500 border border-emerald-300/50 ring-1 ring-emerald-300/30 shadow-lg shadow-emerald-500/30'
                       : isAccessible
                       ? 'bg-[rgb(var(--bg))] border border-primary-500'
                       : 'bg-[rgb(var(--bg))] border border-primary-500'
@@ -57,7 +57,7 @@ export function StepIndicator({ steps, currentStep, completedSteps, onStepClick 
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                       </svg>
                     ) : (
-                      <span className={`text-lg font-bold ${isActive ? 'text-secondary-500' : 'text-white/70'}`}>
+                      <span className={`text-lg font-bold ${isActive ? 'text-[rgb(var(--secondary-dark))]' : 'text-white/70'}`}>
                         {index + 1}
                       </span>
                     )}
@@ -121,37 +121,43 @@ interface WizardContainerProps {
   subtitle?: string
   description?: string
   icon?: ReactNode
+  headerActions?: ReactNode
 }
 
-export function WizardContainer({ children, title, subtitle, description, icon }: WizardContainerProps) {
+export function WizardContainer({ children, title, subtitle, description, icon, headerActions }: WizardContainerProps) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="glass-card overflow-hidden">
         {(title || subtitle || description) && (
           <div className="p-6 md:p-8 border-b border-white/10 bg-gradient-to-r from-primary-500/10 to-secondary-500/10">
-            <div className="flex items-start gap-4">
-              {icon && (
-                <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
-                  {icon}
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-4 flex-1 min-w-0">
+                {icon && (
+                  <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center flex-shrink-0">
+                    {icon}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  {title && (
+                    <h2 className="text-2xl md:text-3xl font-bold text-white mb-2 bg-clip-text text-transparent bg-gradient-to-r from-white to-white/80">
+                      {title}
+                    </h2>
+                  )}
+                  {subtitle && (
+                    <p className="text-white/70 text-sm md:text-base leading-relaxed">
+                      {subtitle}
+                    </p>
+                  )}
+                  {description && (
+                    <p className="text-white/60 text-sm mt-2">
+                      {description}
+                    </p>
+                  )}
                 </div>
-              )}
-              <div className="flex-1">
-                {title && (
-                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-2 bg-clip-text text-transparent bg-gradient-to-r from-white to-white/80">
-                    {title}
-                  </h2>
-                )}
-                {subtitle && (
-                  <p className="text-white/70 text-sm md:text-base leading-relaxed">
-                    {subtitle}
-                  </p>
-                )}
-                {description && (
-                  <p className="text-white/60 text-sm mt-2">
-                    {description}
-                  </p>
-                )}
               </div>
+              {headerActions && (
+                <div className="flex-shrink-0">{headerActions}</div>
+              )}
             </div>
           </div>
         )}
@@ -247,7 +253,7 @@ export function ActionButtons({
   const label = onPrevious ? previousLabel : backLabel
   
   return (
-    <div className="flex items-center justify-between mt-8 pt-6 border-t border-white/10">
+    <div className="flex items-center justify-between mt-10 pt-8 border-t border-white/10">
       <div>
         {handleBack && (
           <button
@@ -258,14 +264,14 @@ export function ActionButtons({
             aria-label={label}
             title={label}
           >
-            <svg className="w-5 h-5 text-secondary-500 group-hover:text-secondary-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5 text-primary-500 group-hover:text-primary-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
           </button>
         )}
       </div>
       
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
         {onSkip && (
           <button
             type="button"
@@ -325,7 +331,7 @@ export function ProgressBar({ value, max, label }: ProgressBarProps) {
   const percentage = (value / max) * 100
   
   return (
-    <div className="space-y-2">
+    <div className="space-y-4 mt-6">
       {label && (
         <div className="flex items-center justify-between text-xs">
           <span className="text-white/60">{label}</span>

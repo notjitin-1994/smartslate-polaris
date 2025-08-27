@@ -74,6 +74,7 @@ export default function StarmapJobViewer() {
             <EnhancedReportDisplay 
               reportMarkdown={markdown}
               reportTitle={job.title || 'Needs Analysis Report'}
+              showGeneratedDate={false}
               editableTitle
               onSaveTitle={async (newTitle: string) => {
                 const trimmed = newTitle.trim()

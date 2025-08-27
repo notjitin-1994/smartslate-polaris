@@ -103,7 +103,8 @@ function getStatusConfig(status: StarmapJob['status'] | string) {
 }
 
 export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting }: EnhancedStarmapCardProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
+  const [isTimelineExpanded, setIsTimelineExpanded] = useState(false)
+  const [isRisksExpanded, setIsRisksExpanded] = useState(false)
   const progressPct = useProgress(job)
   const statusConfig = getStatusConfig(job.status)
   const StatusIcon = statusConfig.icon
@@ -321,9 +322,9 @@ export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting 
           </div>
           
           <div className="space-y-3">
-            {timelineData.slice(0, 3).map((phase, idx) => (
+            {(isTimelineExpanded ? timelineData : timelineData.slice(0, 3)).map((phase, idx, arr) => (
               <div key={phase.id} className="relative">
-                {idx < timelineData.length - 1 && (
+                {idx < arr.length - 1 && (
                   <div className="absolute left-2 top-8 bottom-0 w-0.5 bg-gradient-to-b from-primary-400/50 to-transparent" />
                 )}
                 
@@ -365,10 +366,14 @@ export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting 
             
             {timelineData.length > 3 && (
               <button
-                onClick={() => setIsExpanded(!isExpanded)}
+                onClick={() => setIsTimelineExpanded(!isTimelineExpanded)}
                 className="text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center gap-1"
               >
-                <span>+{timelineData.length - 3} more phases</span>
+                {isTimelineExpanded ? (
+                  <span>Show less</span>
+                ) : (
+                  <span>+{timelineData.length - 3} more phases</span>
+                )}
               </button>
             )}
           </div>
@@ -448,7 +453,7 @@ export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting 
               
               {risksData.length > 0 ? (
                 <div className="space-y-3">
-                  {risksData.slice(0, 3).map((risk, idx) => (
+                  {(isRisksExpanded ? risksData : risksData.slice(0, 3)).map((risk, idx) => (
                     <div key={idx} className="relative bg-white/5 rounded-lg p-3 border border-white/10">
                       <div className="flex items-start gap-3">
                         {/* Severity indicator */}
@@ -505,13 +510,24 @@ export function EnhancedStarmapCard({ job, onView, onResume, onDelete, deleting 
                   
                   {risksData.length > 3 && (
                     <button
-                      onClick={() => setIsExpanded(!isExpanded)}
+                      onClick={() => setIsRisksExpanded(!isRisksExpanded)}
                       className="w-full text-xs text-primary-400 hover:text-primary-300 transition-colors flex items-center justify-center gap-1 py-2"
                     >
-                      <span>+{risksData.length - 3} more risks</span>
-                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
+                      {isRisksExpanded ? (
+                        <>
+                          <span>Show less</span>
+                          <svg className="w-3 h-3 rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </>
+                      ) : (
+                        <>
+                          <span>+{risksData.length - 3} more risks</span>
+                          <svg className="w-3 h-3 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </>
+                      )}
                     </button>
                   )}
                 </div>

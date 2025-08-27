@@ -38,6 +38,12 @@ export const STAGE1_REQUESTER_FIELDS: NAField[] = [
     placeholder: '+1 555-0123' 
   },
   { 
+    id: 'requester_profile_url', 
+    label: 'LinkedIn or public profile URL', 
+    type: 'text', 
+    placeholder: 'https://linkedin.com/in/your-handle' 
+  },
+  { 
     id: 'requester_timezone', 
     label: 'Time zone', 
     type: 'single_select',

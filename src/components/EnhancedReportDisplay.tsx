@@ -566,7 +566,7 @@ const EnhancedReportDisplay = memo(({
           </div>
           
           {/* Quick Stats */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
             <div className="text-center">
               <div className="text-2xl font-bold text-white">{stats.totalObjectives}</div>
               <div className="text-xs text-white/60">Objectives</div>
@@ -583,11 +583,7 @@ const EnhancedReportDisplay = memo(({
               <div className="text-2xl font-bold text-white">{stats.totalRisks}</div>
               <div className="text-xs text-white/60">Risks</div>
             </div>
-            <div className="text-left md:text-center w-full col-span-2 md:col-span-1">
-              <div className="hidden md:block">
-                <div className="text-2xl font-bold text-emerald-400">{stats.confidence}%</div>
-                <div className="text-xs text-white/60">Confidence</div>
-              </div>
+            <div className="text-left md:text-center w-full col-span-2 md:col-span-1 md:hidden">
               <div className="md:hidden w-full">
                 <div className="h-2 bg-white/10 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-400" style={{ width: `${stats.confidence}%` }} />
@@ -595,6 +591,13 @@ const EnhancedReportDisplay = memo(({
                 <div className="mt-1 text-[11px] text-white/70">{stats.confidence}% • Confidence</div>
               </div>
             </div>
+          </div>
+          {/* Desktop confidence bar below quick stats, matching mobile style */}
+          <div className="hidden md:block mt-4">
+            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-emerald-400 to-teal-400" style={{ width: `${stats.confidence}%` }} />
+            </div>
+            <div className="mt-1 text-[11px] text-white/70">{stats.confidence}% • Confidence</div>
           </div>
         </div>
       </div>

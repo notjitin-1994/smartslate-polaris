@@ -1,5 +1,6 @@
 import { getSupabase } from '@/services/supabase'
 import { env } from '@/config/env'
+import { getAuthRedirectUrl } from '@/utils/domainUtils'
 import { AuthError, ValidationError } from '@/lib/errors'
 import type { User, Session } from '@supabase/supabase-js'
 
@@ -114,7 +115,7 @@ export async function signUp({ email, password }: AuthCredentials): Promise<{ us
  */
 export async function signInWithGoogle(): Promise<void> {
   try {
-    const redirectTo = env.authRedirectUrl || `${window.location.origin}/auth/callback`
+    const redirectTo = getAuthRedirectUrl()
     
     const { error } = await getSupabase().auth.signInWithOAuth({
       provider: 'google',

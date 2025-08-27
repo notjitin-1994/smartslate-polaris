@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ComponentType } from 'react'
 import { useLocation, useNavigate, useParams, useOutlet } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import { getSupabase } from '@/services/supabase'
+import { redirectTo, getBaseUrl } from '@/utils/domainUtils'
 import HeaderSwirlBackground from '@/components/HeaderSwirlBackground'
  
 import { paths, portalUserPath, publicProfilePath } from '@/routes/paths'
@@ -174,7 +175,7 @@ function WorkspaceActionCard({ href, label, description, icon: Icon }: Workspace
 
 function Brand() {
   return (
-    <a href="http://app.smartslate.io" className="inline-flex items-center gap-2" aria-label="Smartslate">
+    <a href={getBaseUrl()} className="inline-flex items-center gap-2" aria-label="Smartslate">
       <img src="/images/logos/logo.png" alt="Smartslate" className="h-6 w-auto logo-glow" />
     </a>
   )
@@ -512,7 +513,7 @@ export function PortalPage() {
       await getSupabase().auth.signOut()
     } finally {
       if (typeof window !== 'undefined') {
-        window.location.href = 'https://app.smartslate.io'
+        redirectTo()
       } else {
         navigate('/login', { replace: true })
       }
@@ -597,7 +598,7 @@ export function PortalPage() {
 
   function goToProfile() {
     closeProfileMenu()
-    window.location.href = 'http://app.smartslate.io/notjitin'
+    redirectTo('/notjitin')
   }
 
 
@@ -738,7 +739,7 @@ export function PortalPage() {
                 <button
                   type="button"
                   title="Settings"
-                  onClick={() => (window.location.href = 'http://app.smartslate.io/settings')}
+                  onClick={() => redirectTo('/settings')}
                   className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
                 >
                   <SettingsIconImg className="w-5 h-5" />
@@ -785,7 +786,7 @@ export function PortalPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => (window.location.href = 'http://app.smartslate.io/settings')}
+                  onClick={() => redirectTo('/settings')}
                   className="w-full inline-flex items-center gap-2 px-3 py-2 text-sm text-white/85 hover:bg-white/5 rounded-lg transition pressable"
                   title="Settings"
                 >
@@ -1252,7 +1253,7 @@ export function PortalPage() {
                         <button
                           type="button"
                           title="Settings"
-                          onClick={() => (window.location.href = 'http://app.smartslate.io/settings')}
+                          onClick={() => redirectTo('/settings')}
                           className="w-10 h-10 rounded-lg text-white/85 hover:text-white flex items-center justify-center pressable"
                         >
                           <SettingsIconImg className="w-10 h-10" />

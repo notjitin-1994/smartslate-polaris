@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { getSupabase } from '@/services/supabase'
-import { env } from '@/config/env'
+import { getAuthRedirectUrl } from '@/utils/domainUtils'
 
 export function GoogleOAuthButton() {
   const [loading, setLoading] = useState(false)
   async function onClick() {
     try {
       setLoading(true)
-      const redirectTo = env.googleRedirectUrl || `${window.location.origin}/auth/callback`
+      const redirectTo = getAuthRedirectUrl()
       const { data, error } = await getSupabase().auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo },

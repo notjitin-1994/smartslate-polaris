@@ -110,6 +110,30 @@
     -webkit-backdrop-filter: blur(18px);
     backdrop-filter: blur(18px);
   }
+  /* Border/blur only variant with no fill background */
+  .glass-shell {
+    position: relative;
+    border-radius: 1rem; /* 16px */
+    background:
+      linear-gradient(rgba(0,0,0,0), rgba(0,0,0,0)) padding-box,
+      linear-gradient(135deg, rgba(255,255,255,0.22), rgba(255,255,255,0.06)) border-box;
+    border: 1px solid transparent;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.06);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+  }
+  /* Slightly tighter padding and more rounded corners on small screens */
+  @media (max-width: 640px) {
+    .glass-card {
+      border-radius: 1.25rem; /* 20px */
+      background:
+        linear-gradient(rgba(13,27,42,0.52), rgba(13,27,42,0.52)) padding-box,
+        linear-gradient(135deg, rgba(255,255,255,0.20), rgba(255,255,255,0.05)) border-box;
+      box-shadow: 0 10px 36px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
+    }
+  }
   .input {@apply w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white placeholder-white/40 outline-none ring-0 focus:ring-[1.2px] focus:ring-primary-400 focus:border-primary-400 transition;}
   /* Brand-compliant native select styling (dark, glassy) */
   select.input {

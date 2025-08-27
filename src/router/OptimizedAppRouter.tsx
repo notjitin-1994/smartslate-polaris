@@ -5,6 +5,7 @@ import { paths } from '@/routes/paths'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { withLazyLoad } from '@/components/LazyLoad'
 import { DevDebugButton } from '@/components/DevDebugButton'
+import SmallScreenGate from '@/components/SmallScreenGate'
 
 // Eagerly loaded components (needed immediately)
 import AuthCallback from '@/pages/AuthCallback'
@@ -50,6 +51,7 @@ export function OptimizedAppRouter() {
   return (
     <BrowserRouter>
       <AuthProvider>
+        <SmallScreenGate minWidthPx={800}>
         <Suspense fallback={<AppLoadingFallback />}>
           <Routes>
             {/* Public routes */}
@@ -112,6 +114,7 @@ export function OptimizedAppRouter() {
           {import.meta.env.DEV && <DevDebugButton />}
           
         </Suspense>
+        </SmallScreenGate>
       </AuthProvider>
     </BrowserRouter>
   )

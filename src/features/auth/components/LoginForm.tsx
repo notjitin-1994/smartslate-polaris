@@ -50,7 +50,7 @@ export function LoginForm() {
       </button>
 
       <div className="relative py-2 text-center text-xs text-white/40">
-        <span className="bg-[rgb(var(--card))] px-2 relative z-10 text-primary-500">or</span>
+        <span className="bg-white/5 px-2 rounded-sm relative z-10 text-primary-500">or</span>
         <span className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-px bg-white/10" />
       </div>
 

@@ -1,9 +1,7 @@
+@import './styles/animations.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-/* Import enhanced animations */
-@import './styles/animations.css';
 
 @layer base {
   :root {

@@ -170,9 +170,9 @@ const stages = await questionnaireService.generateDynamicStages({
 // Returns validated, optimized questionnaire stages
 ```
 
-## Update PolarisRevamped.tsx
+## Update Polaris UI
 
-Here's how to update the main Polaris component:
+Here's a sample of integrating the optimized services within a Polaris page/wizard:
 
 ```typescript
 // Add new imports
@@ -181,7 +181,7 @@ import { reportGenService } from '@/services/reportGenerationService'
 import { questionnaireService } from '@/services/questionnaireService'
 import { enhancedDb } from '@/services/enhancedDbService'
 
-// Replace research calls
+// Research calls
 async function triggerGreetingResearch() {
   const response = await unifiedAIService.research(
     `Research greeting context for ${stage1Answers.requester_name}...`,
@@ -190,7 +190,7 @@ async function triggerGreetingResearch() {
   setGreetingReport(response.content)
 }
 
-// Replace dynamic question generation
+// Dynamic question generation
 async function generateDynamicQuestions() {
   const stages = await questionnaireService.generateDynamicStages({
     experienceLevel: experienceLevel as any,
@@ -208,7 +208,7 @@ async function generateDynamicQuestions() {
   setDynamicStages(stages)
 }
 
-// Replace report generation
+// Report generation
 async function generateReport() {
   const report = await reportGenService.generateComprehensiveReport({
     userId: user?.id || '',

@@ -20,7 +20,7 @@ The new starmap creation process has been completely revamped to support asynchr
 - Session state includes current step, answers, and job status
 
 ### 3. **Job Management Dashboard**
-- Central hub at `/starmaps` to view all starmap jobs
+- Central hub at `/portal/starmaps` to view all starmap jobs
 - Filter by status: Draft, Processing, Completed, Failed
 - Quick actions: Resume, View Report, Delete
 - Visual progress indicators for each stage
@@ -78,7 +78,7 @@ Key functions:
 7. User returns to see completed report
 
 ### Resuming a Job
-1. User visits `/starmaps` dashboard
+1. User visits `/portal/starmaps` dashboard
 2. Sees job with status and progress
 3. Clicks "Resume" or "Check Status"
 4. Returns to exact point where they left off

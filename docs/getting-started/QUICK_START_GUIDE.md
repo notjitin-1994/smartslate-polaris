@@ -1,8 +1,8 @@
-# Quick Start Guide - Revamped Starmap Creation
+# Quick Start Guide - Polaris
 
 ## Prerequisites
 
-1. Node.js 18+ installed
+1. Node.js 20+
 2. Supabase account with project created
 3. Anthropic API key (for Claude)
 
@@ -14,7 +14,7 @@ npm install
 ```
 
 ### 2. Configure Environment
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (copy from `env.example`) and fill values:
 
 ```env
 # Supabase Configuration (required)
@@ -25,10 +25,10 @@ VITE_SUPABASE_ANON_KEY=your_supabase_anon_key_here
 VITE_LLM_PROVIDER=anthropic
 VITE_ANTHROPIC_API_KEY=your_anthropic_api_key_here
 VITE_ANTHROPIC_MODEL=claude-3-5-sonnet-latest
-VITE_ANTHROPIC_MAX_TOKENS=12000  # Important: Set to 12000 for AI report editing
+VITE_ANTHROPIC_MAX_TOKENS=12000
 
-# Perplexity Configuration (already configured with your key)
-VITE_PERPLEXITY_API_KEY=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
+# Perplexity Configuration (required for research)
+VITE_PERPLEXITY_API_KEY=your_perplexity_api_key
 ```
 
 ### 3. Run Database Migrations

@@ -1,69 +1,77 @@
-# React + TypeScript + Vite
+# Smartslate Polaris (React + TypeScript + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Smartslate Polaris is a React + Vite application for creating AI-assisted L&D discovery starmaps with Supabase auth/storage and a job-based flow. The app ships with lazy-loaded routes, a protected portal, and an async report pipeline with webhooks.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Optimized router with lazy loading (`src/router/OptimizedAppRouter.tsx`)
+- Supabase Auth and session adoption (`src/contexts/AuthContext.tsx`)
+- Job-based Polaris flow and dashboards
+- AI-assisted report generation and editing
+- Webhook-backed async report jobs and monitoring
+- Dev-only API debug overlay
 
-## Expanding the ESLint configuration
+## Quick Start
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      ...tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      ...tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      ...tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+1) Install
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default tseslint.config([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+2) Configure environment
+```bash
+cp .env.example .env
+# Fill Supabase and AI provider keys. See env.example for all options.
 ```
+
+3) Run
+```bash
+npm run dev
+```
+
+4) Build
+```bash
+npm run build && npm run preview
+```
+
+## Key Routes
+
+- Public: `/login`, `/auth/callback`, `/pricing`, `/:username`, `/report/public/:id`
+- Dev only: `/dev/debug`, `/dev/card-comparison`
+- Portal (protected): `/` with nested
+  - `discover` (new starmap)
+  - `starmaps` and `starmap/:id`
+  - `polaris/jobs`, `polaris/new`, `polaris/job/:jobId`, `polaris/job/:jobId/resume`
+  - `discover/new` (Polaris Nova)
+
+See `src/router/OptimizedAppRouter.tsx` for the exact definitions.
+
+## Environment
+
+Edit `.env` using `env.example` as reference. Important keys:
+- `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+- `VITE_LLM_PROVIDER` and related provider keys (Anthropic/OpenAI/Perplexity)
+- Webhook settings: `WEBHOOK_SECRET`, `WEBHOOK_BASE_URL`
+
+## Documentation
+
+- Start here: `docs/README.md`
+- Quick start: `docs/getting-started/QUICK_START_GUIDE.md`
+- Architecture: `docs/architecture/`
+- Features: `docs/features/`
+- Troubleshooting: `docs/troubleshooting/`
+- Testing: `docs/testing/WEBHOOK_TESTING_GUIDE.md`
+- Refactoring guide: `docs/REFACTORING_GUIDE.md`
+- Styling: `docs/STYLING_GUIDE.md`
+
+## Scripts
+
+- `npm run dev` – start dev server
+- `npm run build` – typecheck and build
+- `npm run preview` – preview production build
+- `npm run lint` – run ESLint
+
+## Notes
+
+- Core functionality, API routes, and AI services live in `api/` and `src/services/` and were not altered by cleanup.
+- Dev-only API debug overlay is auto-enabled in development.

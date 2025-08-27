@@ -58,7 +58,7 @@ src/
 ```typescript
 // Components are now lazy loaded for better initial load time
 const AuthLanding = withLazyLoad(() => import('@/pages/AuthLanding'))
-const Polaris = withLazyLoad(() => import('@/pages/Polaris'))
+// Polaris page is now routed via portal nested routes; see OptimizedAppRouter
 ```
 
 ### 2. **Performance Monitoring**

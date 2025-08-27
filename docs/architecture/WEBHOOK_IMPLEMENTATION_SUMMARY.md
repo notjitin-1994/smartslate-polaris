@@ -210,7 +210,7 @@ WEBHOOK_MAX_RETRIES=3
 - **Failure Tests**: Network issues, database failures
 
 ### Testing Documentation
-**File**: `WEBHOOK_TESTING_GUIDE.md`
+**File**: `../testing/WEBHOOK_TESTING_GUIDE.md`
 - Step-by-step testing procedures
 - Validation checklists
 - Performance benchmarks

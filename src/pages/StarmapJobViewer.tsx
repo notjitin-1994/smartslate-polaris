@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { getStarmapJob, type StarmapJob } from '@/services/starmapJobsService'
 import EnhancedReportDisplay from '@/components/EnhancedReportDisplay'
@@ -10,7 +10,6 @@ import { regenerateStarmapFinalReportWithContext } from '@/services/reportGenera
 export default function StarmapJobViewer() {
   const { id } = useParams<{ id: string }>()
   const { user } = useAuth()
-  const navigate = useNavigate()
 
   const [job, setJob] = useState<StarmapJob | null>(null)
   const [loading, setLoading] = useState(true)

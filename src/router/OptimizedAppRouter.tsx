@@ -23,7 +23,7 @@ const Pricing = withLazyLoad(() => import('@/pages/Pricing'))
 const ReportsDebug = withLazyLoad(() => import('@/pages/ReportsDebug'))
 const ApiDebug = withLazyLoad(() => import('@/pages/ApiDebug'))
 const CardComparison = withLazyLoad(() => import('@/pages/CardComparison'))
-const StarmapJobViewer = withLazyLoad(() => import('@/pages/StarmapJobViewer'))
+const ReportStarmapPage = withLazyLoad(() => import('@/pages/ReportStarmapPage'))
 
 // Job-based Polaris routes removed; only /discover remains active
 
@@ -60,7 +60,7 @@ export function OptimizedAppRouter() {
                 <Route index element={<StarmapJobsDashboard />} />
                 <Route path="settings" element={<SettingsContent />} />
                 <Route path="discover" element={<PolarisRevampedV3 />} />
-                <Route path="report/starmap/:id" element={<StarmapJobViewer />} />
+                <Route path="report/starmap/:id" element={<ReportStarmapPage />} />
                 <Route path="pricing" element={<Pricing />} />
                 <Route path="debug/reports" element={<ReportsDebug />} />
                 <Route path="briefings" element={<Navigate to="/discover" replace />} />

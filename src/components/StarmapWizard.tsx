@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 interface StepIndicatorProps {
-  steps: Array<{ key: string; label: string; icon?: ReactNode; description?: string }>
+  steps: Array<{ key: string; label: string; icon?: ReactNode; description?: string; shortLabel?: string }>
   currentStep: number
   completedSteps?: number[]
   onStepClick: (index: number) => void
@@ -9,75 +9,67 @@ interface StepIndicatorProps {
 
 export function StepIndicator({ steps, currentStep, completedSteps, onStepClick }: StepIndicatorProps) {
   const completed = completedSteps || []
+  const totalConnectors = Math.max(steps.length - 1, 1)
+  const lastCompleted = completed.length > 0 ? Math.max(...completed) : -1
+  const completedConnectors = Math.max(0, Math.min(totalConnectors, lastCompleted + 1))
+  const progressPct = (completedConnectors / totalConnectors) * 100
   return (
     <div className="relative">
       {/* Desktop Version */}
       <div className="hidden lg:block">
-        <div className="flex items-center justify-between">
-          {steps.map((step, index) => {
-            const isActive = index === currentStep
-            const isCompleted = completed.includes(index)
-            const isAccessible = isCompleted || index <= currentStep
-            
-            return (
-              <div key={step.key} className="flex-1 relative">
-                {/* Connection Line */}
-                {index < steps.length - 1 && (
-                  <div className="absolute left-1/2 top-8 w-full h-0.5">
-                    <div className="w-full h-full bg-transparent" />
-                    <div 
-                      className={`absolute inset-0 bg-primary-500 transition-all duration-500 ${
-                        completed.includes(index) ? 'w-full' : 'w-0'
-                      }`}
-                    />
-                  </div>
-                )}
-                
-                {/* Step Circle */}
-                <button
-                  onClick={() => isAccessible && onStepClick(index)}
-                  disabled={!isAccessible}
-                  className={`relative z-10 mx-auto flex flex-col items-center group ${
-                    isAccessible ? 'cursor-pointer' : 'cursor-not-allowed'
-                  }`}
-                >
-                  <div className={`
-                    w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-300 
-                    ${isActive 
-                      ? 'bg-primary-500 shadow-lg shadow-primary-500/30 scale-110' 
-                      : isCompleted 
-                      ? 'bg-gradient-to-br from-emerald-400 to-green-500 border border-emerald-300/50 ring-1 ring-emerald-300/30 shadow-lg shadow-emerald-500/30'
-                      : isAccessible
-                      ? 'bg-[rgb(var(--bg))] border border-primary-500'
-                      : 'bg-[rgb(var(--bg))] border border-primary-500'
-                    }
-                  `}>
-                    {isCompleted ? (
-                      <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-                      </svg>
-                    ) : (
-                      <span className={`text-lg font-bold ${isActive ? 'text-[rgb(var(--secondary-dark))]' : 'text-white/70'}`}>
-                        {index + 1}
-                      </span>
-                    )}
-                  </div>
-                  
-                  {/* Label */}
-                  <div className="mt-3 text-center">
-                    <div className={`text-sm font-medium transition-colors ${
-                      isActive ? 'text-white' : isCompleted ? 'text-emerald-300' : 'text-white/70'
-                    }`}>
-                      {step.label}
+        <div className="relative">
+          {/* Single baseline connector (full width) */}
+          <div className="absolute left-0 right-0 top-8 h-0.5 bg-white/10" />
+          {/* Progress overlay */}
+          <div 
+            className="absolute left-0 top-8 h-0.5 bg-primary-500 transition-all duration-500"
+            style={{ width: `${progressPct}%` }}
+          />
+          {/* Steps grid */}
+          <div 
+            className="grid items-start"
+            style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}
+          >
+            {steps.map((step, index) => {
+              const isActive = index === currentStep
+              const isCompleted = completed.includes(index)
+              const isAccessible = isCompleted || index <= currentStep
+              return (
+                <div key={step.key} className="relative">
+                  <button
+                    onClick={() => isAccessible && onStepClick(index)}
+                    disabled={!isAccessible}
+                    className={`mx-auto flex flex-col items-center group ${isAccessible ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                  >
+                    <div className={`
+                      h-12 md:h-14 px-2 min-w-[48px] md:min-w-[56px] w-auto rounded-xl border flex items-center justify-center transition-all duration-200
+                      ${isCompleted
+                        ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/30'
+                        : isActive
+                        ? 'bg-[rgb(var(--bg))] border-primary-400 ring-2 ring-primary-400'
+                        : 'bg-[rgb(var(--bg))] border-white/10'}
+                    `}>
+                      {isCompleted ? (
+                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      ) : (
+                        <span className={`text-[9px] md:text-[10px] font-semibold leading-none tracking-tight whitespace-nowrap ${isActive ? 'text-primary-200' : 'text-white/80'}`}>
+                          {step.shortLabel || step.label}
+                        </span>
+                      )}
                     </div>
-                    {step.description && (
-                      <div className="text-xs text-white/50 mt-1 max-w-[120px]">{step.description}</div>
-                    )}
-                  </div>
-                </button>
-              </div>
-            )
-          })}
+                    <div className="mt-3 text-center">
+                      <div className="hidden">{step.label}</div>
+                      {step.description && (
+                        <div className="text-xs text-white/50 mt-1 max-w-[140px] mx-auto leading-snug">{step.description}</div>
+                      )}
+                    </div>
+                  </button>
+                </div>
+              )
+            })}
+          </div>
         </div>
       </div>
       
@@ -122,9 +114,10 @@ interface WizardContainerProps {
   description?: string
   icon?: ReactNode
   headerActions?: ReactNode
+  savedStatus?: 'saved' | 'saving' | 'idle'
 }
 
-export function WizardContainer({ children, title, subtitle, description, icon, headerActions }: WizardContainerProps) {
+export function WizardContainer({ children, title, subtitle, description, icon, headerActions, savedStatus = 'idle' }: WizardContainerProps) {
   return (
     <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="glass-card overflow-hidden">
@@ -156,7 +149,12 @@ export function WizardContainer({ children, title, subtitle, description, icon, 
                 </div>
               </div>
               {headerActions && (
-                <div className="flex-shrink-0">{headerActions}</div>
+                <div className="flex-shrink-0 flex items-center gap-3">
+                  <span className="text-xs text-white/60">
+                    {savedStatus === 'saving' ? 'Saving…' : savedStatus === 'saved' ? 'All changes saved' : ''}
+                  </span>
+                  {headerActions}
+                </div>
               )}
             </div>
           </div>

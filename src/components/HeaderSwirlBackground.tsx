@@ -30,6 +30,12 @@ const HeaderSwirlBackground = memo(({ imageSrc = '/images/logos/logo-swirl.png',
   }, [])
 
   const swirls = useMemo(() => {
+    const randomizeOpacity = (base: number) => {
+      const factor = 0.8 + Math.random() * 0.2
+      const value = base * factor
+      return Math.min(1, Math.max(0, value))
+    }
+
     if (isMobile) {
       return baseSwirls
         .filter((s) => Number(s.left.replace('%','')) <= 60) // keep left cluster only
@@ -38,10 +44,13 @@ const HeaderSwirlBackground = memo(({ imageSrc = '/images/logos/logo-swirl.png',
         .map((s) => ({
           ...s,
           size: Math.round(s.size * 0.7),
-          opacity: Math.max(0.05, s.opacity * 0.75),
+          opacity: Math.max(0.05, randomizeOpacity(s.opacity * 0.75)),
         }))
     }
-    return baseSwirls
+    return baseSwirls.map((s) => ({
+      ...s,
+      opacity: randomizeOpacity(s.opacity),
+    }))
   }, [isMobile])
 
   return (

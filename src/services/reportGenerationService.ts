@@ -186,13 +186,16 @@ ${optionsText}
 REQUIREMENTS (STRICT):
 1) Return the ENTIRE report as Markdown with these exact section headers (keep names):
    ## Executive Summary
-   ## Current State Analysis
-   ## Recommended Solution
-   ## Learner Experience Design
-   ## Measurement Framework
-   ## Resource Planning
-   ## Risk Assessment
-   ## Next Steps
+   ## Organization & Audience
+   ## Business Objectives & Requirements
+   ## Learning Transfer & Sustainment
+   ## Performance Support
+   ## Documentation
+   ## Delivery & Modalities
+   ## Systems, Data & Integration
+   ## Resourcing, Budget & Timeline
+   ## Risks & Change Readiness
+   ## Recommendations & Next Steps
 2) Maintain professional tone. If contradictions exist between original and new context, integrate sensibly and briefly note contradictions inline.
 3) If UPDATE ONLY SELECTED SECTIONS is Yes, limit changes to the focus areas but still return the FULL report.
 4) Do NOT include any preamble or closing remarks.`
@@ -279,7 +282,7 @@ REQUIREMENTS (STRICT):
 ${normalizedNewContext.json ? `\nNEW CONTEXT JSON:\n${JSON.stringify(normalizedNewContext.json, null, 2)}` : ''}
 ${focusText}
 ${optionsText}
-\nREQUIREMENTS (STRICT):\n1) Return the ENTIRE report as Markdown with these exact section headers (keep names):\n   ## Executive Summary\n   ## Current State Analysis\n   ## Recommended Solution\n   ## Learner Experience Design\n   ## Measurement Framework\n   ## Resource Planning\n   ## Risk Assessment\n   ## Next Steps\n2) Maintain professional tone. Integrate new context consistently; note contradictions briefly inline.\n3) If UPDATE ONLY SELECTED SECTIONS is Yes, limit changes to the focus areas but still return the FULL report.\n4) Do NOT include preamble or closing remarks.`
+\nREQUIREMENTS (STRICT):\n1) Return the ENTIRE report as Markdown with these exact section headers (keep names):\n   ## Executive Summary\n   ## Organization & Audience\n   ## Business Objectives & Requirements\n   ## Learning Transfer & Sustainment\n   ## Performance Support\n   ## Documentation\n   ## Delivery & Modalities\n   ## Systems, Data & Integration\n   ## Resourcing, Budget & Timeline\n   ## Risks & Change Readiness\n   ## Recommendations & Next Steps\n2) Maintain professional tone. Integrate new context consistently; note contradictions briefly inline.\n3) If UPDATE ONLY SELECTED SECTIONS is Yes, limit changes to the focus areas but still return the FULL report.\n4) Do NOT include preamble or closing remarks.`
 
     const response = await unifiedAIService.call({
       prompt,
@@ -445,7 +448,7 @@ Context:
 - Size: ${context.companySize || 'Not specified'}
 
 Provide:
-1. Current state analysis
+1. Organization & audience analysis
 2. Industry best practices
 3. Emerging trends (last 18 months)
 4. Relevant case studies
@@ -742,66 +745,145 @@ Return a JSON object with:
    * Batch generate multiple report sections in parallel
    */
   async generateComprehensiveReport(context: ReportContext): Promise<GeneratedReport> {
-    console.log('[ReportGen] Generating comprehensive report with parallel sections')
-    
-    // Generate sections in parallel for efficiency
-    const [
-      mainReport,
-      learnerSection,
-      techSection,
-      budgetSection,
-      riskSection,
-      implementationSection
-    ] = await Promise.all([
-      this.generateNeedsAnalysisReport(context),
-      this.generateReportSection('learner_analysis', context),
-      this.generateReportSection('technology_assessment', context),
-      this.generateReportSection('budget_breakdown', context),
-      this.generateReportSection('risk_assessment', context),
-      this.generateReportSection('implementation_plan', context)
-    ])
-    
-    // Combine sections into comprehensive report
-    const combinedContent = `
-${mainReport.content}
+    console.log('[ReportGen] Generating comprehensive report (Path B prompt)')
 
-## Detailed Analysis
+    const safeJson = (obj: any) => {
+      try { return JSON.stringify(obj ?? {}, null, 2) } catch { return '{}' }
+    }
+    const safeText = (txt?: string) => (txt || '').toString()
 
-### Learner Analysis
-${learnerSection}
+    // Consolidate data similar to consolidateData but keep explicit blocks for prompt slots
+    const allStatic = {
+      stage1: context.greetingData || {},
+      stage2: context.orgData || {},
+      stage3: context.requirementsData || {}
+    }
+    const newStatic = {
+      requirements: (context as any).requirementsStatic || {},
+      learning_transfer: (context as any).learningTransferStatic || {},
+      performance_support: (context as any).performanceSupportStatic || {},
+      documentation: (context as any).documentationStatic || {}
+    }
 
-### Technology Assessment
-${techSection}
+    const system = [
+      'You are an expert Learning & Development consultant creating a comprehensive Needs Analysis Report for the Polaris platform.',
+      'You must return a structured, professional report in Markdown.',
+      'It should be detailed, evidence-based, and decision-ready.',
+      'Do not include explanations about how you generated it. Output only the report.'
+    ].join('\n')
 
-### Budget Analysis
-${budgetSection}
+    const user = `
+# GOAL
+Generate a clear, detailed **Learning Needs Analysis Report** for ${context.companyName || 'the organization'}, based on static intake answers, dynamic questionnaire responses, and research briefs. 
+The report must synthesize all information into actionable insights for stakeholders.
 
-### Risk Assessment
-${riskSection}
+# INPUTS
+- Experience Level: ${context.experienceLevel}
+- Static Answers (Stage 1–3): ${safeJson(allStatic)}
+- New Static Sections: 
+  - Requirements: ${safeJson(newStatic.requirements)}
+  - Learning Transfer: ${safeJson(newStatic.learning_transfer)}
+  - Performance Support: ${safeJson(newStatic.performance_support)}
+  - Documentation: ${safeJson(newStatic.documentation)}
+- Dynamic Answers: ${safeJson(context.dynamicAnswers)}
+- Research Reports:
+  - Preliminary: ${safeText(context.preliminaryReport)}
+  - Greeting/Context: ${safeText(context.greetingReport)}
+  - Organization: ${safeText(context.orgReport)}
+  - Requirements: ${safeText(context.requirementReport)}
 
-### Implementation Plan
-${implementationSection}
-`
-    
-    // Validate the combined report
-    const validation = await this.validateReport(combinedContent)
-    
+# STRUCTURE
+The report must use Markdown headings. Organize as follows:
+
+## Executive Summary
+- One-page top-line summary of objectives, constraints, and key findings.
+- Highlight top 3 priorities and urgent risks.
+
+## Organization & Audience
+- Context: org size, industry, geographies, audience segments.
+- Learner profile: roles, languages, accessibility, device/bandwidth, motivation.
+
+## Business Objectives & Requirements
+- Strategic goals and desired outcomes.
+- Target competencies/skills and frameworks.
+- Assessment and compliance requirements.
+- Success criteria and acceptance definitions.
+
+## Learning Transfer & Sustainment
+- Manager/supervisor role in reinforcement.
+- Anticipated barriers and mitigations.
+- Transfer measurement strategies.
+
+## Performance Support
+- Existing vs. required tools (job aids, guides, tooltips, chatbots).
+- Embedding opportunities (CRM, workflow apps, LMS).
+- Ownership and sustainment cadence.
+
+## Documentation
+- Current state and quality.
+- Critical processes covered vs. gaps.
+- Ownership model and governance.
+- Integration with training.
+
+## Delivery & Modalities
+- Preferred formats and constraints.
+- Pilot vs. rollout strategy.
+- Offline, bandwidth, or accessibility considerations.
+
+## Systems, Data & Integration
+- Current systems and integration readiness.
+- Analytics maturity and data confidence.
+- Recommendations for measurement dashboards.
+
+## Resourcing, Budget & Timeline
+- Budget ceilings and allocation priorities.
+- Internal capacity (SMEs, facilitators, tech admins).
+- Milestones (pilot, launch, audits, compliance deadlines).
+- Schedule flexibility.
+
+## Risks & Change Readiness
+- Appetite for experimentation.
+- Past adoption experience.
+- Stakeholder map (sponsors, blockers, champions).
+- Change management supports.
+
+## Recommendations & Next Steps
+- Prioritized recommendations (short-term, mid-term, long-term).
+- Critical dependencies and assumptions.
+- Measurable success indicators.
+
+# STYLE
+- Write for senior stakeholders: concise, professional, plain language.
+- Use bullet points for clarity; short paragraphs for context.
+- Highlight gaps, risks, and trade-offs explicitly.
+- No repetition of raw answers—synthesize into insights.
+
+# RETURN
+Return the full report in Markdown with headings as above. Do not include anything else.`
+
+    const response = await unifiedAIService.call({
+      prompt: '',
+      inputType: 'text',
+      capabilities: ['reasoning'],
+      temperature: 0.3,
+      maxTokens: 8096,
+      preferredProvider: 'anthropic',
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ]
+    })
+
+    const reportContent = this.parseReport(response.content, 'final')
+    const metadata = {
+      ...this.extractMetadata(reportContent, response),
+      prompts: { system, user }
+    }
+
     return {
-      content: combinedContent,
+      content: reportContent,
       format: 'markdown',
-      metadata: {
-        ...mainReport.metadata,
-        sections: [
-          ...mainReport.metadata.sections,
-          'Learner Analysis',
-          'Technology Assessment',
-          'Budget Analysis',
-          'Risk Assessment',
-          'Implementation Plan'
-        ],
-        completeness: validation.completeness,
-        validated: validation.isValid
-      }
+      metadata
     }
   }
 }

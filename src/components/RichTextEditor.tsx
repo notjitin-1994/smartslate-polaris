@@ -11,6 +11,12 @@ interface RichTextEditorProps {
   readOnly?: boolean
   // When true, applies a denser DOS-like look (compact spacing, monospaced font)
   compactDosStyle?: boolean
+  // When true, the toolbar floats/sticks at the top of the scroll container
+  floatingToolbar?: boolean
+  // Show the fullscreen toggle button
+  showFullscreen?: boolean
+  // Start collapsed (single-tile card)
+  collapsedInitially?: boolean
 }
 
 interface FormatButton {
@@ -33,11 +39,11 @@ const listButtons: FormatButton[] = [
 
 // Memoized ToolbarGroup component for better performance
 const ToolbarGroup = memo(({ label, children }: { label: string; children: ReactNode }) => (
-  <div className="flex items-center gap-2 mr-3 px-2 py-1 rounded-xl border border-white/10 bg-white/5">
-    <div className="hidden md:block text-[10px] uppercase tracking-wide text-white/50 mr-2 select-none">
+  <div className="flex items-center gap-3 mr-4 px-3 py-2 rounded-2xl border border-white/10 bg-white/5">
+    <div className="hidden md:block text-[10px] uppercase tracking-wide text-white/50 mr-3 select-none">
       {label}
     </div>
-    <div className="flex items-center gap-1">{children}</div>
+    <div className="flex items-center gap-2">{children}</div>
   </div>
 ))
 
@@ -52,7 +58,10 @@ export function RichTextEditor({
   maxHeight,
   className = '',
   readOnly = false,
-  compactDosStyle = false
+  compactDosStyle = false,
+  floatingToolbar = false,
+  showFullscreen = true,
+  collapsedInitially = false
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const [isFocused, setIsFocused] = useState(false)
@@ -71,6 +80,7 @@ export function RichTextEditor({
   const [gridRowsHover, setGridRowsHover] = useState(0)
   const [gridColsHover, setGridColsHover] = useState(0)
   const [tableContext, setTableContext] = useState<{ table: HTMLTableElement | null; rowIndex: number; colIndex: number; colsCount: number; rowsCount: number }>({ table: null, rowIndex: -1, colIndex: -1, colsCount: 0, rowsCount: 0 })
+  const [isToolbarCollapsed, setIsToolbarCollapsed] = useState<boolean>(collapsedInitially)
   
   const getWordCount = useCallback((html: string): number => {
     // Strip HTML tags and count words
@@ -78,8 +88,6 @@ export function RichTextEditor({
     if (!text) return 0
     return text.split(/\s+/).length
   }, [])
-
-  const currentWordCount = getWordCount(value)
 
   // Update editor content when value prop changes (but not during user typing)
   useEffect(() => {
@@ -566,7 +574,40 @@ export function RichTextEditor({
   }, [autoGrow, isFullscreen])
 
   const Toolbar = (
-    <div className="toolbar relative flex flex-col gap-3 p-4 border-b border-white/10 bg-white/5 rounded-xl shadow-xl">
+    <div
+      className={`toolbar ${floatingToolbar ? 'sticky top-2 z-50 m-2 rounded-2xl border border-white/10 bg-[rgb(var(--bg))]/85 backdrop-blur-md shadow-2xl' : 'relative rounded-2xl border-b border-white/10 bg-white/5 shadow-xl'} ${isToolbarCollapsed ? 'p-2' : 'p-5'} flex flex-col gap-3 relative`}
+    >
+      {!isToolbarCollapsed && (
+        <button
+          type="button"
+          onClick={() => setIsToolbarCollapsed(true)}
+          className="absolute right-2 top-2 z-50 w-9 h-9 rounded-lg flex items-center justify-center text-white/75 hover:text-white hover:bg-white/10 transition-colors"
+          aria-label="Collapse toolbar"
+          title="Collapse toolbar"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="4" y="4" width="16" height="16" rx="3" />
+            <path d="M8 12h8" />
+          </svg>
+        </button>
+      )}
+      {isToolbarCollapsed ? (
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setIsToolbarCollapsed(false)}
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-white/80 hover:text-white hover:bg-white/10 transition-colors"
+            aria-label="Expand toolbar"
+            title="Expand toolbar"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="4" y="4" width="16" height="16" rx="3" />
+              <path d="M8 12h8M12 8v8" />
+            </svg>
+          </button>
+        </div>
+      ) : (
+      <div className="relative z-10">
       {/* Row 1 */}
       <div className="flex items-center gap-2 flex-wrap">
         {/* Style */}
@@ -688,42 +729,10 @@ export function RichTextEditor({
 
         {/* Align */}
         <ToolbarGroup label="Align">
-          <button
-            type="button"
-            onClick={() => executeCommand('justifyLeft')}
-            className="icon-btn icon-btn-sm icon-btn-ghost"
-            title="Align left"
-            disabled={readOnly}
-          >
-            {getIcon('alignLeft')}
-          </button>
-          <button
-            type="button"
-            onClick={() => executeCommand('justifyCenter')}
-            className="icon-btn icon-btn-sm icon-btn-ghost"
-            title="Align center"
-            disabled={readOnly}
-          >
-            {getIcon('alignCenter')}
-          </button>
-          <button
-            type="button"
-            onClick={() => executeCommand('justifyRight')}
-            className="icon-btn icon-btn-sm icon-btn-ghost"
-            title="Align right"
-            disabled={readOnly}
-          >
-            {getIcon('alignRight')}
-          </button>
-          <button
-            type="button"
-            onClick={() => executeCommand('justifyFull')}
-            className="icon-btn icon-btn-sm icon-btn-ghost"
-            title="Justify"
-            disabled={readOnly}
-          >
-            {getIcon('alignJustify')}
-          </button>
+          <button type="button" onClick={() => executeCommand('justifyLeft')} className="icon-btn icon-btn-sm icon-btn-ghost" title="Align left" disabled={readOnly}>{getIcon('alignLeft')}</button>
+          <button type="button" onClick={() => executeCommand('justifyCenter')} className="icon-btn icon-btn-sm icon-btn-ghost" title="Align center" disabled={readOnly}>{getIcon('alignCenter')}</button>
+          <button type="button" onClick={() => executeCommand('justifyRight')} className="icon-btn icon-btn-sm icon-btn-ghost" title="Align right" disabled={readOnly}>{getIcon('alignRight')}</button>
+          <button type="button" onClick={() => executeCommand('justifyFull')} className="icon-btn icon-btn-sm icon-btn-ghost" title="Justify" disabled={readOnly}>{getIcon('alignJustify')}</button>
         </ToolbarGroup>
       </div>
 
@@ -733,15 +742,7 @@ export function RichTextEditor({
         <ToolbarGroup label="Colors">
           {/* Text color */}
           <div className="relative" ref={textColorRef}>
-            <button
-              type="button"
-              onClick={() => !readOnly && setIsTextColorOpen((v) => !v)}
-              className="h-8 w-8 rounded-lg flex items-center justify-center bg-white/5 border border-white/10"
-              aria-haspopup="dialog"
-              aria-expanded={isTextColorOpen}
-              aria-label="Text color"
-              disabled={readOnly}
-            >
+            <button type="button" onClick={() => !readOnly && setIsTextColorOpen((v) => !v)} className="h-8 w-8 rounded-lg flex items-center justify-center bg-white/5 border border-white/10" aria-haspopup="dialog" aria-expanded={isTextColorOpen} aria-label="Text color" disabled={readOnly}>
               <span className="block w-3 h-3 rounded" style={{ background: '#a7dadb' }} />
             </button>
             {isTextColorOpen && !readOnly && (
@@ -761,15 +762,7 @@ export function RichTextEditor({
 
           {/* Highlight color */}
           <div className="relative" ref={highlightColorRef}>
-            <button
-              type="button"
-              onClick={() => !readOnly && setIsHighlightColorOpen((v) => !v)}
-              className="h-8 w-8 rounded-lg flex items-center justify-center bg-white/5 border border-white/10"
-              aria-haspopup="dialog"
-              aria-expanded={isHighlightColorOpen}
-              aria-label="Highlight color"
-              disabled={readOnly}
-            >
+            <button type="button" onClick={() => !readOnly && setIsHighlightColorOpen((v) => !v)} className="h-8 w-8 rounded-lg flex items-center justify-center bg-white/5 border border-white/10" aria-haspopup="dialog" aria-expanded={isHighlightColorOpen} aria-label="Highlight color" disabled={readOnly}>
               <span className="block w-3 h-3 rounded" style={{ background: '#3b82f6' }} />
             </button>
             {isHighlightColorOpen && !readOnly && (
@@ -793,15 +786,7 @@ export function RichTextEditor({
         {/* Table */}
         <ToolbarGroup label="Table">
           <div className="relative" ref={tableGridRef}>
-            <button
-              type="button"
-              onClick={() => !readOnly && setIsTableGridOpen((v) => !v)}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-              title="Insert table (choose size)"
-              aria-haspopup="dialog"
-              aria-expanded={isTableGridOpen}
-              disabled={readOnly}
-            >
+            <button type="button" onClick={() => !readOnly && setIsTableGridOpen((v) => !v)} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors" title="Insert table (choose size)" aria-haspopup="dialog" aria-expanded={isTableGridOpen} disabled={readOnly}>
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="3" y="3" width="18" height="18" rx="2"/>
                 <line x1="3" y1="9" x2="21" y2="9" />
@@ -815,14 +800,7 @@ export function RichTextEditor({
                 <div className="grid grid-cols-10 gap-1">
                   {Array.from({ length: 8 }).map((_, r) => (
                     Array.from({ length: 10 }).map((_, c) => (
-                      <button
-                        key={`${r}-${c}`}
-                        type="button"
-                        className={`h-4 w-4 rounded ${r < gridRowsHover && c < gridColsHover ? 'bg-primary-300/70' : 'bg-white/10 hover:bg-white/20'}`}
-                        onMouseEnter={() => { setGridRowsHover(r + 1); setGridColsHover(c + 1) }}
-                        onClick={() => insertTable(r + 1, c + 1)}
-                        aria-label={`Insert ${r + 1} by ${c + 1} table`}
-                      />
+                      <button key={`${r}-${c}`} type="button" className={`h-4 w-4 rounded ${r < gridRowsHover && c < gridColsHover ? 'bg-primary-300/70' : 'bg-white/20 hover:bg-white/30'}`} onMouseEnter={() => { setGridRowsHover(r + 1); setGridColsHover(c + 1) }} onClick={() => insertTable(r + 1, c + 1)} aria-label={`Insert ${r + 1} by ${c + 1} table`} />
                     ))
                   ))}
                 </div>
@@ -831,58 +809,17 @@ export function RichTextEditor({
               </div>
             )}
           </div>
-          <button
-            type="button"
-            onClick={addColumnRight}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${tableContext.table ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-white/30 cursor-not-allowed'}`}
-            title="Add column to the right of current cell"
-            disabled={readOnly || !tableContext.table}
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="4" y="4" width="16" height="16" rx="2"/>
-              <line x1="12" y1="4" x2="12" y2="20" />
-              <line x1="4" y1="12" x2="20" y2="12" />
-              <line x1="16" y1="12" x2="20" y2="12" />
-            </svg>
+          <button type="button" onClick={addColumnRight} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${tableContext.table ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-white/30 cursor-not-allowed'}`} title="Add column to the right of current cell" disabled={readOnly || !tableContext.table}> 
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="16" y1="12" x2="20" y2="12" /></svg>
           </button>
-          <button
-            type="button"
-            onClick={addRowBelow}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${tableContext.table ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-white/30 cursor-not-allowed'}`}
-            title="Add row below current row"
-            disabled={readOnly || !tableContext.table}
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="4" y="4" width="16" height="16" rx="2"/>
-              <line x1="12" y1="4" x2="12" y2="20" />
-              <line x1="4" y1="16" x2="20" y2="16" />
-            </svg>
+          <button type="button" onClick={addRowBelow} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${tableContext.table ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-white/30 cursor-not-allowed'}`} title="Add row below current row" disabled={readOnly || !tableContext.table}>
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20" /><line x1="4" y1="16" x2="20" y2="16" /></svg>
           </button>
-          <button
-            type="button"
-            onClick={deleteColumn}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${tableContext.table ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-white/30 cursor-not-allowed'}`}
-            title="Delete current column"
-            disabled={readOnly || !tableContext.table}
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="4" y="4" width="16" height="16" rx="2"/>
-              <line x1="12" y1="4" x2="12" y2="20" />
-              <line x1="8" y1="12" x2="16" y2="12" />
-            </svg>
+          <button type="button" onClick={deleteColumn} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${tableContext.table ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-white/30 cursor-not-allowed'}`} title="Delete current column" disabled={readOnly || !tableContext.table}>
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
           </button>
-          <button
-            type="button"
-            onClick={deleteRow}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${tableContext.table ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-white/30 cursor-not-allowed'}`}
-            title="Delete current row"
-            disabled={readOnly || !tableContext.table}
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="4" y="4" width="16" height="16" rx="2"/>
-              <line x1="4" y1="12" x2="20" y2="12" />
-              <line x1="8" y1="12" x2="16" y2="12" />
-            </svg>
+          <button type="button" onClick={deleteRow} className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${tableContext.table ? 'text-white/70 hover:text-white hover:bg-white/10' : 'text-white/30 cursor-not-allowed'}`} title="Delete current row" disabled={readOnly || !tableContext.table}>
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2"/><line x1="4" y1="12" x2="20" y2="12" /><line x1="8" y1="12" x2="16" y2="12" /></svg>
           </button>
         </ToolbarGroup>
 
@@ -890,129 +827,32 @@ export function RichTextEditor({
 
         {/* Blocks */}
         <ToolbarGroup label="Blocks">
-          <button
-            type="button"
-            onClick={toggleBlockquote}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-            title="Blockquote"
-            disabled={readOnly}
-          >
-            {getIcon('quote')}
-          </button>
-          <button
-            type="button"
-            onClick={toggleCodeBlock}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-            title="Code block"
-            disabled={readOnly}
-          >
-            {getIcon('code')}
-          </button>
+          <button type="button" onClick={toggleBlockquote} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors" title="Blockquote" disabled={readOnly}>{getIcon('quote')}</button>
+          <button type="button" onClick={toggleCodeBlock} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors" title="Code block" disabled={readOnly}>{getIcon('code')}</button>
         </ToolbarGroup>
 
         <div className="w-px h-6 bg-white/15" />
 
         {/* Insert */}
         <ToolbarGroup label="Insert">
-          <button
-            type="button"
-            onClick={addLink}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-            title="Add Link"
-            disabled={readOnly}
-          >
-            {getIcon('link')}
-          </button>
+          <button type="button" onClick={addLink} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors" title="Add Link" disabled={readOnly}>{getIcon('link')}</button>
         </ToolbarGroup>
 
         <div className="w-px h-6 bg-white/15" />
 
         {/* History */}
         <ToolbarGroup label="History">
-          <button
-            type="button"
-            onClick={() => executeCommand('undo')}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-            title="Undo (Ctrl/Cmd+Z)"
-            disabled={readOnly}
-          >
-            {getIcon('undo')}
+          <button type="button" onClick={() => executeCommand('undo')} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors" title="Undo (Ctrl/Cmd+Z)" disabled={readOnly}>{getIcon('undo')}</button>
+          <button type="button" onClick={() => executeCommand('redo')} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors" title="Redo (Ctrl/Cmd+Y)" disabled={readOnly}>{getIcon('redo')}</button>
+          <button type="button" onClick={removeFormat} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors" title="Clear formatting" disabled={readOnly}>{getIcon('clear')}</button>
+          <button type="button" onClick={() => setIsToolbarCollapsed(true)} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors" title="Collapse toolbar" aria-label="Collapse toolbar">
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="3" /><path d="M8 12h8" /></svg>
           </button>
-          <button
-            type="button"
-            onClick={() => executeCommand('redo')}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-            title="Redo (Ctrl/Cmd+Y)"
-            disabled={readOnly}
-          >
-            {getIcon('redo')}
-          </button>
-          <button
-            type="button"
-            onClick={removeFormat}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-            title="Clear formatting"
-            disabled={readOnly}
-          >
-            {getIcon('clear')}
-          </button>
+          {showFullscreen && (<button type="button" onClick={() => setIsFullscreen(v => !v)} className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors" title={isFullscreen ? 'Exit full screen' : 'Full screen'}>{getIcon('fullscreen')}</button>)}
         </ToolbarGroup>
-
-        {/* Right side actions */}
-        <div className="ml-auto flex items-center gap-2">
-          {/* Help popover */}
-          <div className="relative" ref={helpRef}>
-            <button
-              type="button"
-              onClick={() => setIsHelpOpen((v) => !v)}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-              title="Help & tips"
-            >
-              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M9.09 9a3 3 0 1 1 5.82 1c0 2-3 2-3 4" />
-                <line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-            </button>
-            {isHelpOpen && (
-              <div className="absolute right-0 top-10 z-50 w-80 rounded-lg border border-white/10 bg-[rgb(var(--bg))]/95 shadow-xl p-3 text-xs text-white/80 space-y-2 backdrop-blur-lg">
-                <div className="font-semibold text-white">Editor tips</div>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li><b>Style</b>: Use for paragraphs, headings, code, or quote.</li>
-                  <li><b>Text</b>: Bold, italic, underline. Shortcuts: Ctrl/Cmd+B/I/U.</li>
-                  <li><b>Lists</b>: Bulleted or numbered lists.</li>
-                  <li><b>Font</b>: Apply a font to selected text.</li>
-                  <li><b>Colors</b>: Text color and highlight color with presets or custom.</li>
-                  <li><b>Table</b>: Insert via grid, then add/delete rows/columns inside a cell.</li>
-                  <li><b>Blocks</b>: Quote or code block for structure.</li>
-                  <li><b>Insert</b>: Add hyperlinks to selected text.</li>
-                  <li><b>History</b>: Undo/Redo, or Clear formatting.</li>
-                  <li><b>View</b>: Full screen for distraction-free writing.</li>
-                </ul>
-              </div>
-            )}
-          </div>
-
-          {/* Fullscreen toggle */}
-          <button
-            type="button"
-            onClick={() => setIsFullscreen(v => !v)}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-            title={isFullscreen ? 'Exit full screen' : 'Full screen'}
-          >
-            {getIcon('fullscreen')}
-          </button>
-
-          {/* Word count */}
-          {typeof maxWords === 'number' && (
-            <div className="pl-2 ml-1 border-l border-white/10 text-xs">
-              <span className={`${currentWordCount > maxWords * 0.9 ? 'text-yellow-400' : currentWordCount >= maxWords ? 'text-red-400' : 'text-white/60'}`}>
-                {currentWordCount}/{maxWords} words
-              </span>
-            </div>
-          )}
-        </div>
       </div>
+      </div>
+      )}
     </div>
   )
 
@@ -1069,7 +909,7 @@ export function RichTextEditor({
   }
 
   return (
-    <div className={`border border-white/10 rounded-lg overflow-hidden bg-white/5 ${isFocused ? 'ring-2 ring-primary-400 border-primary-400' : ''} ${className} flex flex-col ${compactDosStyle ? 'dos-compact' : ''}`}>
+    <div className={`border border-white/10 rounded-lg ${floatingToolbar ? '' : 'overflow-hidden'} bg-white/5 ${isFocused ? 'ring-2 ring-primary-400 border-primary-400' : ''} ${className} flex flex-col ${compactDosStyle ? 'dos-compact' : ''}`}>
       {/* Toolbar */}
       {Toolbar}
 

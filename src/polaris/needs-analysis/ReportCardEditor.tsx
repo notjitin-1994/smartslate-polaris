@@ -157,7 +157,7 @@ function formatReportAsMarkdown(report: NAReport): string {
   }
 
   if (report.solution) {
-    md += '\n## Recommended Solution\n\n'
+    md += '\n## Business Objectives & Requirements\n\n'
     if (report.solution.delivery_modalities?.length) {
       md += '### Delivery Modalities\n'
       report.solution.delivery_modalities.forEach(m => {
@@ -443,7 +443,7 @@ export default function ReportCardEditor({ markdown, onChange, className = '' }:
             <div className="glass-card p-5">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-1 rounded bg-secondary-500/20"><Icon name="solution" className="w-4 h-4 text-secondary-400" /></div>
-                <h3 className="text-lg font-semibold text-white/90">Recommended Solutions</h3>
+                <h3 className="text-lg font-semibold text-white/90">Business Objectives & Requirements</h3>
               </div>
               <div className="space-y-3">
                 {(report.solution.delivery_modalities || []).map((m, idx) => (
@@ -588,7 +588,7 @@ export default function ReportCardEditor({ markdown, onChange, className = '' }:
             <div className="glass-card p-5 border-l-4 border-l-red-400">
               <div className="flex items-center gap-2 mb-4">
                 <div className="p-1 rounded bg-red-500/20"><Icon name="risks" className="w-4 h-4 text-red-400" /></div>
-                <h4 className="text-sm font-semibold text-white/90">Risk Assessment</h4>
+                <h4 className="text-sm font-semibold text-white/90">Risks & Change Readiness</h4>
               </div>
               <div className="space-y-3">
                 {(report.risks || []).map((r, idx) => (

@@ -171,7 +171,7 @@ class AIEditingService {
       CRITICAL INSTRUCTIONS:
       1. You MUST return the COMPLETE report with ALL sections
       2. NEVER remove any sections, even if editing only one part
-      3. MAINTAIN the exact section headers (## Executive Summary, ## Recommended Solution, etc.)
+      3. MAINTAIN the exact section headers (## Executive Summary, ## Organization & Audience, ## Business Objectives & Requirements, etc.)
       4. PRESERVE all markdown formatting including:
          - Section headers with ## 
          - Subsection headers with ###
@@ -199,7 +199,7 @@ class AIEditingService {
       REMEMBER: 
       - Return the ENTIRE report with all sections
       - Only modify the parts mentioned in the edit request
-      - Keep all section headers exactly as they are (## Executive Summary, ## Recommended Solution, etc.)
+      - Keep all section headers exactly as they are (## Executive Summary, ## Organization & Audience, ## Business Objectives & Requirements, etc.)
       - Do not remove or rename any sections
       - Maintain all markdown formatting
       
@@ -227,7 +227,7 @@ class AIEditingService {
           
           // Validate that the edited content contains expected sections
           const editedContent = parsed.editedContent as string
-          const requiredSections = ['## Executive Summary', '## Recommended Solution']
+          const requiredSections = ['## Executive Summary', '## Organization & Audience']
           const missingSections = requiredSections.filter(section => !editedContent.includes(section))
           
           if (missingSections.length > 0) {

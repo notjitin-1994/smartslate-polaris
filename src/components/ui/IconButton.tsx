@@ -3,7 +3,7 @@ import type { ButtonHTMLAttributes, ReactNode } from 'react'
 type IconButtonProps = {
   ariaLabel: string
   title?: string
-  variant?: 'ghost' | 'primary' | 'danger'
+  variant?: 'ghost' | 'primary' | 'danger' | 'plain'
   size?: 'sm' | 'md'
   className?: string
   children: ReactNode
@@ -18,14 +18,16 @@ export function IconButton({
   children,
   ...rest
 }: IconButtonProps) {
-  const variantClass = variant ? ` icon-btn-${variant}` : ''
-  const sizeClass = size === 'sm' ? ' icon-btn-sm' : ''
+  const isPlain = variant === 'plain'
+  const baseClass = isPlain ? 'icon-btn-plain' : 'icon-btn'
+  const variantClass = !isPlain && variant ? ` icon-btn-${variant}` : ''
+  const sizeClass = !isPlain && size === 'sm' ? ' icon-btn-sm' : ''
   return (
     <button
       type="button"
       aria-label={ariaLabel}
       title={title || ariaLabel}
-      className={`icon-btn${variantClass}${sizeClass} ${className}`.trim()}
+      className={`${baseClass}${variantClass}${sizeClass} ${className}`.trim()}
       {...rest}
     >
       {children}

@@ -253,36 +253,61 @@ Generate a professional report with:
 # [Report Title]
 
 ## Executive Summary
-[Concise overview with key findings and recommendations]
+- One-page top-line summary of objectives, constraints, and key findings.
+- Highlight top 3 priorities and urgent risks.
 
-## Current State Analysis
-[Data-driven assessment of the present situation]
+## Organization & Audience
+- Context: org size, industry, geographies, audience segments.
+- Learner profile: roles, languages, accessibility, device/bandwidth, motivation.
 
-## Recommended Solution
-### Delivery Strategy
-### Technology Architecture
-### Content & Curriculum
-### Implementation Approach
+## Business Objectives & Requirements
+- Strategic goals and desired outcomes.
+- Target competencies/skills and frameworks.
+- Assessment and compliance requirements.
+- Success criteria and acceptance definitions.
 
-## Learner Experience Design
-[User journey and engagement strategy]
+## Learning Transfer & Sustainment
+- Manager/supervisor role in reinforcement.
+- Anticipated barriers and mitigations.
+- Transfer measurement strategies.
 
-## Measurement Framework
-[Success metrics, analytics, and reporting]
+## Performance Support
+- Existing vs. required tools (job aids, guides, tooltips, chatbots).
+- Embedding opportunities (CRM, workflow apps, LMS).
+- Ownership and sustainment cadence.
 
-## Resource Planning
-### Budget Breakdown
-### Timeline & Milestones
-### Team & Expertise Requirements
+## Documentation
+- Current state and quality.
+- Critical processes covered vs. gaps.
+- Ownership model and governance.
+- Integration with training.
 
-## Risk Assessment
-[Identified risks with mitigation strategies]
+## Delivery & Modalities
+- Preferred formats and constraints.
+- Pilot vs. rollout strategy.
+- Offline, bandwidth, or accessibility considerations.
 
-## Next Steps
-[Prioritized action items with owners and dates]
+## Systems, Data & Integration
+- Current systems and integration readiness.
+- Analytics maturity and data confidence.
+- Recommendations for measurement dashboards.
 
-## Appendices
-[Supporting data, research, and references]
+## Resourcing, Budget & Timeline
+- Budget ceilings and allocation priorities.
+- Internal capacity (SMEs, facilitators, tech admins).
+- Milestones (pilot, launch, audits, compliance deadlines).
+- Schedule flexibility.
+
+## Risks & Change Readiness
+- Appetite for experimentation.
+- Past adoption experience.
+- Stakeholder map (sponsors, blockers, champions).
+- Change management supports.
+
+## Recommendations & Next Steps
+- Prioritized recommendations (short-term, mid-term, long-term).
+- Critical dependencies and assumptions.
+- Measurable success indicators.
 
 Use professional formatting, clear headings, and data visualizations where appropriate.`,
 

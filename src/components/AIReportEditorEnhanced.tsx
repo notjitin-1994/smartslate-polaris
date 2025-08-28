@@ -166,7 +166,7 @@ export function AIReportEditorEnhanced({
           originalLength: currentContent.length,
           editedLength: result.editedContent.length,
           hasExecutiveSummary: result.editedContent.includes('## Executive Summary'),
-          hasRecommendedSolution: result.editedContent.includes('## Recommended Solution')
+          hasRecommendedSolution: result.editedContent.includes('## Organization & Audience')
         })
         
         // Update the edit with results

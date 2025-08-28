@@ -253,11 +253,11 @@ export async function exportToWord(
         addList("Objectives:", report.summary.objectives);
       }
       
-      // Recommended Solution
+      // Business Objectives & Requirements
       if (report.solution && report.solution.delivery_modalities.length > 0) {
         sections.push(
           new Paragraph({
-            text: "▎ RECOMMENDED SOLUTION",
+            text: "▎ BUSINESS OBJECTIVES & REQUIREMENTS",
             heading: HeadingLevel.HEADING_1,
             spacing: { before: 400, after: 200 }
           })

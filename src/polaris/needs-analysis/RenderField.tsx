@@ -272,6 +272,27 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
       );
     }
 
+    case 'boolean': {
+      const boolVal = typeof value === 'boolean' ? value : false
+      return (
+        <div className="mb-4">
+          {common}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              className={`px-3 py-1.5 rounded-full border transition ${boolVal ? 'bg-primary-500/20 border-primary-400 text-primary-200' : 'bg-white/5 border-white/10 text-white/80'}`}
+              onClick={() => onChange((field as any).id, true)}
+            >Yes</button>
+            <button
+              type="button"
+              className={`${!boolVal ? 'bg-primary-500/20 border-primary-400 text-primary-200' : 'bg-white/5 border-white/10 text-white/80'} px-3 py-1.5 rounded-full border transition`}
+              onClick={() => onChange((field as any).id, false)}
+            >No</button>
+          </div>
+        </div>
+      );
+    }
+
     default:
       return null;
   }

@@ -7,7 +7,8 @@ export type NAQuestionType =
   | 'calendar_date'
   | 'calendar_range'
   | 'slider'
-  | 'number';
+  | 'number'
+  | 'boolean';
 
 export interface NAFieldBase {
   id: string;            // stable key
@@ -60,13 +61,19 @@ export interface NANumberField extends NAFieldBase {
   default?: number;
 }
 
+export interface NABooleanField extends NAFieldBase {
+  type: 'boolean';
+  default?: boolean;
+}
+
 export type NAField =
   | NATextField
   | NAOptionField
   | NACalendarDateField
   | NACalendarRangeField
   | NASliderField
-  | NANumberField;
+  | NANumberField
+  | NABooleanField;
 
 export interface NAQuestionSet {
   stage: number;                 // 1..4 (stage 1 is static intake)
@@ -78,6 +85,7 @@ export type NAResponseValue =
   | string
   | number
   | string[]
+  | boolean
   | { start?: string; end?: string };
 
 export type NAResponseMap = Record<string, NAResponseValue | null>;

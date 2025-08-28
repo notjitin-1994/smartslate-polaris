@@ -30,7 +30,7 @@ export function formatReportAsMarkdown(report: NAReport): string {
   }
 
   if (report.solution) {
-    md += '\n## Recommended Solution\n\n'
+    md += '\n## Business Objectives & Requirements\n\n'
     if (report.solution.delivery_modalities?.length) {
       md += '### Delivery Modalities\n'
       report.solution.delivery_modalities.forEach(m => {

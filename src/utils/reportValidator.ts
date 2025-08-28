@@ -237,12 +237,16 @@ export function validatePreliminaryMarkdown(markdown: string): {
 } {
   const requiredSections = [
     '## Executive Summary',
-    '## Recommended Solution',
-    '## Delivery Plan',
-    '## Measurement',
-    '## Budget',
-    '## Risk Mitigation',
-    '## Next Steps'
+    '## Organization & Audience',
+    '## Business Objectives & Requirements',
+    '## Learning Transfer & Sustainment',
+    '## Performance Support',
+    '## Documentation',
+    '## Delivery & Modalities',
+    '## Systems, Data & Integration',
+    '## Resourcing, Budget & Timeline',
+    '## Risks & Change Readiness',
+    '## Recommendations & Next Steps'
   ]
   
   const missingSections: string[] = []
@@ -254,10 +258,10 @@ export function validatePreliminaryMarkdown(markdown: string): {
     }
   }
   
-  // Check for Recommended Solution subsections
-  if (/## Recommended Solution/i.test(markdown)) {
+  // Check for Business Objectives & Requirements subsections
+  if (/## Business Objectives & Requirements/i.test(markdown)) {
     const subsections = [
-      { pattern: /### Delivery Modalities/i, name: '### Delivery Modalities' },
+      { pattern: /### Strategic Goals/i, name: '### Strategic Goals' },
       { pattern: /\*\*Target Audiences?:\*\*/i, name: '**Target Audiences:**' },
       { pattern: /\*\*Key Competencies:\*\*/i, name: '**Key Competencies:**' },
       { pattern: /\*\*Content Outline:\*\*/i, name: '**Content Outline:**' }

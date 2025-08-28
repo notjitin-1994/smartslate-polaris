@@ -5,46 +5,60 @@ import {
   createStarmapJob,
   updateStarmapJobStageData,
   saveDynamicQuestions,
-  submitStarmapJobForProcessing,
   checkAsyncJobStatus,
   saveSessionState,
   resumeStarmapJob,
   updateStarmapJobTitle,
+  saveJobReport as saveStarmapJobReport,
   type StarmapJob
 } from '@/services/starmapJobsService'
 import { callLLM } from '@/services/llmClient'
 import RenderField from '@/polaris/needs-analysis/RenderField'
 import { EnhancedReportDisplay, IconButton } from '@/components'
-import { regenerateStarmapFinalReportWithContext } from '@/services/reportGenerationService'
-import { EXPERIENCE_LEVELS } from '@/polaris/needs-analysis/experience'
+import { regenerateStarmapFinalReportWithContext, reportGenService } from '@/services/reportGenerationService'
 import { 
-  STAGE1_REQUESTER_FIELDS, 
-  STAGE2_ORGANIZATION_FIELDS, 
-  STAGE3_PROJECT_FIELDS 
-} from '@/polaris/needs-analysis/three-stage-static'
-import { 
-  NA_QUESTIONNAIRE_PROMPT 
+  NA_DYNAMIC_STAGES_PROMPT 
 } from '@/polaris/needs-analysis/prompts'
-import { buildFastNAReportPrompt } from '@/polaris/needs-analysis/report'
 import { tryExtractJson } from '@/polaris/needs-analysis/json'
+import { POLARIS_STATIC_SECTIONS } from '@/polaris/needs-analysis/staticSections'
 
 import { parseMarkdownToReport } from '@/polaris/needs-analysis/parse'
 import type { NAField, NAResponseMap } from '@/polaris/needs-analysis/types'
 import { 
   StepIndicator, 
   WizardContainer, 
-  ActionButtons, 
-  ProgressBar 
+  ActionButtons 
 } from '@/components'
 
+// Local draft helpers
+function loadLocalDraft(key: string) {
+  try { return JSON.parse(localStorage.getItem(key) || 'null') } catch { return null }
+}
+function saveLocalDraft(key: string, value: any) {
+  try { localStorage.setItem(key, JSON.stringify(value)) } catch {}
+}
+
+const STATIC_STEPS = POLARIS_STATIC_SECTIONS.map(s => ({ id: s.id, label: s.title, description: s.description || '' }))
 const STEPS = [
-  { id: 'experience', label: 'Experience Level', description: 'Tell us about your background' },
-  { id: 'stage1', label: 'Your Details', description: 'Basic information about you' },
-  { id: 'stage2', label: 'Organization', description: 'About your organization' },
-  { id: 'stage3', label: 'Project Scope', description: 'Project requirements and constraints' },
-  { id: 'dynamic', label: 'Deep Dive', description: 'Targeted questions based on your inputs' },
-  { id: 'report', label: 'Your Starmap', description: 'View and edit your personalized report' }
+  ...STATIC_STEPS,
+  { id: 'dynamic', label: 'Deep Dive', description: 'Personalized follow-ups.' },
+  { id: 'report', label: 'Your Starmap', description: 'View and edit your report.' }
 ]
+
+const STEP_SHORT_LABELS: Record<string, string> = {
+  org_audience: 'Org',
+  business_context: 'Business',
+  project_requirements: 'Project',
+  resources_constraints: 'Constraints',
+  systems_data: 'Data',
+  timeline_scheduling: 'Timeline',
+  risk_change: 'Risk',
+  learning_transfer: 'Transfer',
+  performance_support: 'Support',
+  documentation: 'Documentation',
+  dynamic: 'Dynamic',
+  report: 'Final'
+}
 
 export default function PolarisRevampedV3() {
   const navigate = useNavigate()
@@ -59,11 +73,8 @@ export default function PolarisRevampedV3() {
   const [error, setError] = useState<string | null>(null)
   
   // Form state
-  const [active, setActive] = useState('experience')
-  const [experienceAnswer, setExperienceAnswer] = useState<NAResponseMap>({})
-  const [stage1Answers, setStage1Answers] = useState<NAResponseMap>({})
-  const [stage2Answers, setStage2Answers] = useState<NAResponseMap>({})
-  const [stage3Answers, setStage3Answers] = useState<NAResponseMap>({})
+  const [active, setActive] = useState(STATIC_STEPS[0]?.id || 'dynamic')
+  const [staticAnswers, setStaticAnswers] = useState<NAResponseMap>({})
   const [dynamicQuestions, setDynamicQuestions] = useState<NAField[]>([])
   const [dynamicAnswers, setDynamicAnswers] = useState<NAResponseMap>({})
   
@@ -132,10 +143,14 @@ export default function PolarisRevampedV3() {
       clearTimeout(autoSaveTimerRef.current)
     }
     
+    // Save local drafts immediately for resilient resume
+    saveLocalDraft('polaris:staticAnswers', staticAnswers)
+    saveLocalDraft('polaris:dynamicAnswers', dynamicAnswers)
+
     autoSaveTimerRef.current = setTimeout(() => {
       saveProgress()
-    }, 2000) // Save after 2 seconds of inactivity
-  }, [stage1Answers, stage2Answers, stage3Answers, dynamicAnswers])
+    }, 1000)
+  }, [staticAnswers, dynamicAnswers])
   
   async function initializeJob() {
     try {
@@ -155,6 +170,11 @@ export default function PolarisRevampedV3() {
         } else {
           setJob(data)
           restoreJobState(data)
+          // Merge local drafts if newer (best-effort)
+          const localStatic = loadLocalDraft('polaris:staticAnswers')
+          const localDynamic = loadLocalDraft('polaris:dynamicAnswers')
+          if (localStatic && Object.keys(localStatic).length > 0) setStaticAnswers((prev) => ({ ...prev, ...localStatic }))
+          if (localDynamic && Object.keys(localDynamic).length > 0) setDynamicAnswers((prev) => ({ ...prev, ...localDynamic }))
         }
       } else {
         // Create new job
@@ -182,15 +202,8 @@ export default function PolarisRevampedV3() {
   }
   
   function restoreJobState(job: StarmapJob) {
-    // Restore experience level
-    if (job.experience_level) {
-      setExperienceAnswer({ exp_level: job.experience_level })
-    }
-    
-    // Restore stage data
-    setStage1Answers(job.stage1_data || {})
-    setStage2Answers(job.stage2_data || {})
-    setStage3Answers(job.stage3_data || {})
+    // Restore static and dynamic data
+    setStaticAnswers(job.stage3_data || {})
     setDynamicAnswers(job.dynamic_answers || {})
     setDynamicQuestions(job.dynamic_questions || [])
     
@@ -233,14 +246,10 @@ export default function PolarisRevampedV3() {
       setActive('report')
     } else if (job.dynamic_complete) {
       setActive('dynamic')
-    } else if (job.stage3_complete) {
-      setActive('stage3')
-    } else if (job.stage2_complete) {
-      setActive('stage2')
-    } else if (job.stage1_complete) {
-      setActive('stage1')
-    } else if (job.experience_level) {
-      setActive('stage1')
+    } else if (job.session_state?.active) {
+      setActive(job.session_state.active)
+    } else {
+      setActive(STATIC_STEPS[0]?.id || 'dynamic')
     }
   }
   
@@ -249,15 +258,12 @@ export default function PolarisRevampedV3() {
     
     try {
       setSaving(true)
-      const expVal = (experienceAnswer['exp_level'] as string) || ''
       
-      // Save current stage data
-      if (active === 'stage1' && Object.keys(stage1Answers).length > 0) {
-        await updateStarmapJobStageData(job.id, 'stage1', stage1Answers)
-      } else if (active === 'stage2' && Object.keys(stage2Answers).length > 0) {
-        await updateStarmapJobStageData(job.id, 'stage2', stage2Answers)
-      } else if (active === 'stage3' && Object.keys(stage3Answers).length > 0) {
-        await updateStarmapJobStageData(job.id, 'stage3', stage3Answers)
+      // Save current data: persist all static answers under stage3 to avoid schema changes
+      if (STATIC_STEPS.some(s => s.id === active)) {
+        if (Object.keys(staticAnswers).length > 0) {
+          await updateStarmapJobStageData(job.id, 'stage3', staticAnswers)
+        }
       } else if (active === 'dynamic' && Object.keys(dynamicAnswers).length > 0) {
         await updateStarmapJobStageData(job.id, 'dynamic', dynamicAnswers)
       }
@@ -265,9 +271,13 @@ export default function PolarisRevampedV3() {
       // Save session state
       await saveSessionState(job.id, {
         active,
-        experienceLevel: expVal,
         asyncJobId,
         asyncStatus,
+        history: {
+          lastUpdated: new Date().toISOString(),
+          staticAnswers,
+          dynamicAnswers,
+        },
         lastSaved: new Date().toISOString()
       })
     } catch (err) {
@@ -283,29 +293,82 @@ export default function PolarisRevampedV3() {
     try {
       setGenerating(true)
       setGenerationProgress('Generating personalized questions...')
-      const expVal = (experienceAnswer['exp_level'] as string) || 'Experienced'
       
-      const staticAnswers = {
-        ...stage1Answers,
-        ...stage2Answers,
-        ...stage3Answers
+      const bySection = (sectionId: string): Record<string, unknown> => {
+        const section = POLARIS_STATIC_SECTIONS.find(s => s.id === sectionId)
+        const map: Record<string, unknown> = {}
+        if (section) {
+          for (const f of section.fields) {
+            if (Object.prototype.hasOwnProperty.call(staticAnswers, f.id)) {
+              map[f.id] = (staticAnswers as any)[f.id]
+            }
+          }
+        }
+        return map
       }
+      const { system, user } = NA_DYNAMIC_STAGES_PROMPT({
+        companyName: (staticAnswers['org_name'] as string) || '',
+        experienceLevel: 'Experienced',
+        stage1Answers: {},
+        stage2Answers: bySection('org_audience'),
+        stage3Answers: bySection('project_requirements'),
+        requirementsStatic: bySection('project_requirements'),
+        learningTransferStatic: bySection('learning_transfer'),
+        performanceSupportStatic: bySection('performance_support'),
+        documentationStatic: bySection('documentation'),
+        preliminaryReport: job.preliminary_report || '',
+        greetingReport: '',
+        orgReport: '',
+        requirementsReport: '',
+        previousDynamic: dynamicAnswers
+      })
       
-      const prompt = NA_QUESTIONNAIRE_PROMPT(
-        expVal,
-        2, // Generate 2 rounds of questions
-        staticAnswers,
-        dynamicAnswers
-      )
-      
-      const response = await callLLM([{ role: 'user', content: prompt }])
+      const response = await callLLM([
+        { role: 'system', content: system },
+        { role: 'user', content: user }
+      ])
       const jsonStr = tryExtractJson(response.content)
       const parsed = JSON.parse(jsonStr)
-      const questions = Array.isArray(parsed?.questions) ? parsed.questions : []
+      const stages = Array.isArray(parsed?.stages) ? parsed.stages : []
+      const rawQuestions: any[] = stages.flatMap((s: any) => Array.isArray(s?.questions) ? s.questions : [])
+      const questions = rawQuestions.map((q: any) => {
+        const type = String(q.type || '').toLowerCase()
+        const base: any = {
+          id: q.id,
+          label: q.label,
+          help: q.help,
+          required: q.required === true,
+          type
+        }
+        if (type === 'single_select' || type === 'multi_select') {
+          const opts = Array.isArray(q.options) ? q.options : []
+          base.options = opts
+            .map((o: any) => typeof o === 'string' ? o : (o?.label || o?.value))
+            .filter((s: any) => typeof s === 'string' && s.length > 0)
+        } else if (type === 'slider') {
+          base.min = typeof q.min === 'number' ? q.min : 0
+          base.max = typeof q.max === 'number' ? q.max : 100
+          if (typeof q.step === 'number') base.step = q.step
+          if (typeof q.unit === 'string') base.unit = q.unit
+        } else if (type === 'number') {
+          if (typeof q.min === 'number') base.min = q.min
+          if (typeof q.max === 'number') base.max = q.max
+          if (typeof q.step === 'number') base.step = q.step
+          if (typeof q.unit === 'string') base.unit = q.unit
+        }
+        return base
+      })
       
       if (questions.length > 0) {
         setDynamicQuestions(questions)
         await saveDynamicQuestions(job.id, questions)
+        // Keep prompt + result in session history
+        await saveSessionState(job.id, {
+          active,
+          lastSaved: new Date().toISOString(),
+          dynamicPrompt: { system, user },
+          dynamicRaw: response.content
+        })
       }
     } catch (err) {
       console.error('Error generating dynamic questions:', err)
@@ -321,59 +384,46 @@ export default function PolarisRevampedV3() {
     
     try {
       setGenerating(true)
-      setGenerationProgress('Preparing your personalized starmap...')
-      const expVal = (experienceAnswer['exp_level'] as string) || 'Experienced'
-      
-      // Build the comprehensive prompt
-      const allData = {
-        experience: expVal,
-        ...stage1Answers,
-        ...stage2Answers,
-        ...stage3Answers,
-        dynamic_answers: dynamicAnswers
+      setGenerationProgress('Generating your comprehensive starmap...')
+
+      const bySection = (sectionId: string): Record<string, unknown> => {
+        const section = POLARIS_STATIC_SECTIONS.find(s => s.id === sectionId)
+        const map: Record<string, unknown> = {}
+        if (section) {
+          for (const f of section.fields) {
+            if (Object.prototype.hasOwnProperty.call(staticAnswers, f.id)) {
+              map[f.id] = (staticAnswers as any)[f.id]
+            }
+          }
+        }
+        return map
       }
-      
-      const prompt = buildFastNAReportPrompt(
-        expVal,
-        allData
-      )
-      
-      // Submit for async processing
-      setGenerationProgress('Submitting for processing...')
-      const { data: submitData, error: submitError } = await submitStarmapJobForProcessing(
-        job.id,
-        prompt,
-        'sonar-pro',
-        'final'
-      )
-      
-      if (submitError || !submitData) {
-        throw new Error('Failed to submit job for processing')
+
+      const context: any = {
+        jobId: job.id,
+        userId: (user as any)?.id || '',
+        experienceLevel: 'intermediate',
+        companyName: (staticAnswers['org_name'] as string) || job.title || 'Organization',
+        orgData: bySection('org_audience'),
+        requirementsData: bySection('project_requirements'),
+        dynamicAnswers,
+        requirementsStatic: bySection('project_requirements'),
+        learningTransferStatic: bySection('learning_transfer'),
+        performanceSupportStatic: bySection('performance_support'),
+        documentationStatic: bySection('documentation')
       }
-      
-      setAsyncJobId(submitData.jobId)
-      setAsyncStatus('processing')
-      setAsyncProgress(0)
-      
-      // Set initial loading message
-      const loadingInfo = getLoadingMessage('processing', 0)
-      setAsyncPhase(loadingInfo.phase)
-      setAsyncMessage(loadingInfo.message)
-      
-      // Save async job info
-      await saveSessionState(job.id, {
-        active: 'report',
-        asyncJobId: submitData.jobId,
-        asyncStatus: 'processing',
-        lastSaved: new Date().toISOString()
-      })
-      
-      // Start polling for status
-      startPolling(job.id)
-      
-      // Show processing UI
+
+      const generated = await reportGenService.generateComprehensiveReport(context)
+
+      await saveStarmapJobReport(job.id, 'final', generated.content)
+
+      setReport(generated.content)
+      try { setParsedReport(parseMarkdownToReport(generated.content)) } catch {}
       setActive('report')
-      setGenerationProgress('Your starmap is being generated. You can safely navigate away and return later.')
+      setAsyncJobId(null)
+      setAsyncStatus('completed')
+      setAsyncProgress(100)
+      setGenerationProgress('')
     } catch (err) {
       console.error('Error generating report:', err)
       setError('Failed to generate report. Please try again.')
@@ -513,26 +563,20 @@ export default function PolarisRevampedV3() {
       case 'number':
       case 'slider':
         return value !== null && value !== undefined && value !== ''
+      case 'boolean':
+        return typeof value === 'boolean'
       default:
         return Boolean(value)
     }
   }
   
   function canProceedToNext(): boolean {
-    switch (active) {
-      case 'experience':
-        return EXPERIENCE_LEVELS.every(f => isFieldAnswered(f, experienceAnswer[f.id]))
-      case 'stage1':
-        return STAGE1_REQUESTER_FIELDS.every(f => isFieldAnswered(f, stage1Answers[f.id]))
-      case 'stage2':
-        return STAGE2_ORGANIZATION_FIELDS.every(f => isFieldAnswered(f, stage2Answers[f.id]))
-      case 'stage3':
-        return STAGE3_PROJECT_FIELDS.every(f => isFieldAnswered(f, stage3Answers[f.id]))
-      case 'dynamic':
-        return dynamicQuestions.length === 0 || dynamicQuestions.every(f => isFieldAnswered(f, dynamicAnswers[f.id]))
-      default:
-        return true
+    if (active === 'dynamic') {
+      return dynamicQuestions.length === 0 || dynamicQuestions.every(f => isFieldAnswered(f, dynamicAnswers[f.id]))
     }
+    const section = POLARIS_STATIC_SECTIONS.find(s => s.id === active)
+    if (!section) return true
+    return section.fields.every(f => isFieldAnswered(f, staticAnswers[f.id]))
   }
   
   async function handleNext() {
@@ -542,7 +586,9 @@ export default function PolarisRevampedV3() {
     
     const currentIndex = getStepIndex(active)
     
-    if (active === 'stage3' && dynamicQuestions.length === 0) {
+    const staticStepIds = STATIC_STEPS.map(s => s.id)
+    const isLastStatic = staticStepIds[staticStepIds.length - 1] === active
+    if (isLastStatic && dynamicQuestions.length === 0) {
       // Generate dynamic questions after stage 3
       await generateDynamicQuestions()
       setActive('dynamic')
@@ -599,7 +645,7 @@ export default function PolarisRevampedV3() {
       {/* Step Indicator */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <StepIndicator
-          steps={STEPS.map((s) => ({ key: s.id, label: s.label, description: s.description }))}
+          steps={STEPS.map((s) => ({ key: s.id, label: s.label, description: s.description, shortLabel: STEP_SHORT_LABELS[s.id] }))}
           currentStep={currentIndex}
           completedSteps={Array.from({ length: currentIndex }, (_, i) => i)}
           onStepClick={(index) => {
@@ -686,7 +732,6 @@ export default function PolarisRevampedV3() {
           <div className="animate-fade-in">
             <EnhancedReportDisplay 
               reportMarkdown={report}
-              prelimReport={job?.preliminary_report || undefined}
               reportTitle={job?.title || 'Needs Analysis Report'}
               editableTitle
               onSaveTitle={async (newTitle) => {
@@ -702,8 +747,7 @@ export default function PolarisRevampedV3() {
                   <IconButton
                     ariaLabel="Add Context & Recreate"
                     title="Add Context & Recreate"
-                    variant="ghost"
-                    className="icon-btn-lg"
+                    variant="plain"
                     onClick={() => setRegenOpen(true)}
                     disabled={regenerating}
                   >
@@ -749,6 +793,7 @@ export default function PolarisRevampedV3() {
           <WizardContainer 
             title={currentStep?.label || ''} 
             description={currentStep?.description || ''}
+            savedStatus={saving ? 'saving' : 'saved'}
             headerActions={(
               <IconButton
                 ariaLabel="Save and Exit"
@@ -773,60 +818,15 @@ export default function PolarisRevampedV3() {
               </IconButton>
             )}
           >
-            {/* Experience Level */}
-            {active === 'experience' && (
-              <div className="max-w-xl">
-                {EXPERIENCE_LEVELS.map(field => (
-                  <div key={field.id}>
-                    <RenderField
-                      field={field}
-                      value={experienceAnswer[field.id]}
-                      onChange={(id, value) => setExperienceAnswer(prev => ({ ...prev, [id]: value }))}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {/* Stage 1 */}
-            {active === 'stage1' && (
+            {/* Static Sections */}
+            {STATIC_STEPS.some(s => s.id === active) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {STAGE1_REQUESTER_FIELDS.map(field => (
-                  <div key={field.id}>
-                    <RenderField
-                      field={field}
-                      value={stage1Answers[field.id]}
-                      onChange={(id, value) => setStage1Answers(prev => ({ ...prev, [id]: value }))}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {/* Stage 2 */}
-            {active === 'stage2' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {STAGE2_ORGANIZATION_FIELDS.map(field => (
+                {(POLARIS_STATIC_SECTIONS.find(s => s.id === active)?.fields || []).map(field => (
                   <div key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
                     <RenderField
                       field={field}
-                      value={stage2Answers[field.id]}
-                      onChange={(id, value) => setStage2Answers(prev => ({ ...prev, [id]: value }))}
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            
-            {/* Stage 3 */}
-            {active === 'stage3' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {STAGE3_PROJECT_FIELDS.map(field => (
-                  <div key={field.id} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
-                    <RenderField
-                      field={field}
-                      value={stage3Answers[field.id]}
-                      onChange={(id, value) => setStage3Answers(prev => ({ ...prev, [id]: value }))}
+                      value={staticAnswers[field.id]}
+                      onChange={(id, value) => setStaticAnswers(prev => ({ ...prev, [id]: value }))}
                     />
                   </div>
                 ))}
@@ -868,28 +868,6 @@ export default function PolarisRevampedV3() {
               previousLabel="Previous"
             />
             
-            {/* Progress */}
-            {active === 'stage1' && (
-              <ProgressBar
-                value={Object.keys(stage1Answers).filter(k => stage1Answers[k]).length}
-                max={STAGE1_REQUESTER_FIELDS.length}
-                label="Fields completed"
-              />
-            )}
-            {active === 'stage2' && (
-              <ProgressBar
-                value={Object.keys(stage2Answers).filter(k => stage2Answers[k]).length}
-                max={STAGE2_ORGANIZATION_FIELDS.length}
-                label="Fields completed"
-              />
-            )}
-            {active === 'stage3' && (
-              <ProgressBar
-                value={Object.keys(stage3Answers).filter(k => stage3Answers[k]).length}
-                max={STAGE3_PROJECT_FIELDS.length}
-                label="Fields completed"
-              />
-            )}
             {/* Save & Exit moved to header; bottom button removed */}
           </WizardContainer>
         )}
@@ -1018,13 +996,16 @@ export default function PolarisRevampedV3() {
                   <div className="flex flex-wrap gap-2">
                     {[
                       'Executive Summary',
-                      'Current State Analysis',
-                      'Recommended Solution',
-                      'Learner Experience Design',
-                      'Measurement Framework',
-                      'Resource Planning',
-                      'Risk Assessment',
-                      'Next Steps'
+                      'Organization & Audience',
+                      'Business Objectives & Requirements',
+                      'Learning Transfer & Sustainment',
+                      'Performance Support',
+                      'Documentation',
+                      'Delivery & Modalities',
+                      'Systems, Data & Integration',
+                      'Resourcing, Budget & Timeline',
+                      'Risks & Change Readiness',
+                      'Recommendations & Next Steps'
                     ].map((area) => {
                       const selected = focusAreas.includes(area)
                       return (

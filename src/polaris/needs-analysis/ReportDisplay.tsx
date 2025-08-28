@@ -659,7 +659,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
                 <div className="p-1 rounded bg-secondary-500/20">
                   <Icon name="solution" className="w-4 h-4 text-secondary-400" />
                 </div>
-                <h3 className="text-lg font-semibold text-white/90">Recommended Solutions</h3>
+                <h3 className="text-lg font-semibold text-white/90">Business Objectives & Requirements</h3>
               </div>
               <div className="space-y-3">
                 {solutionItems}
@@ -859,7 +859,7 @@ const ReportDisplay = memo(({ reportMarkdown, reportTitle, editableTitle = false
                 <div className="p-1 rounded bg-red-500/20">
                   <Icon name="risks" className="w-4 h-4 text-red-400" />
                 </div>
-                <h4 className="text-sm font-semibold text-white/90">Risk Assessment</h4>
+                <h4 className="text-sm font-semibold text-white/90">Risks & Change Readiness</h4>
               </div>
               <div className="space-y-3">
                 {riskItems}

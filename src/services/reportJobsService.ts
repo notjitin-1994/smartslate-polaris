@@ -186,6 +186,31 @@ export async function getSummaryReportJobs(
 }
 
 /**
+ * Get jobs associated with a specific starmap job via JSON metadata
+ */
+export async function getStarmapReportJobs(
+  starmapJobId: string
+): Promise<{ data: ReportJob[]; error: any }> {
+  try {
+    const { data, error } = await supabase
+      .from('report_jobs')
+      .select('*')
+      .contains('metadata', { starmap_job_id: starmapJobId })
+      .order('created_at', { ascending: false })
+    
+    if (error) {
+      console.error('Failed to get starmap report jobs:', error)
+      return { data: [], error }
+    }
+    
+    return { data: data || [], error: null }
+  } catch (err) {
+    console.error('Error getting starmap report jobs:', err)
+    return { data: [], error: err }
+  }
+}
+
+/**
  * Cancel a job
  */
 export async function cancelReportJob(jobId: string): Promise<{ error: any }> {

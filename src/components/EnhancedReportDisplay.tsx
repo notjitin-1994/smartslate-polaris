@@ -241,6 +241,7 @@ interface EnhancedReportDisplayProps {
   reportTitle?: string
   editableTitle?: boolean
   onSaveTitle?: (newTitle: string) => void | Promise<void>
+  onEditSection?: (sectionTitle: string) => void
   className?: string
   // legacy props removed
   summaryId?: string
@@ -256,6 +257,7 @@ const EnhancedReportDisplay = memo(({
   reportTitle = 'Needs Analysis Report',
   editableTitle = false,
   onSaveTitle,
+  onEditSection,
   className = '',
   summaryId,
   starmapJobId,
@@ -450,6 +452,16 @@ const EnhancedReportDisplay = memo(({
                     </div>
                   </div>
                 )}
+                {onEditSection && (
+                  <button
+                    type="button"
+                    onClick={() => onEditSection('Executive Summary')}
+                    title="Add context & recreate this section"
+                    className="px-2 py-1 rounded-lg bg-white/10 border border-white/15 text-white/80 hover:bg-white/15"
+                  >
+                    Edit
+                  </button>
+                )}
               </div>
               {report.summary.problem_statement && (
                 <p className="text-white/85 text-[0.95rem] leading-relaxed mb-4">{report.summary.problem_statement}</p>
@@ -478,6 +490,18 @@ const EnhancedReportDisplay = memo(({
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M3 3v18h18"/><rect x="7" y="13" width="3" height="5"/><rect x="12" y="9" width="3" height="9"/><rect x="17" y="6" width="3" height="12"/></svg>
                 Measurement Framework
               </div>
+              {onEditSection && (
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    onClick={() => onEditSection('Business Objectives & Requirements')}
+                    title="Add context & recreate this section"
+                    className="px-2 py-1 rounded-lg bg-white/10 border border-white/15 text-white/80 hover:bg-white/15"
+                  >
+                    Edit Section
+                  </button>
+                </div>
+              )}
               {report.measurement.success_metrics.length ? (
                 <div className="space-y-3">
                   {report.measurement.success_metrics.slice(0,4).map((m, i) => {
@@ -514,6 +538,18 @@ const EnhancedReportDisplay = memo(({
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 2l9 4v6c0 5-4 9-9 10-5-1-9-5-9-10V6l9-4z"/></svg>
                 Risks & Change Readiness
               </div>
+              {onEditSection && (
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    onClick={() => onEditSection('Risks & Change Readiness')}
+                    title="Add context & recreate this section"
+                    className="px-2 py-1 rounded-lg bg-white/10 border border-white/15 text-white/80 hover:bg-white/15"
+                  >
+                    Edit Section
+                  </button>
+                </div>
+              )}
               {report.risks.length ? (
                 <div>
                   <div className="mb-3">
@@ -556,9 +592,21 @@ const EnhancedReportDisplay = memo(({
           <section>
             <div className="glass-card p-5">
               <div className="text-white font-semibold mb-3 flex items-center gap-2">
-                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 12c2.21 0 4-1.79 4-4S14.21 4 12 4 8 5.79 4 4 4z"/><path d="M6 20v-1a6 6 0 0112 0v1"/></svg>
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M12 12c2.21 0 4-1.79 4-4S14.21 4 12 4 8 5.79 8 8s1.79 4 4 4z"/><path d="M6 20v-1a6 6 0 0112 0v1"/></svg>
                 Organization & Audience
               </div>
+              {onEditSection && (
+                <div className="mb-3">
+                  <button
+                    type="button"
+                    onClick={() => onEditSection('Organization & Audience')}
+                    title="Add context & recreate this section"
+                    className="px-2 py-1 rounded-lg bg-white/10 border border-white/15 text-white/80 hover:bg-white/15"
+                  >
+                    Edit Section
+                  </button>
+                </div>
+              )}
               {report.learner_analysis.profiles.length ? (
                 <div className="space-y-3">
                   <div className="rounded-lg bg-white/5 border border-white/10 p-3">

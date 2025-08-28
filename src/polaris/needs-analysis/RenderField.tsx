@@ -9,11 +9,13 @@ interface RenderFieldProps {
 }
 
 export default function RenderField({ field, value, onChange }: RenderFieldProps) {
+  const inputId = `${field.id}-input`
+  const helpId = field.help ? `${field.id}-help` : undefined
   const common = (
-    <label className="block mb-2 font-semibold">
+    <label htmlFor={inputId} className="block mb-2 font-semibold">
       <span className="text-sm text-white/90">{field.label}</span>
       {field.required && <span className="text-red-500"> *</span>}
-      {field.help && <div className="text-xs text-white/60 mt-1">{field.help}</div>}
+      {field.help && <div id={helpId} className="text-xs text-white/60 mt-1">{field.help}</div>}
     </label>
   );
 
@@ -26,7 +28,10 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
           {common}
           {field.type === 'text' ? (
             <input 
-              className="input w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20" 
+              id={inputId}
+              aria-required={field.required}
+              aria-describedby={helpId}
+              className="input w-full" 
               placeholder={textField.placeholder} 
               value={(value as string) ?? ''} 
               onChange={(e) => onChange(field.id, e.target.value)} 
@@ -34,7 +39,10 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
             />
           ) : (
             <textarea 
-              className="input w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20 min-h-[100px] resize-y" 
+              id={inputId}
+              aria-required={field.required}
+              aria-describedby={helpId}
+              className="input w-full min-h-[100px] resize-y" 
               placeholder={textField.placeholder} 
               value={(value as string) ?? ''} 
               onChange={(e) => onChange(field.id, e.target.value)} 
@@ -62,6 +70,9 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
         <div className="mb-4">
           {common}
           <select
+            id={inputId}
+            aria-required={field.required}
+            aria-describedby={helpId}
             className="input w-full"
             value={selectValue}
             onChange={(e) => {
@@ -85,7 +96,10 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
           { (customMode || isPreExistingCustom) && (
             <div className="mt-2">
               <input
-                className="input w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white placeholder-white/30 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20"
+                id={inputId}
+                aria-required={field.required}
+                aria-describedby={helpId}
+                className="input w-full"
                 placeholder="Type custom value…"
                 value={current}
                 onChange={(e) => onChange(field.id, e.target.value)}
@@ -170,8 +184,11 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
         <div className="mb-4">
           {common}
           <input 
+            id={inputId}
+            aria-required={field.required}
+            aria-describedby={helpId}
             type="date" 
-            className="input w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20" 
+            className="input w-full" 
             value={(value as string) ?? ''} 
             onChange={(e) => onChange(field.id, e.target.value || null)} 
             min={dateField.minDate}
@@ -189,8 +206,11 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
           {common}
           <div className="flex gap-2 items-center">
             <input 
+              id={`${inputId}-start`}
+              aria-required={field.required}
+              aria-describedby={helpId}
               type="date" 
-              className="input flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20" 
+              className="input flex-1" 
               value={v.start ?? ''} 
               onChange={(e) => onChange(field.id, { ...v, start: e.target.value })} 
               min={rangeField.minDate}
@@ -198,8 +218,11 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
             />
             <span className="text-white/60">to</span>
             <input 
+              id={`${inputId}-end`}
+              aria-required={field.required}
+              aria-describedby={helpId}
               type="date" 
-              className="input flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20" 
+              className="input flex-1" 
               value={v.end ?? ''} 
               onChange={(e) => onChange(field.id, { ...v, end: e.target.value })} 
               min={rangeField.minDate}
@@ -219,6 +242,9 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
           {common}
           <div className="space-y-2">
             <input 
+              id={inputId}
+              aria-required={field.required}
+              aria-describedby={helpId}
               type="range" 
               className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-primary-400"
               min={min} 
@@ -234,8 +260,10 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
             </div>
             <div className="flex items-center gap-2">
               <input
+                id={`${inputId}-custom`}
+                aria-describedby={helpId}
                 type="number"
-                className="w-28 px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20"
+                className="input w-28"
                 placeholder="Custom"
                 value={typeof value === 'number' && (value < min || value > max) ? value : ''}
                 onChange={(e) => {
@@ -258,8 +286,11 @@ export default function RenderField({ field, value, onChange }: RenderFieldProps
           {common}
           <div className="flex items-center gap-2">
             <input 
+              id={inputId}
+              aria-required={field.required}
+              aria-describedby={helpId}
               type="number" 
-              className="input flex-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:border-primary-400 focus:outline-none focus:ring-1 focus:ring-primary-400/20" 
+              className="input flex-1" 
               min={min} 
               max={max} 
               step={step} 

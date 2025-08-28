@@ -17,6 +17,8 @@ interface RichTextEditorProps {
   showFullscreen?: boolean
   // Start collapsed (single-tile card)
   collapsedInitially?: boolean
+  // Offset from the top of the viewport when toolbar is sticky
+  stickyOffsetPx?: number
 }
 
 interface FormatButton {
@@ -39,7 +41,7 @@ const listButtons: FormatButton[] = [
 
 // Memoized ToolbarGroup component for better performance
 const ToolbarGroup = memo(({ label, children }: { label: string; children: ReactNode }) => (
-  <div className="flex items-center gap-3 mr-4 px-3 py-2 rounded-2xl border border-white/10 bg-white/5">
+  <div className="flex items-center gap-3 mr-4 px-3 py-2">
     <div className="hidden md:block text-[10px] uppercase tracking-wide text-white/50 mr-3 select-none">
       {label}
     </div>
@@ -61,7 +63,8 @@ export function RichTextEditor({
   compactDosStyle = false,
   floatingToolbar = false,
   showFullscreen = true,
-  collapsedInitially = false
+  collapsedInitially = false,
+  stickyOffsetPx = 0
 }: RichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement>(null)
   const [isFocused, setIsFocused] = useState(false)
@@ -241,7 +244,7 @@ export function RichTextEditor({
     }
   }
 
-  const applyBlock = (tagName: 'p' | 'h1' | 'h2' | 'pre' | 'blockquote') => {
+  const applyBlock = (tagName: 'p' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'pre' | 'blockquote') => {
     if (!editorRef.current || readOnly) return
     editorRef.current.focus()
     try {
@@ -575,7 +578,8 @@ export function RichTextEditor({
 
   const Toolbar = (
     <div
-      className={`toolbar ${floatingToolbar ? 'sticky top-2 z-50 m-2 rounded-2xl border border-white/10 bg-[rgb(var(--bg))]/85 backdrop-blur-md shadow-2xl' : 'relative rounded-2xl border-b border-white/10 bg-white/5 shadow-xl'} ${isToolbarCollapsed ? 'p-2' : 'p-5'} flex flex-col gap-3 relative`}
+      className={`toolbar ${floatingToolbar ? 'sticky z-50 m-0 w-full rounded-none border-b border-white/10 bg-transparent backdrop-blur-none shadow-none' : 'relative rounded-2xl border-b border-white/10 bg-transparent shadow-none'} ${isToolbarCollapsed ? 'p-2' : 'p-5'} flex flex-col gap-3 relative`}
+      style={floatingToolbar ? { top: stickyOffsetPx } : undefined}
     >
       {!isToolbarCollapsed && (
         <button
@@ -621,6 +625,10 @@ export function RichTextEditor({
                 if (value === 'P') applyBlock('p')
                 else if (value === 'H1') applyBlock('h1')
                 else if (value === 'H2') applyBlock('h2')
+                else if (value === 'H3') applyBlock('h3')
+                else if (value === 'H4') applyBlock('h4')
+                else if (value === 'H5') applyBlock('h5')
+                else if (value === 'H6') applyBlock('h6')
                 else if (value === 'PRE') applyBlock('pre')
                 else if (value === 'BLOCKQUOTE') applyBlock('blockquote')
               }}
@@ -629,8 +637,12 @@ export function RichTextEditor({
             >
               <option value="STYLE_DEFAULT">Style</option>
               <option value="P">Text</option>
-              <option value="H1">Heading</option>
-              <option value="H2">Subheading</option>
+              <option value="H1">H1</option>
+              <option value="H2">H2</option>
+              <option value="H3">H3</option>
+              <option value="H4">H4</option>
+              <option value="H5">H5</option>
+              <option value="H6">H6</option>
               <option value="PRE">Code</option>
               <option value="BLOCKQUOTE">Quote</option>
             </select>
@@ -909,7 +921,7 @@ export function RichTextEditor({
   }
 
   return (
-    <div className={`border border-white/10 rounded-lg ${floatingToolbar ? '' : 'overflow-hidden'} bg-white/5 ${isFocused ? 'ring-2 ring-primary-400 border-primary-400' : ''} ${className} flex flex-col ${compactDosStyle ? 'dos-compact' : ''}`}>
+    <div className={`border border-white/10 rounded-lg bg-white/5 ${isFocused ? 'ring-2 ring-primary-400 border-primary-400' : ''} ${className} flex flex-col ${compactDosStyle ? 'dos-compact' : ''}`}>
       {/* Toolbar */}
       {Toolbar}
 
@@ -986,6 +998,12 @@ export function RichTextEditor({
         .prose h2 { font-size: 1.25rem; font-weight: 600; margin: 0.75rem 0; }
         [contenteditable] h3,
         .prose h3 { font-size: 1.125rem; font-weight: 600; margin: 0.5rem 0; }
+        [contenteditable] h4,
+        .prose h4 { font-size: 1.05rem; font-weight: 600; margin: 0.5rem 0; }
+        [contenteditable] h5,
+        .prose h5 { font-size: 1rem; font-weight: 600; margin: 0.5rem 0; }
+        [contenteditable] h6,
+        .prose h6 { font-size: 0.95rem; font-weight: 600; margin: 0.5rem 0; }
         
         [contenteditable] strong,
         .prose strong {

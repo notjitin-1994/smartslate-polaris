@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiDebugStore, type ApiLogEntry } from '@/dev/apiDebug'
+import { reportDebugStore, type ReportDebugEntry } from '@/dev/reportDebug'
 import { errorTrackerStore, type ErrorLogEntry } from '@/dev/errorTracker'
 
 export default function ApiDebug() {
-  const [tab, setTab] = useState<'calls' | 'errors'>('calls')
+  const [tab, setTab] = useState<'calls' | 'errors' | 'reportgen'>('calls')
   const [logs, setLogs] = useState<ApiLogEntry[]>(apiDebugStore.get())
   const [errors, setErrors] = useState<ErrorLogEntry[]>(errorTrackerStore.get())
+  const [reportLogs, setReportLogs] = useState<ReportDebugEntry[]>(reportDebugStore.get())
   const [query, setQuery] = useState('')
   const [onlyErrors, setOnlyErrors] = useState(false)
   const [groupBy, setGroupBy] = useState<'none' | 'fingerprint' | 'origin' | 'type'>('none')
@@ -15,7 +17,8 @@ export default function ApiDebug() {
   useEffect(() => {
     const unsubA = apiDebugStore.subscribe(() => setLogs([...apiDebugStore.get()]))
     const unsubB = errorTrackerStore.subscribe(() => setErrors([...errorTrackerStore.get()]))
-    return () => { unsubA(); unsubB() }
+    const unsubC = reportDebugStore.subscribe(() => setReportLogs([...reportDebugStore.get()]))
+    return () => { unsubA(); unsubB(); unsubC() }
   }, [])
 
   const filteredCalls = useMemo(() => {
@@ -59,6 +62,7 @@ export default function ApiDebug() {
         <div className="flex items-center gap-2 mb-3">
           <button onClick={() => setTab('calls')} className={`px-3 py-1.5 rounded border text-sm ${tab==='calls' ? 'bg-white/15 border-white/30' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}>Calls</button>
           <button onClick={() => setTab('errors')} className={`px-3 py-1.5 rounded border text-sm ${tab==='errors' ? 'bg-white/15 border-white/30' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}>Errors</button>
+          <button onClick={() => setTab('reportgen')} className={`px-3 py-1.5 rounded border text-sm ${tab==='reportgen' ? 'bg-white/15 border-white/30' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}>Report Generation Debug</button>
           <div className="ml-auto flex gap-2 text-xs text-white/60">
             <SummaryBadge label="Calls" value={logs.length} />
             <SummaryBadge label="Errors" value={errors.length} />
@@ -153,7 +157,7 @@ export default function ApiDebug() {
               </tbody>
             </table>
           </div>
-        ) : (
+        ) : tab === 'errors' ? (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <div className="overflow-auto rounded border border-white/10">
               <table className="min-w-full text-sm">
@@ -203,6 +207,32 @@ export default function ApiDebug() {
                 </div>
               )}
             </div>
+          </div>
+        ) : (
+          <div className="overflow-auto rounded border border-white/10">
+            <table className="min-w-full text-sm">
+              <thead className="bg-white/5">
+                <tr>
+                  <th className="text-left p-2">Time</th>
+                  <th className="text-left p-2">Type</th>
+                  <th className="text-left p-2">Job</th>
+                  <th className="text-left p-2">Step</th>
+                  <th className="text-left p-2">Progress</th>
+                  <th className="text-left p-2">Message</th>
+                  <th className="text-left p-2">Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {reportLogs.map(entry => (
+                  <ReportRow key={entry.id} entry={entry} />
+                ))}
+                {reportLogs.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="p-6 text-center text-white/50">No report generation logs yet. Start a report from Discover.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -317,6 +347,24 @@ function ErrorRow({ entry, onSelect, selectedId }: { entry: ErrorLogEntry; onSel
         </tr>
       )}
     </>
+  )
+}
+
+function ReportRow({ entry }: { entry: ReportDebugEntry }) {
+  const ts = new Date(entry.timestamp).toLocaleTimeString()
+  const badgeCls = entry.level === 'success' ? 'bg-green-500/10 border-green-400/30 text-green-300' : entry.level === 'error' ? 'bg-red-500/10 border-red-400/30 text-red-300' : 'bg-white/10 border-white/20 text-white/80'
+  return (
+    <tr className="border-t border-white/10">
+      <td className="p-2 whitespace-nowrap text-white/70">{ts}</td>
+      <td className="p-2 whitespace-nowrap">
+        <span className={`px-2 py-0.5 rounded border ${badgeCls}`}>{entry.type}</span>
+      </td>
+      <td className="p-2 whitespace-nowrap text-white/80">{entry.jobId || '—'}</td>
+      <td className="p-2 whitespace-nowrap text-white/80">{entry.step || '—'}</td>
+      <td className="p-2 whitespace-nowrap text-white/80">{typeof entry.progress === 'number' ? `${entry.progress}%` : '—'}</td>
+      <td className="p-2 whitespace-nowrap text-white/80">{entry.message || '—'}</td>
+      <td className="p-2 text-white/80 max-w-[28rem] truncate" title={formatContent(entry.data)}>{formatContent(entry.data)}</td>
+    </tr>
   )
 }
 

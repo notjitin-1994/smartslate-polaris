@@ -9,13 +9,13 @@ import {
   saveSessionState,
   resumeStarmapJob,
   updateStarmapJobTitle,
-  saveJobReport as saveStarmapJobReport,
+  submitStarmapJobForProcessing,
   type StarmapJob
 } from '@/services/starmapJobsService'
 import { callLLM } from '@/services/llmClient'
 import RenderField from '@/polaris/needs-analysis/RenderField'
 import { EnhancedReportDisplay, IconButton } from '@/components'
-import { regenerateStarmapFinalReportWithContext, reportGenService } from '@/services/reportGenerationService'
+import { regenerateStarmapFinalReportWithContext, buildComprehensiveReportPrompt } from '@/services/reportGenerationService'
 import { 
   NA_DYNAMIC_STAGES_PROMPT 
 } from '@/polaris/needs-analysis/prompts'
@@ -29,6 +29,8 @@ import {
   WizardContainer, 
   ActionButtons 
 } from '@/components'
+
+import { reportDebugStore } from '@/dev/reportDebug'
 
 // Local draft helpers
 function loadLocalDraft(key: string) {
@@ -155,6 +157,7 @@ export default function PolarisRevampedV3() {
   async function initializeJob() {
     try {
       setLoading(true)
+      reportDebugStore.info('job_init', { message: 'Initializing discover flow' })
       
       // Check if resuming an existing job
       const jobId = searchParams.get('jobId')
@@ -169,6 +172,7 @@ export default function PolarisRevampedV3() {
           await createNewJob()
         } else {
           setJob(data)
+          reportDebugStore.info('job_init', { jobId: data.id, message: 'Resumed existing job' })
           restoreJobState(data)
           // Merge local drafts if newer (best-effort)
           const localStatic = loadLocalDraft('polaris:staticAnswers')
@@ -199,6 +203,7 @@ export default function PolarisRevampedV3() {
     }
     
     setJob(data)
+    reportDebugStore.success('job_init', { jobId: data.id, message: 'Created new job' })
   }
   
   function restoreJobState(job: StarmapJob) {
@@ -239,6 +244,7 @@ export default function PolarisRevampedV3() {
         setAsyncPhase(loadingInfo.phase)
         setAsyncMessage(loadingInfo.message)
         startPolling(job.id)
+        reportDebugStore.info('resume_polling', { jobId: job.id, message: 'Resuming polling for in-progress job' })
     }
     
     // Navigate to appropriate step
@@ -263,9 +269,11 @@ export default function PolarisRevampedV3() {
       if (STATIC_STEPS.some(s => s.id === active)) {
         if (Object.keys(staticAnswers).length > 0) {
           await updateStarmapJobStageData(job.id, 'stage3', staticAnswers)
+          reportDebugStore.success('stage_saved', { jobId: job.id, step: active, data: { count: Object.keys(staticAnswers).length } })
         }
       } else if (active === 'dynamic' && Object.keys(dynamicAnswers).length > 0) {
         await updateStarmapJobStageData(job.id, 'dynamic', dynamicAnswers)
+        reportDebugStore.success('stage_saved', { jobId: job.id, step: 'dynamic', data: { count: Object.keys(dynamicAnswers).length } })
       }
       
       // Save session state
@@ -280,6 +288,7 @@ export default function PolarisRevampedV3() {
         },
         lastSaved: new Date().toISOString()
       })
+      reportDebugStore.info('save_state', { jobId: job.id, data: { active, asyncStatus } })
     } catch (err) {
       console.error('Error saving progress:', err)
     } finally {
@@ -362,6 +371,7 @@ export default function PolarisRevampedV3() {
       if (questions.length > 0) {
         setDynamicQuestions(questions)
         await saveDynamicQuestions(job.id, questions)
+        reportDebugStore.success('dynamic_success', { jobId: job.id, data: { count: questions.length } })
         // Keep prompt + result in session history
         await saveSessionState(job.id, {
           active,
@@ -373,6 +383,7 @@ export default function PolarisRevampedV3() {
     } catch (err) {
       console.error('Error generating dynamic questions:', err)
       setError('Failed to generate questions. Please try again.')
+      reportDebugStore.error('dynamic_error', { jobId: job?.id, message: (err as any)?.message })
     } finally {
       setGenerating(false)
       setGenerationProgress('')
@@ -413,17 +424,23 @@ export default function PolarisRevampedV3() {
         documentationStatic: bySection('documentation')
       }
 
-      const generated = await reportGenService.generateComprehensiveReport(context)
+      // Build prompt and submit async job so user can navigate away and return later
+      const prompt = buildComprehensiveReportPrompt(context)
+      reportDebugStore.info('report_prompt_built', { jobId: job.id, data: { length: prompt.length } })
 
-      await saveStarmapJobReport(job.id, 'final', generated.content)
-
-      setReport(generated.content)
-      try { setParsedReport(parseMarkdownToReport(generated.content)) } catch {}
+      const submit = await submitStarmapJobForProcessing(job.id, prompt, 'sonar-pro', 'final')
+      if (submit.error || !submit.data) {
+        throw submit.error || new Error('Failed to submit job')
+      }
       setActive('report')
-      setAsyncJobId(null)
-      setAsyncStatus('completed')
-      setAsyncProgress(100)
-      setGenerationProgress('')
+      setAsyncJobId(submit.data.jobId)
+      setAsyncStatus('processing')
+      setAsyncProgress(0)
+      const loadingInfo = getLoadingMessage('processing', 0)
+      setAsyncPhase(loadingInfo.phase)
+      setAsyncMessage(loadingInfo.message)
+      reportDebugStore.info('job_submit', { jobId: job.id, message: 'Submitted async job', data: { asyncJobId: submit.data.jobId } })
+      startPolling(job.id)
     } catch (err) {
       console.error('Error generating report:', err)
       setError('Failed to generate report. Please try again.')
@@ -449,6 +466,7 @@ export default function PolarisRevampedV3() {
       
       setAsyncStatus(data.status)
       setAsyncProgress(data.progress)
+      reportDebugStore.info('poll_status', { jobId, progress: data.progress, data })
       
       // Update dynamic loading messages
       const loadingInfo = getLoadingMessage(data.status, data.progress)
@@ -472,6 +490,7 @@ export default function PolarisRevampedV3() {
         if (job) {
           setJob({ ...job, status: 'completed', final_report: data.result })
         }
+        reportDebugStore.success('job_complete', { jobId, message: 'Final report generated' })
       } else if (data.status === 'failed') {
         // Job failed
         setError(data.error || 'Report generation failed. Please try again.')
@@ -482,6 +501,7 @@ export default function PolarisRevampedV3() {
           clearInterval(pollTimerRef.current)
           pollTimerRef.current = null
         }
+        reportDebugStore.error('job_failed', { jobId, message: data.error })
       }
     }, 3000) // Poll every 3 seconds
   }

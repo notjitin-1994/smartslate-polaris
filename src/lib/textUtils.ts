@@ -179,8 +179,14 @@ export function markdownToHtml(markdown: string): string {
       listType = ''
     }
     
-    // Handle headings
-    if (line.startsWith('### ')) {
+    // Handle headings (H1–H6)
+    if (line.startsWith('###### ')) {
+      html += `<h6>${line.substring(7)}</h6>`
+    } else if (line.startsWith('##### ')) {
+      html += `<h5>${line.substring(6)}</h5>`
+    } else if (line.startsWith('#### ')) {
+      html += `<h4>${line.substring(5)}</h4>`
+    } else if (line.startsWith('### ')) {
       html += `<h3>${line.substring(4)}</h3>`
     } else if (line.startsWith('## ')) {
       html += `<h2>${line.substring(3)}</h2>`
@@ -260,10 +266,13 @@ export function htmlToMarkdown(html: string): string {
   // Line breaks
   md = md.replace(/<br\s*\/?\s*>/gim, '\n')
   
-  // Headings
+  // Headings H1–H6
   md = md.replace(/<h1[^>]*>([\s\S]*?)<\/h1>/gim, '# $1\n')
   md = md.replace(/<h2[^>]*>([\s\S]*?)<\/h2>/gim, '## $1\n')
   md = md.replace(/<h3[^>]*>([\s\S]*?)<\/h3>/gim, '### $1\n')
+  md = md.replace(/<h4[^>]*>([\s\S]*?)<\/h4>/gim, '#### $1\n')
+  md = md.replace(/<h5[^>]*>([\s\S]*?)<\/h5>/gim, '##### $1\n')
+  md = md.replace(/<h6[^>]*>([\s\S]*?)<\/h6>/gim, '###### $1\n')
   
   // Lists - handle both ul and ol properly
   md = md.replace(/<ul[^>]*>[\s\S]*?<\/ul>/gim, (match) => {

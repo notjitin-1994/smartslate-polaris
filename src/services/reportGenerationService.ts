@@ -54,6 +54,67 @@ export interface GeneratedReport {
  */
 export class ReportGenerationService {
   /**
+   * Build a comprehensive final report prompt as a single string for async jobs
+   */
+  buildComprehensiveReportPrompt(context: ReportContext): string {
+    const safeJson = (obj: any) => {
+      try { return JSON.stringify(obj ?? {}, null, 2) } catch { return '{}' }
+    }
+    const safeText = (txt?: string) => (txt || '').toString()
+
+    const allStatic = {
+      stage1: context.greetingData || {},
+      stage2: context.orgData || {},
+      stage3: context.requirementsData || {}
+    }
+    const newStatic = {
+      requirements: (context as any).requirementsStatic || {},
+      learning_transfer: (context as any).learningTransferStatic || {},
+      performance_support: (context as any).performanceSupportStatic || {},
+      documentation: (context as any).documentationStatic || {}
+    }
+
+    const prompt = `You are an expert Learning & Development consultant creating a comprehensive Needs Analysis Report for the Polaris platform.\n\n` +
+      `GOAL\n` +
+      `Generate a clear, detailed Learning Needs Analysis Report for ${context.companyName || 'the organization'}, based on static intake answers, dynamic questionnaire responses, and research briefs. The report must synthesize all information into actionable insights for stakeholders.\n\n` +
+      `INPUTS\n` +
+      `- Experience Level: ${context.experienceLevel}\n` +
+      `- Static Answers (Stage 1–3): ${safeJson(allStatic)}\n` +
+      `- New Static Sections: \n` +
+      `  - Requirements: ${safeJson(newStatic.requirements)}\n` +
+      `  - Learning Transfer: ${safeJson(newStatic.learning_transfer)}\n` +
+      `  - Performance Support: ${safeJson(newStatic.performance_support)}\n` +
+      `  - Documentation: ${safeJson(newStatic.documentation)}\n` +
+      `- Dynamic Answers: ${safeJson(context.dynamicAnswers)}\n` +
+      `- Research Reports:\n` +
+      `  - Preliminary: ${safeText(context.preliminaryReport)}\n` +
+      `  - Greeting/Context: ${safeText(context.greetingReport)}\n` +
+      `  - Organization: ${safeText(context.orgReport)}\n` +
+      `  - Requirements: ${safeText(context.requirementReport)}\n\n` +
+      `STRUCTURE\n` +
+      `Return a professional Markdown report using exactly these sections and headings (keep names):\n` +
+      `## Executive Summary\n` +
+      `## Organization & Audience\n` +
+      `## Business Objectives & Requirements\n` +
+      `## Learning Transfer & Sustainment\n` +
+      `## Performance Support\n` +
+      `## Documentation\n` +
+      `## Delivery & Modalities\n` +
+      `## Systems, Data & Integration\n` +
+      `## Resourcing, Budget & Timeline\n` +
+      `## Risks & Change Readiness\n` +
+      `## Recommendations & Next Steps\n\n` +
+      `STYLE\n` +
+      `- Write for senior stakeholders: concise, professional, plain language.\n` +
+      `- Use bullet points for clarity and short paragraphs for context.\n` +
+      `- Highlight gaps, risks, and trade-offs explicitly.\n` +
+      `- Do not repeat raw answers; synthesize into insights.\n\n` +
+      `RETURN\n` +
+      `Output the full report in Markdown with the sections above. Do not include anything else.`
+
+    return prompt
+  }
+  /**
    * Generate a comprehensive needs analysis report
    */
   async generateNeedsAnalysisReport(
@@ -886,6 +947,76 @@ Return the full report in Markdown with headings as above. Do not include anythi
       metadata
     }
   }
+
+  /**
+   * Regenerate a single named section for a Starmap final report.
+   * Returns ONLY the markdown content for that section starting with the H2 header.
+   */
+  async regenerateStarmapSection(
+    jobId: string,
+    sectionTitle: string,
+    additions: { newContextText?: string; newContextJson?: any }
+  ): Promise<{ sectionMarkdown: string }> {
+    const { data: job, error } = await getStarmapJob(jobId)
+    if (error || !job) {
+      throw new AppError('Starmap job not found', 'JOB_NOT_FOUND')
+    }
+    const existingReport = job.final_report || job.preliminary_report || ''
+    const context: ReportContext = {
+      jobId,
+      userId: job.user_id,
+      experienceLevel: (job.experience_level as any) || 'intermediate',
+      companyName: job.title || undefined,
+      greetingData: job.stage1_data || {},
+      orgData: job.stage2_data || {},
+      requirementsData: job.stage3_data || {},
+      dynamicAnswers: job.dynamic_answers || {},
+      preliminaryReport: job.preliminary_report || undefined,
+      greetingReport: undefined,
+      orgReport: undefined,
+      requirementReport: undefined
+    }
+
+    const additionsText = (additions?.newContextText || '').trim()
+    const additionsJson = additions?.newContextJson
+
+    const prompt = `Act as an expert Instructional Designer, Learning Experience Consultant, and Learning Experience Developer.\n\n` +
+      `You will update ONE section of a comprehensive L&D Needs Analysis final report.\n` +
+      `Return ONLY the markdown for the specific section starting with the exact H2 header: \n## ${sectionTitle}\n` +
+      `Do not return any other sections or commentary.\n\n` +
+      `ORIGINAL FULL REPORT (Markdown):\n${existingReport}\n\n` +
+      `CONTEXT DATA (JSON):\n${JSON.stringify(context, null, 2)}\n\n` +
+      (additionsText ? `NEW CONTEXT (verbatim text):\n${additionsText}\n\n` : '') +
+      (additionsJson ? `NEW CONTEXT JSON:\n${JSON.stringify(additionsJson, null, 2)}\n\n` : '') +
+      `REQUIREMENTS:\n` +
+      `1) Update ONLY the specified section "${sectionTitle}"; reflect the new context accurately.\n` +
+      `2) Maintain brand-consistent tone, clear headings, concise bullets, and actionable phrasing.\n` +
+      `3) Keep the section visually skimmable (short paragraphs, bullets, mini tables if helpful).\n` +
+      `4) If data is insufficient, add a short "Assumptions" sublist.\n` +
+      `5) Return only the updated section markdown starting with '## ${sectionTitle}'.`
+
+    const response = await unifiedAIService.call({
+      prompt,
+      inputType: 'text',
+      capabilities: ['reasoning'],
+      temperature: 0.3,
+      maxTokens: 4000,
+      preferredProvider: 'anthropic'
+    })
+
+    // Clean possible code fences
+    let sectionMarkdown = response.content
+      .replace(/```markdown\n?/g, '')
+      .replace(/```\n?/g, '')
+      .trim()
+
+    // Ensure it starts with the section header
+    if (!sectionMarkdown.startsWith(`## ${sectionTitle}`)) {
+      sectionMarkdown = `## ${sectionTitle}\n\n${sectionMarkdown}`
+    }
+
+    return { sectionMarkdown }
+  }
 }
 
 // Export singleton instance
@@ -925,3 +1056,12 @@ export const regenerateStarmapFinalReportWithContext = (
     updateOnlySelectedSections?: boolean
   }
 ) => reportGenService.regenerateStarmapFinalReportWithContext(jobId, additions)
+
+export const buildComprehensiveReportPrompt = (context: ReportContext) =>
+  reportGenService.buildComprehensiveReportPrompt(context)
+
+export const regenerateStarmapSection = (
+  jobId: string,
+  sectionTitle: string,
+  additions: { newContextText?: string; newContextJson?: any }
+) => reportGenService.regenerateStarmapSection(jobId, sectionTitle, additions)

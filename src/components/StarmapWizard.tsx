@@ -34,35 +34,34 @@ export function StepIndicator({ steps, currentStep, completedSteps, onStepClick 
               const isActive = index === currentStep
               const isCompleted = completed.includes(index)
               const isAccessible = isCompleted || index <= currentStep
+              const displayNumber = index + 1
               return (
                 <div key={step.key} className="relative">
                   <button
                     onClick={() => isAccessible && onStepClick(index)}
                     disabled={!isAccessible}
-                    className={`mx-auto flex flex-col items-center group ${isAccessible ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                    className={`mx-auto flex flex-col items-center gap-2 group ${isAccessible ? 'cursor-pointer' : 'cursor-not-allowed'}`}
+                    aria-current={isActive ? 'step' : undefined}
                   >
-                    <div className={`
-                      h-12 md:h-14 px-2 min-w-[48px] md:min-w-[56px] w-auto rounded-xl border flex items-center justify-center transition-all duration-200
+                    <div className={`w-12 h-12 md:w-14 md:h-14 rounded-full border flex items-center justify-center transition-all duration-200
                       ${isCompleted
-                        ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/30'
+                        ? 'bg-emerald-500 border-emerald-400 shadow-lg shadow-emerald-500/30 text-white'
                         : isActive
-                        ? 'bg-[rgb(var(--bg))] border-primary-400 ring-2 ring-primary-400'
-                        : 'bg-[rgb(var(--bg))] border-white/10'}
-                    `}>
+                        ? 'bg-primary-500 text-white border-primary-500 shadow-lg shadow-primary-500/25'
+                        : 'bg-[rgb(var(--bg))] border-white/15 text-white/80'}`}
+                    >
                       {isCompleted ? (
-                        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                         </svg>
                       ) : (
-                        <span className={`text-[9px] md:text-[10px] font-semibold leading-none tracking-tight whitespace-nowrap ${isActive ? 'text-primary-200' : 'text-white/80'}`}>
-                          {step.shortLabel || step.label}
-                        </span>
+                        <span className="text-sm md:text-base font-semibold">{displayNumber}</span>
                       )}
                     </div>
-                    <div className="mt-3 text-center">
-                      <div className="hidden">{step.label}</div>
+                    <div className="text-center">
+                      <div className={`text-[11px] md:text-xs font-medium ${isActive ? 'text-white' : 'text-white/75'}`}>{step.label}</div>
                       {step.description && (
-                        <div className="text-xs text-white/50 mt-1 max-w-[140px] mx-auto leading-snug">{step.description}</div>
+                        <div className="text-[10px] md:text-[11px] text-white/50 mt-0.5 max-w-[160px] mx-auto leading-snug">{step.description}</div>
                       )}
                     </div>
                   </button>
@@ -257,60 +256,56 @@ export function ActionButtons({
           <button
             type="button"
             onClick={handleBack}
-            className="w-12 h-12 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 flex items-center justify-center transition-all duration-200 group"
+            className="btn-text"
             disabled={isLoading}
             aria-label={label}
             title={label}
           >
-            <svg className="w-5 h-5 text-primary-500 group-hover:text-primary-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
+            <span>{label}</span>
           </button>
         )}
       </div>
-      
-      <div className="flex items-center gap-4">
+
+      <div className="flex items-center gap-3">
         {onSkip && (
           <button
             type="button"
             onClick={onSkip}
-            className="w-10 h-10 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 flex items-center justify-center transition-all duration-200 group"
+            className="btn-ghost px-3 py-2"
             disabled={isLoading}
             aria-label={skipLabel}
             title={skipLabel}
           >
-            <svg className="w-4 h-4 text-secondary-500 group-hover:text-secondary-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
+            {skipLabel}
           </button>
         )}
-        
         {onNext && (
           <button
             type="button"
             onClick={onNext}
-            className={`
-              relative w-12 h-12 rounded-xl font-medium transition-all duration-200 flex items-center justify-center
-              ${nextDisabled 
-                ? 'bg-white/10 text-white/40 cursor-not-allowed' 
-                : 'bg-secondary-500 text-white hover:bg-secondary-400 hover:shadow-lg hover:shadow-secondary-500/25 hover:scale-105'
-              }
-            `}
+            className={`btn-primary px-5 py-2.5 ${nextDisabled ? 'opacity-60 cursor-not-allowed' : ''}`}
             disabled={nextDisabled || isLoading}
             aria-label={nextLabel}
             title={nextLabel}
           >
             {isLoading ? (
-              <div className="flex items-center justify-center">
+              <div className="flex items-center gap-2">
                 <svg className="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
+                <span>{nextLabel}</span>
               </div>
             ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              <div className="flex items-center gap-2">
+                <span>{nextLabel}</span>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
             )}
           </button>
         )}

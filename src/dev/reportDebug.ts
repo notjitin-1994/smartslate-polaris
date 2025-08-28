@@ -1,84 +1,61 @@
-/* Report Generation Debug store (dev only) */
-
-type Subscriber = () => void
-
-export type ReportDebugEventType =
-  | 'job_init'
-  | 'stage_saved'
-  | 'save_state'
-  | 'dynamic_start'
-  | 'dynamic_success'
-  | 'dynamic_error'
-  | 'report_prompt_built'
-  | 'job_submit'
-  | 'resume_polling'
-  | 'poll_status'
-  | 'job_complete'
-  | 'job_failed'
-  | 'navigate_away'
-  | 'navigate_back'
+// Stub for reportDebug - provides minimal functionality for frontend
 
 export type ReportDebugEntry = {
   id: string
   timestamp: string
-  type: ReportDebugEventType
-  jobId?: string
-  step?: string
-  message?: string
-  progress?: number
-  data?: any
-  level?: 'info' | 'success' | 'error'
+  type: string
+  content: string
 }
 
 class ReportDebugStore {
-  private logs: ReportDebugEntry[] = []
-  private subscribers: Set<Subscriber> = new Set()
-  private max = 1000
+  private entries: ReportDebugEntry[] = []
+  private subscribers: Set<() => void> = new Set()
 
-  add(entry: Omit<ReportDebugEntry, 'id' | 'timestamp'>) {
-    if (!import.meta.env.DEV) return
-    const row: ReportDebugEntry = {
-      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      timestamp: new Date().toISOString(),
-      level: 'info',
-      ...entry
+  get() {
+    return this.entries
+  }
+
+  subscribe(callback: () => void) {
+    this.subscribers.add(callback)
+    return () => {
+      this.subscribers.delete(callback)
     }
-    this.logs.unshift(row)
-    if (this.logs.length > this.max) this.logs.length = this.max
-    this.emit()
-  }
-
-  info(type: ReportDebugEventType, payload?: Partial<ReportDebugEntry>) {
-    this.add({ type, level: 'info', ...payload })
-  }
-
-  success(type: ReportDebugEventType, payload?: Partial<ReportDebugEntry>) {
-    this.add({ type, level: 'success', ...payload })
-  }
-
-  error(type: ReportDebugEventType, payload?: Partial<ReportDebugEntry>) {
-    this.add({ type, level: 'error', ...payload })
-  }
-
-  get(): ReportDebugEntry[] {
-    return this.logs
   }
 
   clear() {
-    this.logs = []
-    this.emit()
+    this.entries = []
+    this.notify()
   }
 
-  subscribe(fn: Subscriber): () => void {
-    this.subscribers.add(fn)
-    return () => this.subscribers.delete(fn)
+  info(type: string, data: any) {
+    console.log(`[ReportDebug] ${type}:`, data)
+    this.addEntry('info', type, data)
   }
 
-  private emit() {
-    for (const fn of this.subscribers) fn()
+  success(type: string, data: any) {
+    console.log(`[ReportDebug] SUCCESS ${type}:`, data)
+    this.addEntry('success', type, data)
+  }
+
+  error(type: string, data: any) {
+    console.error(`[ReportDebug] ERROR ${type}:`, data)
+    this.addEntry('error', type, data)
+  }
+
+  private addEntry(level: string, type: string, data: any) {
+    const entry: ReportDebugEntry = {
+      id: Date.now().toString(),
+      timestamp: new Date().toISOString(),
+      type: `${level}:${type}`,
+      content: JSON.stringify(data)
+    }
+    this.entries.push(entry)
+    this.notify()
+  }
+
+  private notify() {
+    this.subscribers.forEach(callback => callback())
   }
 }
 
 export const reportDebugStore = new ReportDebugStore()
-
-

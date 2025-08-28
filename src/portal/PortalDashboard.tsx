@@ -1,5 +1,6 @@
 import { type ComponentType } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { isNeedsAnalysisEnabled } from '@/features/needs-analysis/utils/featureFlag'
 
 type ActionCardProps = {
   title: string
@@ -44,6 +45,24 @@ function IconStarmap({ className = '' }: { className?: string }) {
       <circle cx="18" cy="8" r="2" />
       <circle cx="9" cy="18" r="2" />
       <path d="M7.5 7.5l8 0.5M7.6 7.9l1.9 7.8M17 9.6l-6.3 7.2" />
+    </svg>
+  )
+}
+
+function IconNeedsAnalysis({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
     </svg>
   )
 }
@@ -110,6 +129,14 @@ export function PortalDashboard() {
           icon={IconCompass}
           onClick={() => navigate('/discover')}
         />
+        {isNeedsAnalysisEnabled() && (
+          <ActionCard
+            title="Needs Analysis"
+            description="Conduct comprehensive training needs analysis with diagnostic tools and recommendations."
+            icon={IconNeedsAnalysis}
+            onClick={() => navigate('/needs-analysis')}
+          />
+        )}
       </div>
 
       {/* Benefits: Material-inspired elevated cards */}

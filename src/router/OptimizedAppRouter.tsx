@@ -18,12 +18,19 @@ const SettingsContent = withLazyLoad(() => import('@/portal/SettingsContent').th
 const PublicProfile = withLazyLoad(() => import('@/pages/PublicProfile').then(m => ({ default: m.PublicProfile })))
 const PublicReportView = withLazyLoad(() => import('@/pages/PublicReportView'))
 const PolarisRevampedV3 = withLazyLoad(() => import('@/pages/PolarisRevampedV3'))
-const StarmapJobsDashboard = withLazyLoad(() => import('@/components/StarmapJobsDashboard'))
+const StarmapJobsDashboard = withLazyLoad(() => import('@/components/StarmapJobsDashboard.simple'))
 const Pricing = withLazyLoad(() => import('@/pages/Pricing'))
 const ReportsDebug = withLazyLoad(() => import('@/pages/ReportsDebug'))
 const ApiDebug = withLazyLoad(() => import('@/pages/ApiDebug'))
 const CardComparison = withLazyLoad(() => import('@/pages/CardComparison'))
 const ReportStarmapPage = withLazyLoad(() => import('@/pages/ReportStarmapPage'))
+
+// Needs Analysis pages
+const NeedsAnalysisDashboard = withLazyLoad(() => import('@/features/needs-analysis/pages/NeedsAnalysisDashboard').then(m => ({ default: m.NeedsAnalysisDashboard })))
+const NeedsAnalysisWizard = withLazyLoad(() => import('@/features/needs-analysis/components/NeedsWizard').then(m => ({ default: m.NeedsWizard })))
+const DiagnosticFlow = withLazyLoad(() => import('@/features/needs-analysis/components/Diagnostic').then(m => ({ default: m.DiagnosticFlow })))
+const RecommendationView = withLazyLoad(() => import('@/features/needs-analysis/components/Recommendation').then(m => ({ default: m.RecommendationView })))
+const ReportView = withLazyLoad(() => import('@/features/needs-analysis/components/Report').then(m => ({ default: m.ReportView })))
 
 // Job-based Polaris routes removed; only /discover remains active
 
@@ -67,6 +74,15 @@ export function OptimizedAppRouter() {
                 <Route path="summaries" element={<Navigate to="/discover" replace />} />
               </Route>
               
+              {/* Needs Analysis Routes */}
+              <Route path="needs-analysis">
+                <Route index element={<NeedsAnalysisDashboard />} />
+                <Route path="new" element={<NeedsAnalysisWizard />} />
+                <Route path=":id/intake" element={<NeedsAnalysisWizard />} />
+                <Route path=":id/diagnostic" element={<DiagnosticFlow />} />
+                <Route path=":id/recommendation" element={<RecommendationView />} />
+                <Route path=":id/report" element={<ReportView />} />
+              </Route>
             </Route>
             
             {/* 404 fallback */}

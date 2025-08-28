@@ -1,28 +1,12 @@
-/**
- * Utility functions for generating and managing share links
- */
+// Stub for shareUtils - provides minimal functionality for frontend
 
-/**
- * Generate a public share link for a report
- * @param reportId The ID of the report to share
- * @returns The full URL for the public report
- */
-export function generateShareLink(reportId: string, options?: { kind?: 'summary' | 'starmap' }): string {
-  const baseUrl = window.location.origin
-  const kind = options?.kind || 'summary'
-  // Use meta endpoint to serve OG tags for richer previews; it will redirect to public view
-  const params = new URLSearchParams({ id: reportId, kind })
-  return `${baseUrl}/api/share/meta?${params.toString()}`
+export const generateShareLink = (id: string, type: 'report' | 'starmap' = 'report'): string => {
+  console.warn('Backend service removed: generateShareLink')
+  return `${window.location.origin}/${type}/${id}`
 }
 
-/**
- * Copy text to clipboard with fallback for older browsers
- * @param text The text to copy
- * @returns Promise that resolves when copied
- */
-export async function copyToClipboard(text: string): Promise<boolean> {
+export const copyToClipboard = async (text: string): Promise<boolean> => {
   try {
-    // Modern way
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text)
       return true
@@ -36,9 +20,9 @@ export async function copyToClipboard(text: string): Promise<boolean> {
       document.body.appendChild(textArea)
       textArea.focus()
       textArea.select()
-      const successful = document.execCommand('copy')
-      document.body.removeChild(textArea)
-      return successful
+      const success = document.execCommand('copy')
+      textArea.remove()
+      return success
     }
   } catch (error) {
     console.error('Failed to copy to clipboard:', error)
@@ -46,33 +30,20 @@ export async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-/**
- * Format a share message with the report link
- * @param link The share link
- * @param reportTitle Optional report title
- * @returns Formatted share message
- */
-export function formatShareMessage(link: string, _reportTitle?: string): string {
-  // WhatsApp requirement: only send the link to avoid unwanted preface text
-  return link
-}
-
-/**
- * Attempt to share via the Web Share API with graceful fallbacks.
- * - On iPad/iOS Safari and modern mobile browsers, this opens the native share sheet.
- * - If Web Share is unavailable or fails, we fall back to copying to clipboard.
- */
-export async function shareLinkNative(options: { url: string; title?: string; text?: string }): Promise<'shared' | 'copied' | 'failed'> {
-  const { url, title = 'SmartSlate Polaris', text } = options
+export const shareLinkNative = async (url: string, title: string = 'Share'): Promise<boolean> => {
   try {
-    const canShare = typeof navigator !== 'undefined' && typeof (navigator as any).share === 'function'
-    if (canShare) {
-      await (navigator as any).share({ url, title, text: text ?? formatShareMessage(url) })
-      return 'shared'
+    if (navigator.share) {
+      await navigator.share({
+        title,
+        url
+      })
+      return true
+    } else {
+      // Fallback to copying to clipboard
+      return await copyToClipboard(url)
     }
-  } catch (err) {
-    // Some browsers throw if user cancels share; treat as failure and continue to clipboard
+  } catch (error) {
+    console.error('Failed to share:', error)
+    return false
   }
-  const copied = await copyToClipboard(url)
-  return copied ? 'copied' : 'failed'
 }

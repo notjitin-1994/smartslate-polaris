@@ -25,6 +25,7 @@ type AppEnv = {
   VITE_PERPLEXITY_FINAL_MODEL?: string
   VITE_UNLIMITED_STARMAPS_USER_IDS?: string
   VITE_UNLIMITED_STARMAPS_USER_EMAILS?: string
+  VITE_NEEDS_ANALYSIS_ENABLED?: string
   MODE: string
   DEV: boolean
   PROD: boolean
@@ -67,6 +68,7 @@ export const env = {
   perplexityFinalModel: (read('VITE_PERPLEXITY_FINAL_MODEL') || 'sonar-pro'),
   unlimitedUserIds: read('VITE_UNLIMITED_STARMAPS_USER_IDS'),
   unlimitedUserEmails: read('VITE_UNLIMITED_STARMAPS_USER_EMAILS'),
+  needsAnalysisEnabled: read('VITE_NEEDS_ANALYSIS_ENABLED') === 'true',
   mode: raw.MODE,
   isDev: raw.DEV,
   isProd: raw.PROD,

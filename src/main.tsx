@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { OptimizedAppRouter } from '@/router/OptimizedAppRouter'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
-import { getSupabase } from '@/services/supabase'
 import { performanceMonitor } from '@/utils/performance'
 import { installApiDebugInterceptor } from '@/dev/apiDebug'
 import { installGlobalErrorTracking } from '@/dev/errorTracker'
@@ -16,10 +15,7 @@ if (typeof window !== 'undefined') {
   }
 }
 
-// Initialize Supabase early so cross-subdomain session adoption (cookie handoff) runs at startup
-getSupabase()
-
-// Install dev-only API debug interceptor
+// Install dev-only debugging (stub implementations)
 if (import.meta.env.DEV) {
   installApiDebugInterceptor()
   installGlobalErrorTracking()

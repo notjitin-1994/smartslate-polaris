@@ -7,17 +7,17 @@ type HeaderSwirlBackgroundProps = {
 
 const HeaderSwirlBackground = memo(({ imageSrc = '/images/logos/logo-swirl.png', className = '' }: HeaderSwirlBackgroundProps) => {
   const baseSwirls = [
-    { id: 1, size: 92, left: '-4%', top: '-24%', opacity: 0.06, rotate: -12 },
-    { id: 2, size: 59, left: '6%', top: '36%', opacity: 0.10, rotate: 8 },
-    { id: 3, size: 109, left: '16%', top: '-22%', opacity: 0.08, rotate: 12 },
-    { id: 4, size: 76, left: '26%', top: '32%', opacity: 0.11, rotate: -10 },
-    { id: 5, size: 101, left: '38%', top: '-20%', opacity: 0.07, rotate: 5 },
-    { id: 6, size: 63, left: '50%', top: '38%', opacity: 0.12, rotate: -6 },
-    { id: 7, size: 109, left: '62%', top: '-18%', opacity: 0.06, rotate: 14 },
-    { id: 8, size: 66, left: '72%', top: '34%', opacity: 0.10, rotate: -4 },
-    { id: 9, size: 90, left: '82%', top: '-22%', opacity: 0.08, rotate: 6 },
-    { id: 10, size: 72, left: '90%', top: '40%', opacity: 0.12, rotate: -8 },
-    { id: 11, size: 102, left: '96%', top: '-20%', opacity: 0.06, rotate: 10 },
+    { id: 1, size: 92, left: '-4%', top: '-24%', opacity: 0.15, rotate: -12 },
+    { id: 2, size: 59, left: '6%', top: '36%', opacity: 0.22, rotate: 8 },
+    { id: 3, size: 109, left: '16%', top: '-22%', opacity: 0.18, rotate: 12 },
+    { id: 4, size: 76, left: '26%', top: '32%', opacity: 0.25, rotate: -10 },
+    { id: 5, size: 101, left: '38%', top: '-20%', opacity: 0.17, rotate: 5 },
+    { id: 6, size: 63, left: '50%', top: '38%', opacity: 0.24, rotate: -6 },
+    { id: 7, size: 109, left: '62%', top: '-18%', opacity: 0.16, rotate: 14 },
+    { id: 8, size: 66, left: '72%', top: '34%', opacity: 0.21, rotate: -4 },
+    { id: 9, size: 90, left: '82%', top: '-22%', opacity: 0.19, rotate: 6 },
+    { id: 10, size: 72, left: '90%', top: '40%', opacity: 0.23, rotate: -8 },
+    { id: 11, size: 102, left: '96%', top: '-20%', opacity: 0.15, rotate: 10 },
   ]
 
   const [isMobile, setIsMobile] = useState(false)
@@ -44,7 +44,7 @@ const HeaderSwirlBackground = memo(({ imageSrc = '/images/logos/logo-swirl.png',
         .map((s) => ({
           ...s,
           size: Math.round(s.size * 0.7),
-          opacity: Math.max(0.05, randomizeOpacity(s.opacity * 0.75)),
+          opacity: Math.max(0.12, randomizeOpacity(s.opacity * 0.85)),
         }))
     }
     return baseSwirls.map((s) => ({
@@ -61,7 +61,7 @@ const HeaderSwirlBackground = memo(({ imageSrc = '/images/logos/logo-swirl.png',
         style={{
           background:
             'radial-gradient(1200px 1200px at 80% 0%, rgba(var(--primary),0.10), transparent 60%),\
-             radial-gradient(900px 900px at 0% 100%, rgba(79,70,229,0.10), transparent 55%)',
+             radial-gradient(900px 900px at 0% 100%, rgba(var(--primary),0.06), transparent 55%)',
         }}
       />
 
@@ -92,7 +92,7 @@ const HeaderSwirlBackground = memo(({ imageSrc = '/images/logos/logo-swirl.png',
             height: `${s.size}px`,
             opacity: s.opacity,
             transform: `translateY(0) rotate(${s.rotate}deg)` as any,
-            filter: 'blur(0.4px) saturate(0.95)',
+            filter: 'saturate(1.1)',
             mixBlendMode: 'soft-light',
           }}
         />
@@ -121,6 +121,7 @@ const HeaderSwirlBackground = memo(({ imageSrc = '/images/logos/logo-swirl.png',
 
 HeaderSwirlBackground.displayName = 'HeaderSwirlBackground'
 
+export { HeaderSwirlBackground }
 export default HeaderSwirlBackground
 
 

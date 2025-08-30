@@ -7,10 +7,19 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
+    "build:strict": "tsc -b && vite build",
+    "typecheck": "tsc -b",
     "build:embed": "vite build -c vite.embed.config.ts",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:polaris": "TS_NODE_PROJECT=tsconfig.app.json node -r ./src/testing/setup.js -r tsconfig-paths/register -r tsx/cjs src/testing/sample-tests.ts",
+    "test:polaris:e2e": "TS_NODE_PROJECT=tsconfig.app.json node -r ./src/testing/setup.js -r tsconfig-paths/register -r tsx/cjs src/testing/sample-tests.ts e2e",
+    "test:polaris:bulk": "TS_NODE_PROJECT=tsconfig.app.json node -r ./src/testing/setup.js -r tsconfig-paths/register -r tsx/cjs src/testing/sample-tests.ts bulk",
+    "test:polaris:forms": "TS_NODE_PROJECT=tsconfig.app.json node -r ./src/testing/setup.js -r tsconfig-paths/register -r tsx/cjs src/testing/sample-tests.ts forms",
+    "test:polaris:performance": "TS_NODE_PROJECT=tsconfig.app.json node -r ./src/testing/setup.js -r tsconfig-paths/register -r tsx/cjs src/testing/sample-tests.ts performance",
+    "test:polaris:all": "TS_NODE_PROJECT=tsconfig.app.json node -r ./src/testing/setup.js -r tsconfig-paths/register -r tsx/cjs src/testing/sample-tests.ts all",
+    "test:demo": "tsx src/testing/demo.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.56.0",
@@ -26,22 +35,29 @@
     "lucide-react": "^0.542.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "react-hot-toast": "^2.6.0",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "7.8.1",
-    "recharts": "^3.1.2"
+    "recharts": "^3.1.2",
+    "remark-gfm": "^4.0.1",
+    "supabase": "^2.39.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.33.0",
+    "@types/node": "^24.3.0",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
-    "@vercel/node": "^5.3.13",
     "@vitejs/plugin-react": "^5.0.0",
     "autoprefixer": "^10.4.21",
+    "dotenv": "^17.2.1",
     "eslint": "^9.33.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
+    "tsconfig-paths": "^4.2.0",
+    "tsx": "^4.20.5",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.1",
     "vite": "^7.1.2"

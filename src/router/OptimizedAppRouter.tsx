@@ -1,101 +1,61 @@
 import { } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { paths } from '@/routes/paths'
 import { ProtectedRoute } from '@/components/ProtectedRoute'
 import { withLazyLoad } from '@/components/LazyLoad'
-import { DevDebugButton } from '@/components/DevDebugButton'
+
 import SmallScreenGate from '@/components/SmallScreenGate'
-import { RouteBreadcrumbs } from '@/router/RouteBreadcrumbs'
 
 // Eagerly loaded components (needed immediately)
 import AuthCallback from '@/pages/AuthCallback'
 
-// Lazy load all other pages for better performance
+// Lazy load required pages only
 const AuthLanding = withLazyLoad(() => import('@/pages/AuthLanding'))
 const PortalPage = withLazyLoad(() => import('@/pages/PortalPage').then(m => ({ default: m.PortalPage })))
-const SettingsContent = withLazyLoad(() => import('@/portal/SettingsContent').then(m => ({ default: m.SettingsContent })))
-const PublicProfile = withLazyLoad(() => import('@/pages/PublicProfile').then(m => ({ default: m.PublicProfile })))
-const PublicReportView = withLazyLoad(() => import('@/pages/PublicReportView'))
-const PolarisRevampedV3 = withLazyLoad(() => import('@/pages/PolarisRevampedV3'))
-const StarmapJobsDashboard = withLazyLoad(() => import('@/components/StarmapJobsDashboard.simple'))
+const BeginDiscovery = withLazyLoad(() => import('@/pages/BeginDiscovery'))
+const DiscoveryViewer = withLazyLoad(() => import('@/pages/DiscoveryViewer'))
+const HomeDashboard = withLazyLoad(() => import('@/components/HomeDashboard').then(m => ({ default: m.HomeDashboard })))
+const DynamicQuestionnaireDemo = withLazyLoad(() => import('@/components/forms/DynamicQuestionnaire/DemoPage').then(m => ({ default: m.DemoPage })))
+const LoadingTest = withLazyLoad(() => import('@/pages/LoadingTest'))
 const Pricing = withLazyLoad(() => import('@/pages/Pricing'))
-const ReportsDebug = withLazyLoad(() => import('@/pages/ReportsDebug'))
-const ApiDebug = withLazyLoad(() => import('@/pages/ApiDebug'))
-const CardComparison = withLazyLoad(() => import('@/pages/CardComparison'))
-const ReportStarmapPage = withLazyLoad(() => import('@/pages/ReportStarmapPage'))
 
-// Needs Analysis pages
-const NeedsAnalysisDashboard = withLazyLoad(() => import('@/features/needs-analysis/pages/NeedsAnalysisDashboard').then(m => ({ default: m.NeedsAnalysisDashboard })))
-const NeedsAnalysisWizard = withLazyLoad(() => import('@/features/needs-analysis/components/NeedsWizard').then(m => ({ default: m.NeedsWizard })))
-const DiagnosticFlow = withLazyLoad(() => import('@/features/needs-analysis/components/Diagnostic').then(m => ({ default: m.DiagnosticFlow })))
-const RecommendationView = withLazyLoad(() => import('@/features/needs-analysis/components/Recommendation').then(m => ({ default: m.RecommendationView })))
-const ReportView = withLazyLoad(() => import('@/features/needs-analysis/components/Report').then(m => ({ default: m.ReportView })))
-
-// Job-based Polaris routes removed; only /discover remains active
-
-// App-wide fallback removed to avoid blocking page content while auth initializes
-
-/**
- * Optimized App Router with lazy loading and code splitting
- */
 export function OptimizedAppRouter() {
   return (
     <BrowserRouter>
       <AuthProvider>
         <SmallScreenGate minWidthPx={800}>
-        {import.meta.env.DEV && <RouteBreadcrumbs />}
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<AuthLanding />} />
             <Route path="/auth/callback" element={<AuthCallback />} />
-            {/* Pricing is shown within the portal layout */}
-            <Route path={paths.publicProfile} element={<PublicProfile />} />
-            <Route path="/report/public/:id" element={<PublicReportView />} />
-            <Route path="/report/public/starmap/:id" element={<PublicReportView />} />
-            {import.meta.env.DEV && (
-              <>
-                <Route path="/dev/debug" element={<ApiDebug />} />
-                <Route path="/dev/card-comparison" element={<CardComparison />} />
-              </>
-            )}
-            
-            
+            <Route path="/loading-test" element={<LoadingTest />} />
+            <Route path={paths.pricing} element={<Pricing />} />
+
             {/* Protected routes - require authentication */}
             <Route element={<ProtectedRoute />}>
               <Route path={paths.portal} element={<PortalPage />}>
-                <Route index element={<StarmapJobsDashboard />} />
-                <Route path="settings" element={<SettingsContent />} />
-                <Route path="discover" element={<PolarisRevampedV3 />} />
-                <Route path="report/starmap/:id" element={<ReportStarmapPage />} />
-                <Route path="pricing" element={<Pricing />} />
-                <Route path="debug/reports" element={<ReportsDebug />} />
-                <Route path="briefings" element={<Navigate to="/discover" replace />} />
-                <Route path="summaries" element={<Navigate to="/discover" replace />} />
+                <Route index element={<HomeDashboard />} />
+                <Route path="begin-discovery" element={<BeginDiscovery />} />
+                <Route path="questionnaire-demo" element={<DynamicQuestionnaireDemo />} />
               </Route>
-              
-              {/* Needs Analysis Routes */}
-              <Route path="needs-analysis">
-                <Route index element={<NeedsAnalysisDashboard />} />
-                <Route path="new" element={<NeedsAnalysisWizard />} />
-                <Route path=":id/intake" element={<NeedsAnalysisWizard />} />
-                <Route path=":id/diagnostic" element={<DiagnosticFlow />} />
-                <Route path=":id/recommendation" element={<RecommendationView />} />
-                <Route path=":id/report" element={<ReportView />} />
+              {/* Explicit absolute route to ensure direct navigation works and still uses Portal shell */}
+              <Route path="/discoveries/:starmapID" element={<PortalPage />}>
+                <Route index element={<DiscoveryViewer />} />
               </Route>
             </Route>
-            
+
             {/* 404 fallback */}
             <Route
               path="*"
               element={
-                <div className="min-h-screen bg-gradient-to-br from-[#020C1B] to-[#0A1628] flex items-center justify-center">
+                <div className="min-h-screen bg-[rgb(var(--bg))] flex items-center justify-center">
                   <div className="text-center text-white">
                     <h1 className="text-6xl font-bold mb-4">404</h1>
                     <p className="text-xl mb-8 text-white/60">Page not found</p>
                     <a
                       href="/"
-                      className="inline-block px-6 py-3 bg-primary-500 hover:bg-primary-600 rounded-lg transition-colors"
+                      className="inline-block px-6 py-3 bg-secondary-500 hover:bg-secondary-600 rounded-lg transition-colors"
                     >
                       Go Home
                     </a>
@@ -104,8 +64,6 @@ export function OptimizedAppRouter() {
               }
             />
           </Routes>
-          {import.meta.env.DEV && <DevDebugButton />}
-          
         </SmallScreenGate>
       </AuthProvider>
     </BrowserRouter>

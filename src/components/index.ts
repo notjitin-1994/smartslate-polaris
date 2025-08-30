@@ -2,18 +2,11 @@
 export { PasswordInput } from './PasswordInput'
 export { ProtectedRoute } from './ProtectedRoute'
 export { RichTextEditor } from './RichTextEditor'
-export { StaticSwirls } from './StaticSwirls'
-export { SwirlField } from './SwirlField'
-export { AIReportEditor } from './AIReportEditor'
-export { AIReportEditorEnhanced } from './AIReportEditorEnhanced'
-export type { EditRequest, AIReportEditorProps } from './AIReportEditor'
-export type { AIReportEditorEnhancedProps } from './AIReportEditorEnhanced'
+// Removed AIReportEditor exports
 export { IconButton } from './ui/IconButton'
-export { SolaraLodestar } from './SolaraLodestar'
+// Removed SolaraLodestar export
 export { default as SmallScreenNotice } from './SmallScreenNotice'
 export { default as SmallScreenGate } from './SmallScreenGate'
 
-// Enhanced UI Components for Starmap Creation
-export { StepIndicator, WizardContainer, FieldCard, ActionButtons, ProgressBar } from './StarmapWizard'
-export { default as EnhancedReportDisplay } from './EnhancedReportDisplay'
+// Removed Starmap/Report exports
 export { default as SiteFooter } from './SiteFooter'

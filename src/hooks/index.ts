@@ -4,5 +4,6 @@ export { useLocalStorage } from './useLocalStorage'
 export { useAsync } from './useAsync'
 export { useDocumentTitle } from './useDocumentTitle'
 export * from './usePerformance'
+export * from './usePerformanceOptimization'
 
 // Re-export types when needed

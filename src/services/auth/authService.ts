@@ -2,6 +2,7 @@ import { getSupabase } from '@/services/supabase'
 import { env } from '@/config/env'
 import { getAuthRedirectUrl } from '@/utils/domainUtils'
 import { AuthError, ValidationError } from '@/lib/errors'
+import { crossDomainAuth } from '@/services/auth/crossDomainAuth'
 import type { User, Session } from '@supabase/supabase-js'
 
 // Email validation regex
@@ -10,6 +11,11 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export interface AuthCredentials {
   email: string
   password: string
+  rememberMe?: boolean
+}
+
+export interface SignUpCredentials extends AuthCredentials {
+  fullName?: string
 }
 
 export interface AuthState {
@@ -40,7 +46,7 @@ function validatePassword(password: string): void {
 /**
  * Sign in with email and password
  */
-export async function signIn({ email, password }: AuthCredentials): Promise<{ user: User; session: Session }> {
+export async function signIn({ email, password, rememberMe = false }: AuthCredentials): Promise<{ user: User; session: Session }> {
   try {
     validateEmail(email)
     
@@ -54,6 +60,10 @@ export async function signIn({ email, password }: AuthCredentials): Promise<{ us
     })
     
     if (error) {
+      // Surface Supabase 400 errors clearly to the UI
+      if (typeof (error as any)?.status === 'number' && (error as any).status === 400) {
+        throw new AuthError(error.message)
+      }
       if (error.message.includes('Invalid login credentials')) {
         throw new AuthError('Invalid email or password')
       }
@@ -63,6 +73,9 @@ export async function signIn({ email, password }: AuthCredentials): Promise<{ us
     if (!data.user || !data.session) {
       throw new AuthError('Authentication failed')
     }
+    
+    // Store session with remember me preference
+    await crossDomainAuth.storeSession(data.session, rememberMe)
     
     return { user: data.user, session: data.session }
   } catch (error) {
@@ -76,21 +89,30 @@ export async function signIn({ email, password }: AuthCredentials): Promise<{ us
 /**
  * Sign up with email and password
  */
-export async function signUp({ email, password }: AuthCredentials): Promise<{ user: User | null }> {
+export async function signUp({ email, password, fullName }: SignUpCredentials): Promise<{ user: User | null }> {
   try {
     validateEmail(email)
     validatePassword(password)
     
     const redirectTo = env.authRedirectUrl || env.siteUrl || undefined
     
+    // Prepare user metadata
+    const userData: Record<string, any> = {
+      email_confirmed: false,
+    }
+    
+    // Add full name to user metadata if provided
+    if (fullName && fullName.trim()) {
+      userData.full_name = fullName.trim()
+      userData.display_name = fullName.trim()
+    }
+    
     const { data, error } = await getSupabase().auth.signUp({
       email: email.toLowerCase().trim(),
       password,
       options: { 
         emailRedirectTo: redirectTo,
-        data: {
-          email_confirmed: false,
-        }
+        data: userData
       },
     })
     
@@ -144,6 +166,9 @@ export async function signInWithGoogle(): Promise<void> {
  */
 export async function signOut(): Promise<void> {
   try {
+    // Clear cross-domain session first
+    await crossDomainAuth.clearSession()
+    
     const { error } = await getSupabase().auth.signOut()
     
     if (error) {

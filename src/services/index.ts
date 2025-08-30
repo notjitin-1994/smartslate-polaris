@@ -1,8 +1,14 @@
-// Auth services
+// Stable service exports for app imports
+
+// Auth services (Supabase-based; app may replace provider via contexts)
 export * from './auth/authService'
 
-// Supabase client
+// Supabase client (optional in client-only mode)
 export { getSupabase } from '../lib/supabaseClient'
 
-// Stub services for removed backend functionality
-export * from './stubs'
+// Removed AI services exports
+
+// Production services removed
+
+// Legacy/stub endpoints removed
+export * from './starmaps'

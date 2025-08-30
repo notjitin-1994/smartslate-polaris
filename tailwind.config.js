@@ -18,6 +18,7 @@ export default {
           400: '#7C69F5',
           500: '#4F46E5',
           600: '#3730A3',
+          700: '#312E81',
         },
         // Utility alias for emphasis/selection overlays
         brand: {
@@ -57,6 +58,18 @@ export default {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.5' },
         },
+        modalSlideUp: {
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        fieldExpand: {
+          '0%': { maxHeight: '0', opacity: '0', transform: 'translateY(-4px)' },
+          '100%': { maxHeight: '120px', opacity: '1', transform: 'translateY(0)' },
+        },
+        fieldCollapse: {
+          '0%': { maxHeight: '120px', opacity: '1', transform: 'translateY(0)' },
+          '100%': { maxHeight: '0', opacity: '0', transform: 'translateY(-4px)' },
+        },
       },
       animation: {
         'fade-in': 'fadeIn 200ms ease-out',
@@ -66,6 +79,9 @@ export default {
         'slide-in-right': 'slideInRight 280ms cubic-bezier(0.22,1,0.36,1)',
         shimmer: 'shimmer 1.8s linear infinite',
         'pulse-subtle': 'pulseSubtle 2s ease-in-out infinite',
+        'modal-slide-up': 'modalSlideUp 250ms cubic-bezier(0.4, 0, 0.2, 1)',
+        'field-expand': 'fieldExpand 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+        'field-collapse': 'fieldCollapse 200ms cubic-bezier(0.4, 0, 0.2, 1)',
       },
     },
   },

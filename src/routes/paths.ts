@@ -5,13 +5,8 @@ export const paths = {
   settings: '/settings',
   pricing: '/pricing',
   publicProfile: '/:username',
-  needsAnalysis: '/needs-analysis',
-  needsAnalysisNew: '/needs-analysis/new',
-  needsAnalysisProject: '/needs-analysis/:id',
-  needsAnalysisIntake: '/needs-analysis/:id/intake',
-  needsAnalysisDiagnostic: '/needs-analysis/:id/diagnostic',
-  needsAnalysisRecommendation: '/needs-analysis/:id/recommendation',
-  needsAnalysisReport: '/needs-analysis/:id/report',
+  discoveryStart: '/begin-discovery',
+  discoveryView: (id: string) => `/discoveries/${id}`,
 } as const
 
 export type AppPath = typeof paths[keyof typeof paths]

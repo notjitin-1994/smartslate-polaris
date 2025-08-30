@@ -1,7 +1,7 @@
 import { Component } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { formatErrorMessage } from '@/lib/errors'
-import { reportError } from '@/dev/errorTracker'
+// Local dev error tracker removed
 
 interface Props {
   children: ReactNode
@@ -50,9 +50,7 @@ export class ErrorBoundary extends Component<Props, State> {
     this.props.onError?.(error, errorInfo)
     
     // Report to local dev error tracker
-    try {
-      reportError(error, { type: 'boundary', origin: 'ErrorBoundary', context: { componentStack: errorInfo.componentStack } })
-    } catch {}
+    // no-op
 
     // Send error to monitoring service in production
     if (import.meta.env.PROD) {
@@ -151,7 +149,7 @@ export class ErrorBoundary extends Component<Props, State> {
               </button>
               <button
                 onClick={this.handleReload}
-                className="flex-1 px-4 py-2 bg-primary-500 hover:bg-primary-600 rounded-lg text-white transition-colors"
+                className="flex-1 px-4 py-2 bg-secondary-500 hover:bg-secondary-600 rounded-lg text-white transition-colors"
               >
                 Reload Page
               </button>

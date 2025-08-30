@@ -20,20 +20,15 @@ const AuthLoading = () => (
  * Protected route wrapper that requires authentication
  */
 export function ProtectedRoute() {
-  const { isAuthenticated, loading } = useAuth()
+  const { isAuthenticated, initializing } = useAuth()
   const location = useLocation()
-  
-  // Show loading state while checking auth
-  if (loading) {
-    return <AuthLoading />
-  }
-  
+
+  // Avoid premature redirects while auth is initializing
+  if (initializing) return <AuthLoading />
+
+  // If authenticated, render child routes
+  if (isAuthenticated) return <Outlet />
+
   // Redirect to login if not authenticated
-  if (!isAuthenticated) {
-    // Save the attempted location for redirect after login
-    return <Navigate to="/login" state={{ from: location }} replace />
-  }
-  
-  // Render child routes if authenticated
-  return <Outlet />
+  return <Navigate to="/login" state={{ from: location }} replace />
 }

@@ -9,7 +9,6 @@ Smartslate Polaris is a React + Vite application for creating AI-assisted L&D di
 - Job-based Polaris flow and dashboards
 - AI-assisted report generation and editing
 - Webhook-backed async report jobs and monitoring
-- Dev-only API debug overlay
 
 ## Quick Start
 
@@ -37,7 +36,7 @@ npm run build && npm run preview
 ## Key Routes
 
 - Public: `/login`, `/auth/callback`, `/pricing`, `/:username`, `/report/public/:id`
-- Dev only: `/dev/debug`, `/dev/card-comparison`
+- Dev only: `/dev/card-comparison`
 - Portal (protected): `/` with nested
   - `discover` (new starmap)
   - `starmaps` and `starmap/:id`

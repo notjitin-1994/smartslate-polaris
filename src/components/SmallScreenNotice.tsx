@@ -1,4 +1,4 @@
-import StarryBackground from '@/components/StarryBackground'
+import StarryBackground from './StarryBackground'
 
 type SmallScreenNoticeProps = {
   minWidthPx?: number
@@ -11,14 +11,12 @@ export function SmallScreenNotice({ minWidthPx = 800 }: SmallScreenNoticeProps) 
       <div className="relative z-10 w-full max-w-md text-center">
         <div className="mb-6 inline-flex items-center gap-3">
           <img src="/images/logos/logo.png" alt="Smartslate" className="h-10 w-auto" />
-          <span className="text-white/80 font-semibold tracking-wide">Polaris</span>
+          <span className="text-white/80 font-semibold tracking-wide">Smartslate</span>
         </div>
 
         <div className="glass-card border border-white/10 rounded-2xl px-6 py-8 backdrop-blur-xl bg-white/5 shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
           <h1 className="text-2xl font-heading font-bold text-white">Best experienced on a larger screen</h1>
-          <p className="mt-3 text-white/70">
-            For clarity and the full Polaris experience, please visit on a tablet, laptop, or desktop.
-          </p>
+          <p className="mt-3 text-white/70">For clarity and the best experience, please visit on a tablet, laptop, or desktop.</p>
           <div className="mt-6 grid grid-cols-3 gap-3 text-left">
             <div className="rounded-xl border border-white/10 bg-white/5 p-4">
               <div className="h-3 w-16 rounded bg-primary-400/40 mb-2" />

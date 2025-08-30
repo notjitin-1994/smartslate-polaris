@@ -1,25 +1,30 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import type { User, Session } from '@supabase/supabase-js'
 import { getSupabase } from '@/services/supabase'
 import * as authService from '@/services/auth/authService'
 import { AuthError, ValidationError } from '@/lib/errors'
 import { paths } from '@/routes/paths'
-import { setUserContext } from '@/dev/errorTracker'
+// Dev error tracker removed
+import { sessionTracker } from '@/services/sessionTracker'
+import { crossDomainAuth } from '@/services/auth/crossDomainAuth'
 
 interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
+  initializing: boolean
   error: string | null
   isAuthenticated: boolean
-  signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string) => Promise<void>
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<void>
+  signUp: (email: string, password: string, fullName?: string) => Promise<void>
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
   updatePassword: (newPassword: string) => Promise<void>
   clearError: () => void
+  rememberMe: boolean
+  setRememberMe: (value: boolean) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -36,8 +41,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const location = useLocation()
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [initializing, setInitializing] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [rememberMe, setRememberMe] = useState(false)
+  const rememberMeRef = useRef<boolean>(rememberMe)
+
+  // Keep a live reference for auth event handlers to read latest preference
+  useEffect(() => {
+    rememberMeRef.current = rememberMe
+  }, [rememberMe])
   
   // Check if user is authenticated
   const isAuthenticated = useMemo(() => !!user && !!session, [user, session])
@@ -45,21 +58,63 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Initialize auth state
   useEffect(() => {
     let mounted = true
+    // Safety timeout: never hang on initializing more than ~1.5s
+    const initTimeout = setTimeout(() => {
+      if (mounted) setInitializing(false)
+    }, 1500)
     
     const initAuth = async () => {
       try {
-        const currentSession = await authService.getSession()
+        // Check remember me preference
+        const isRemembered = crossDomainAuth.isRememberMeEnabled()
+        setRememberMe(isRemembered)
         
-        if (mounted) {
-          setSession(currentSession)
-          setUser(currentSession?.user ?? null)
-          try { if (import.meta.env.DEV) setUserContext(currentSession?.user ? { id: currentSession.user.id, email: currentSession.user.email || undefined } : null) } catch {}
+        // Try to restore session from cross-domain storage first
+        const storedSession = await crossDomainAuth.getStoredSession()
+        if (storedSession && mounted) {
+          // Reconstruct Supabase session format
+          const restoredSession: Session = {
+            access_token: storedSession.access_token,
+            refresh_token: storedSession.refresh_token,
+            expires_at: storedSession.expires_at,
+            expires_in: Math.max(0, storedSession.expires_at - Math.floor(Date.now() / 1000)),
+            token_type: 'bearer',
+            user: storedSession.user
+          }
+          
+          // Set the session in Supabase client
+          await getSupabase().auth.setSession(restoredSession)
+          
+          setSession(restoredSession)
+          setUser(storedSession.user)
+        } else {
+          // Fallback to regular session check
+          const currentSession = await authService.getSession()
+          
+          if (mounted) {
+            setSession(currentSession)
+            setUser(currentSession?.user ?? null)
+          }
+        }
+        
+        // Start session tracking if authenticated
+        const finalSession = storedSession || (await authService.getSession())
+        if (finalSession?.user && mounted) {
+          try {
+            sessionTracker.start({
+              userId: finalSession.user.id,
+              tokenType: 'bearer',
+              accessToken: finalSession.access_token,
+              refreshToken: finalSession.refresh_token,
+              expiresAt: typeof finalSession.expires_at === 'number' ? (finalSession.expires_at * 1000) : null
+            })
+          } catch {}
         }
       } catch (error) {
         console.error('Failed to initialize auth:', error)
       } finally {
         if (mounted) {
-          setLoading(false)
+          setInitializing(false)
         }
       }
     }
@@ -73,39 +128,60 @@ export function AuthProvider({ children }: AuthProviderProps) {
         
         setSession(newSession)
         setUser(newSession?.user ?? null)
-        try { if (import.meta.env.DEV) setUserContext(newSession?.user ? { id: newSession.user.id, email: newSession.user.email || undefined } : null) } catch {}
         
-        // Handle different auth events
         switch (event) {
           case 'SIGNED_IN':
-            // Only redirect to home if we are coming from auth routes
+            // Store session in cross-domain storage
+            if (newSession) {
+              await crossDomainAuth.storeSession(newSession, rememberMeRef.current)
+            }
+            try {
+              if (newSession?.user) {
+                sessionTracker.start({
+                  userId: newSession.user.id,
+                  tokenType: (newSession as any)?.token_type,
+                  accessToken: (newSession as any)?.access_token,
+                  refreshToken: (newSession as any)?.refresh_token,
+                  expiresAt: typeof (newSession as any)?.expires_at === 'number' ? ((newSession as any).expires_at * 1000) : null
+                })
+              }
+            } catch {}
+            // Handle redirect back to the intended route if present; otherwise, let page-level logic decide
             try {
               const pathname = location?.pathname || (typeof window !== 'undefined' ? window.location.pathname : '/')
               const isAuthRoute = pathname === '/login' || pathname.startsWith('/auth/callback')
-              if (isAuthRoute) navigate(paths.home, { replace: true })
+              if (isAuthRoute) {
+                const stored = typeof window !== 'undefined' ? window.sessionStorage.getItem('redirectAfterLogin') : null
+                if (stored) {
+                  const from = JSON.parse(stored)
+                  const to = `${from?.pathname || '/'}${from?.search || ''}${from?.hash || ''}`
+                  try { window.sessionStorage.removeItem('redirectAfterLogin') } catch {}
+                  navigate(to, { replace: true })
+                }
+              }
             } catch {
-              // no-op
             }
             break
           case 'SIGNED_OUT':
-            // Clear state; redirect to login only if currently on protected areas
             setUser(null)
             setSession(null)
+            setRememberMe(false)
+            await crossDomainAuth.clearSession()
+            try { sessionTracker.end() } catch {}
             try {
               const pathname = location?.pathname || (typeof window !== 'undefined' ? window.location.pathname : '/')
-              // Root is protected and all first-level portal routes are at root now
               const isProtected = pathname === '/' || pathname.startsWith('/settings') || pathname.startsWith('/discover') || pathname.startsWith('/seed')
               if (isProtected) navigate('/login')
             } catch {
-              // no-op
             }
             break
           case 'TOKEN_REFRESHED':
-            // Session refreshed successfully
-            console.log('Session refreshed')
+            if (newSession) {
+              await crossDomainAuth.storeSession(newSession, rememberMeRef.current)
+            }
+            try { sessionTracker.touch() } catch {}
             break
           case 'USER_UPDATED':
-            // User data updated
             if (newSession?.user) {
               setUser(newSession.user)
             }
@@ -114,11 +190,37 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
     )
     
+    // Setup cross-tab synchronization
+    const unsubscribeSync = crossDomainAuth.setupCrossTabSync(async (storedSession) => {
+      if (!mounted) return
+      
+      if (storedSession) {
+        const restoredSession: Session = {
+          access_token: storedSession.access_token,
+          refresh_token: storedSession.refresh_token,
+          expires_at: storedSession.expires_at,
+          expires_in: Math.max(0, storedSession.expires_at - Math.floor(Date.now() / 1000)),
+          token_type: 'bearer',
+          user: storedSession.user
+        }
+        
+        await getSupabase().auth.setSession(restoredSession)
+        setSession(restoredSession)
+        setUser(storedSession.user)
+      } else {
+        setSession(null)
+        setUser(null)
+        setRememberMe(false)
+      }
+    })
+    
     return () => {
       mounted = false
+      clearTimeout(initTimeout)
       subscription.unsubscribe()
+      unsubscribeSync()
     }
-  }, [navigate, location])
+  }, [navigate, location, rememberMe])
   
   // Clear error
   const clearError = useCallback(() => {
@@ -126,15 +228,28 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
   
   // Sign in
-  const signIn = useCallback(async (email: string, password: string) => {
+  const signIn = useCallback(async (email: string, password: string, rememberMeValue?: boolean) => {
     try {
       setError(null)
       setLoading(true)
       
-      const { user, session } = await authService.signIn({ email, password })
+      const shouldRemember = rememberMeValue ?? rememberMe
+      
+      const { user, session } = await authService.signIn({ email, password, rememberMe: shouldRemember })
       
       setUser(user)
       setSession(session)
+      setRememberMe(shouldRemember)
+      
+      try {
+        await sessionTracker.start({
+          userId: user.id,
+          tokenType: (session as any)?.token_type,
+          accessToken: (session as any)?.access_token,
+          refreshToken: (session as any)?.refresh_token,
+          expiresAt: typeof (session as any)?.expires_at === 'number' ? ((session as any).expires_at * 1000) : null
+        })
+      } catch {}
     } catch (error) {
       const message = error instanceof AuthError || error instanceof ValidationError
         ? error.message
@@ -144,15 +259,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [rememberMe])
   
   // Sign up
-  const signUp = useCallback(async (email: string, password: string) => {
+  const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
     try {
       setError(null)
       setLoading(true)
       
-      const { user } = await authService.signUp({ email, password })
+      const { user } = await authService.signUp({ email, password, fullName })
       
       if (user) {
         setUser(user)
@@ -190,8 +305,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const signOut = useCallback(async () => {
     try {
       setError(null)
-      setLoading(true)
       
+      try { await sessionTracker.end() } catch {}
       await authService.signOut()
       
       setUser(null)
@@ -202,8 +317,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
         : 'Failed to sign out'
       setError(message)
       throw error
-    } finally {
-      setLoading(false)
     }
   }, [])
   
@@ -248,6 +361,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       user,
       session,
       loading,
+      initializing,
       error,
       isAuthenticated,
       signIn,
@@ -257,11 +371,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       resetPassword,
       updatePassword,
       clearError,
+      rememberMe,
+      setRememberMe,
     }),
     [
       user,
       session,
       loading,
+      initializing,
       error,
       isAuthenticated,
       signIn,
@@ -271,6 +388,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       resetPassword,
       updatePassword,
       clearError,
+      rememberMe,
+      setRememberMe,
     ]
   )
   

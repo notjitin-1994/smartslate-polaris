@@ -28,3 +28,6 @@ dist-ssr
 .env.*
 .env.local
 .vercel
+
+# Debug exports
+debug-export-*.json

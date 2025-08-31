@@ -32,7 +32,7 @@ export async function createStarmapDraft(params?: {
   // Insert minimal fields to avoid unknown column errors
   const { data, error } = await supabase
     .from('master_discovery')
-    .insert({ user_id: userId } as any)
+    .insert({ user_id: userId, status: 'draft' } as any)
     .select('*')
     .single()
 

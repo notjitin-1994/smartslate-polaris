@@ -87,6 +87,17 @@ export default async function handler(request: Request): Promise<Response> {
     const { createClient } = await import('@supabase/supabase-js')
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false }, global: { fetch } })
 
+    // Authorization: require user access token and verify ownership
+    const authHeader = request.headers.get('authorization') || request.headers.get('Authorization')
+    const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+    if (!token) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } })
+    }
+    const { data: authData, error: authErr } = await supabase.auth.getUser(token)
+    if (authErr || !authData?.user) {
+      return new Response(JSON.stringify({ error: 'Invalid token' }), { status: 401, headers: { 'Content-Type': 'application/json' } })
+    }
+
     // Fetch the latest row to build context
     const { data: row, error: fetchErr } = await supabase
       .from('master_discovery')
@@ -96,6 +107,11 @@ export default async function handler(request: Request): Promise<Response> {
 
     if (fetchErr || !row) {
       return new Response(JSON.stringify({ error: 'Record not found', details: fetchErr?.message }), { status: 404, headers: { 'Content-Type': 'application/json' } })
+    }
+
+    // Enforce ownership: user can only update their own document
+    if ((row as any)?.user_id !== authData.user.id) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { 'Content-Type': 'application/json' } })
     }
 
     const systemPrompt = `You are an expert Learning Experience Architect and Prompt Engineer.

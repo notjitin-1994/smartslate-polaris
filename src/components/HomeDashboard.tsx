@@ -501,7 +501,12 @@ export function HomeDashboard() {
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={() => {
-                                const shouldShowLoading = job.status === 'submitted' || job.status === 'generating_dynamic_questions'
+                                const inProgressStatuses: Array<Job['status']> = [
+                                  'generating_dynamic_questions',
+                                  'generating_report',
+                                  'in_progress'
+                                ]
+                                const shouldShowLoading = inProgressStatuses.includes(job.status)
                                 const url = shouldShowLoading 
                                   ? `/begin-discovery?starmapId=${job.id}&loading=1` 
                                   : `/begin-discovery?starmapId=${job.id}`

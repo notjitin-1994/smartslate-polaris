@@ -131,43 +131,28 @@ async function saveStaticStageAnswers(params: {
   if (!recordId) return
   if (Object.keys(stagePayload).length === 0) return
   try {
-    // Try server-side nested merge RPC (idempotent)
-    const { error: rpcError } = await supabase.rpc('save_static_stage_answers', {
-      p_id: recordId,
-      p_stage: stageKey,
-      p_answers: stagePayload
-    })
-    if (rpcError) throw rpcError
+    // Merge on client to avoid dependency on DB RPC availability
+    const { data, error: readErr } = await supabase
+      .from('master_discovery')
+      .select('static_answers')
+      .eq('id', recordId)
+      .single()
+    if (readErr) throw readErr
+    const serverAnswers = (data && (data as any).static_answers) || {}
+    const prevStageBlock = (serverAnswers && (serverAnswers as any)[stageKey]) || {}
+    const mergedStage = { ...prevStageBlock, ...stagePayload }
+    const merged = { ...serverAnswers, [stageKey]: mergedStage }
+    const { error: updateErr } = await supabase
+      .from('master_discovery')
+      .update({ static_answers: merged })
+      .eq('id', recordId)
+    if (updateErr) throw updateErr
     if (setShowSaveIndicator) {
       setShowSaveIndicator(true)
       setTimeout(() => setShowSaveIndicator(false), 2000)
     }
-    return
-  } catch (rpcErr) {
-    // Fallback: client-side merge to avoid overwriting other stages
-    try {
-      const { data, error: readErr } = await supabase
-        .from('master_discovery')
-        .select('static_answers')
-        .eq('id', recordId)
-        .single()
-      if (readErr) throw readErr
-      const serverAnswers = (data && (data as any).static_answers) || {}
-      const prevStageBlock = (serverAnswers && (serverAnswers as any)[stageKey]) || {}
-      const mergedStage = { ...prevStageBlock, ...stagePayload }
-      const merged = { ...serverAnswers, [stageKey]: mergedStage }
-      const { error: updateErr } = await supabase
-        .from('master_discovery')
-        .update({ static_answers: merged })
-        .eq('id', recordId)
-      if (updateErr) throw updateErr
-      if (setShowSaveIndicator) {
-        setShowSaveIndicator(true)
-        setTimeout(() => setShowSaveIndicator(false), 2000)
-      }
-    } catch (fallbackErr) {
-      console.error('Error saving static answers (fallback):', fallbackErr)
-    }
+  } catch (fallbackErr) {
+    console.error('Error saving static answers:', fallbackErr)
   }
 }
 
@@ -333,7 +318,7 @@ export function StarmapRequestForm({ onComplete, initialStep = 'requestor', star
           const isNonEmpty = (hasStages && (data as any).dynamic_questions.stages.length > 0) || (hasArray && (data as any).dynamic_questions.length > 0)
           if (isNonEmpty) {
             setDynamicQuestions(data.dynamic_questions)
-            if (data.status === 'in_progress' || data.status === 'submitted') {
+            if (data.status === 'in_progress') {
               setShowQuestionnaire(true)
             }
           }
@@ -567,7 +552,7 @@ export function StarmapRequestForm({ onComplete, initialStep = 'requestor', star
       } else {
         const { data, error } = await supabase
           .from('master_discovery')
-          .insert([{ user_id: user.id }])
+          .insert([{ user_id: user.id, status: 'draft' } as any])
           .select('id')
           .single()
         if (error) throw error
@@ -664,21 +649,7 @@ export function StarmapRequestForm({ onComplete, initialStep = 'requestor', star
         setShowSaveIndicator: setShowSaveIndicator
       })
 
-      // Update the record status (no individual columns)
-      const { data: updatedRow, error: updateError } = await supabase
-        .from('master_discovery')
-        .update({ status: 'submitted' })
-        .eq('id', recordId)
-        .select('id')
-        .single()
-
-      if (updateError) {
-        throw updateError
-      }
-
-      if (!updatedRow?.id) {
-        throw new Error('Update did not return a row')
-      }
+      // Skip explicit status update to avoid 400 Bad Request due to DB constraints on master_discovery
 
       // Reset static form on successful save and immediately show loader
       await scrollToTopSmooth()

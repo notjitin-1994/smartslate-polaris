@@ -61,12 +61,18 @@ export default function BeginDiscovery() {
         const group = (source as any)?.group || undefined
         setInitialData({ requestor, group })
 
-        // Decide phase based on presence of dynamic questions
+        // Decide phase based on presence of dynamic questions, answers, and status
         const dq = (row as any)?.dynamic_questions
+        const status = (row as any)?.status as string | undefined
+        const staticAnswered = !!(requestor || group)
+
         if (hasNonEmptyDynamicQuestions(dq)) {
           setDynamicQuestions(dq)
           setPhase('dynamic')
         } else if (forceLoading) {
+          setPhase('loading')
+        } else if (staticAnswered || status === 'generating_dynamic_questions' || status === 'awaiting_dynamic_answers') {
+          // Static submitted but dynamic not yet ready → show loading
           setPhase('loading')
         } else {
           setPhase('static')

@@ -261,6 +261,11 @@ export default defineConfig({
           'storage': [
             './src/lib/clientStorage.ts',
             './src/lib/offlineSync.ts'
+          ],
+
+          // Charts (heavy)
+          'charts': [
+            'recharts'
           ]
         }
       }

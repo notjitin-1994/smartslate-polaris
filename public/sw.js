@@ -119,6 +119,16 @@ self.addEventListener('fetch', (event) => {
   }
 });
 
+// Listen for messages from the main thread (e.g., to clear cache on sign-out)
+self.addEventListener('message', (event) => {
+  const data = event?.data || {}
+  if (data && data.type === 'CLEAR_CACHE') {
+    event.waitUntil(
+      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+    )
+  }
+})
+
 // Background sync for queued operations
 self.addEventListener('sync', (event) => {
   if (event.tag === 'background-sync') {

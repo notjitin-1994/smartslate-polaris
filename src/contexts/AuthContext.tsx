@@ -50,6 +50,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Keep a live reference for auth event handlers to read latest preference
   useEffect(() => {
     rememberMeRef.current = rememberMe
+    try { (window as any).__SMARTSLATE_REMEMBER_ME = rememberMe } catch {}
   }, [rememberMe])
   
   // Check if user is authenticated
@@ -141,6 +142,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
               await crossDomainAuth.storeSession(newSession, rememberMeRef.current)
             }
             try {
+              // Ensure storage mode reflects current preference
+              try { (window as any).__SMARTSLATE_REMEMBER_ME = !!rememberMeRef.current } catch {}
               if (newSession?.user) {
                 sessionTracker.start({
                   userId: newSession.user.id,
@@ -172,6 +175,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setSession(null)
             setRememberMe(false)
             await crossDomainAuth.clearSession()
+            // Ask service worker to clear caches on sign-out
+            try { navigator.serviceWorker?.controller?.postMessage?.({ type: 'CLEAR_CACHE' }) } catch {}
             try { sessionTracker.end() } catch {}
             try {
               const pathname = location?.pathname || (typeof window !== 'undefined' ? window.location.pathname : '/')

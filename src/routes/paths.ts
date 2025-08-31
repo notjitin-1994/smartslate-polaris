@@ -6,7 +6,6 @@ export const paths = {
   pricing: '/pricing',
   publicProfile: '/:username',
   discoveryStart: '/begin-discovery',
-  discoveryView: (id: string) => `/discoveries/${id}`,
 } as const
 
 export type AppPath = typeof paths[keyof typeof paths]

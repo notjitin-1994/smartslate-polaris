@@ -81,37 +81,7 @@ export default function BeginDiscovery() {
     return () => { cancel = true }
   }, [starmapId])
 
-  // Poll + realtime for final_report readiness and auto-navigate
-  useEffect(() => {
-    if (!starmapIdMemo || !forceLoading) return
-
-    const check = async () => {
-      const { data } = await supabase
-        .from('master_discovery')
-        .select('id, final_report')
-        .eq('id', starmapIdMemo)
-        .maybeSingle()
-      const hasReport = !!(data as any)?.final_report?.views?.report?.content
-      if (hasReport) navigate(`/discoveries/${starmapIdMemo}`)
-    }
-
-    const channel = supabase
-      .channel(`md-${starmapIdMemo}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'master_discovery', filter: `id=eq.${starmapIdMemo}` },
-        (payload) => {
-          const fr = (payload.new as any)?.final_report
-          if (fr?.views?.report?.content) navigate(`/discoveries/${starmapIdMemo}`)
-        }
-      )
-      .subscribe()
-
-    const interval = setInterval(check, 3000)
-    check()
-
-    return () => { clearInterval(interval); supabase.removeChannel(channel) }
-  }, [starmapIdMemo, forceLoading, navigate])
+  // Removed final report polling/realtime navigation
 
   const handleComplete = (data: StarmapRequestData) => {
     // In a real app, this would send data to an API
@@ -130,7 +100,7 @@ export default function BeginDiscovery() {
             recordId={starmapId}
             starmapId={starmapId}
             dynamicQuestions={dynamicQuestions}
-            onComplete={() => navigate(`/discoveries/${starmapId}`)}
+            onComplete={() => navigate('/')}
           />
         </main>
       </div>

@@ -3,6 +3,8 @@ export default {
   content: [
     './index.html',
     './src/**/*.{js,ts,jsx,tsx}',
+    // Exclude removed starmap element components to avoid Tailwind scanning missing files
+    '!./src/starmap/elements/**',
   ],
   theme: {
     extend: {

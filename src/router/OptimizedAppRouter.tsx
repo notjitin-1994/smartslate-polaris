@@ -14,7 +14,7 @@ import AuthCallback from '@/pages/AuthCallback'
 const AuthLanding = withLazyLoad(() => import('@/pages/AuthLanding'))
 const PortalPage = withLazyLoad(() => import('@/pages/PortalPage').then(m => ({ default: m.PortalPage })))
 const BeginDiscovery = withLazyLoad(() => import('@/pages/BeginDiscovery'))
-const DiscoveryViewer = withLazyLoad(() => import('@/pages/DiscoveryViewer'))
+// DiscoveryViewer removed
 const HomeDashboard = withLazyLoad(() => import('@/components/HomeDashboard').then(m => ({ default: m.HomeDashboard })))
 const DynamicQuestionnaireDemo = withLazyLoad(() => import('@/components/forms/DynamicQuestionnaire/DemoPage').then(m => ({ default: m.DemoPage })))
 const LoadingTest = withLazyLoad(() => import('@/pages/LoadingTest'))
@@ -39,10 +39,7 @@ export function OptimizedAppRouter() {
                 <Route path="begin-discovery" element={<BeginDiscovery />} />
                 <Route path="questionnaire-demo" element={<DynamicQuestionnaireDemo />} />
               </Route>
-              {/* Explicit absolute route to ensure direct navigation works and still uses Portal shell */}
-              <Route path="/discoveries/:starmapID" element={<PortalPage />}>
-                <Route index element={<DiscoveryViewer />} />
-              </Route>
+              {/* Discovery viewer route removed */}
             </Route>
 
             {/* 404 fallback */}

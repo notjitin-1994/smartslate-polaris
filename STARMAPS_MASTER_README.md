@@ -2,15 +2,14 @@
 
 ## Overview
 
-The `starmaps_master` table is a comprehensive database table that stores all starmap-related data in a single, well-structured location. This includes static questions, dynamic questions, user answers, prompts, reports, and progress tracking.
+The `starmaps_master` table is a comprehensive database table that stores all starmap-related data in a single, well-structured location. This includes static questions, dynamic questions, user answers, prompts, and progress tracking.
 
 ## Key Features
 
 ### 1. Complete Data Storage
 - **Static Questions & Answers**: Predefined questions and user responses
 - **Dynamic Questions & Answers**: AI-generated questions based on initial responses
-- **Prompts**: Both dynamic question generation prompts and final report prompts
-- **Reports**: Final generated reports and preliminary reports
+- **Prompts**: Dynamic question generation prompts
 - **Progress Tracking**: Detailed progress with percentage and current step tracking
 - **Status Management**: Comprehensive workflow states from draft to completion
 
@@ -28,8 +27,7 @@ The table includes the following key fields:
 - dynamic_questions_prompt (TEXT): Prompt used to generate dynamic questions
 - dynamic_questions (JSONB): Array of dynamic questions
 - dynamic_answers (JSONB): Object mapping question IDs to answers
-- final_prompt (TEXT): Prompt for final report generation
-- final_report (TEXT): Generated report content
+- final_prompt (TEXT): Previously used for report generation (deprecated)
 - status (TEXT): Current workflow status
 - progress_percentage (INTEGER): 0-100 progress indicator
 - Various timestamps and metadata fields
@@ -44,10 +42,8 @@ The starmap follows this workflow:
 3. `awaiting_static_answers` - Waiting for user input
 4. `generating_dynamic_questions` - AI generating follow-up questions
 5. `awaiting_dynamic_answers` - Waiting for additional input
-6. `generating_report` - Creating final report
-7. `review` - Report ready for review
-8. `completed` - Process complete
-9. `failed` / `cancelled` / `archived` - Alternative end states
+6. `completed` - Process complete
+7. `failed` / `cancelled` / `archived` - Alternative end states
 
 ## Usage Examples
 
@@ -106,8 +102,7 @@ function MyComponent() {
   // Update progress
   await updateProgress('Processing responses', 45);
 
-  // Save final report
-  await saveFinalReport('# Strategic Report\n\n...');
+  // Final report generation removed
 }
 ```
 
@@ -144,7 +139,7 @@ function StarmapsList() {
 const { data: starmap } = await starmapsMasterService.getStarmapByJobId('job-123');
 
 // Update status
-await starmapsMasterService.updateStarmapStatus(starmapId, 'generating_report');
+await starmapsMasterService.updateStarmapStatus(starmapId, 'in_progress');
 
 // Set dynamic questions
 await starmapsMasterService.setDynamicQuestions(starmapId, dynamicQuestions, prompt);

@@ -1,10 +1,8 @@
 // Service Worker for offline support
 const CACHE_NAME = 'smartslate-polaris-v1';
 const STATIC_ASSETS = [
-  '/',
-  '/discover',
-  '/settings',
-  '/pricing',
+  '/', // keep root shell if your app shell is public
+  '/pricing', // public route only
   '/manifest.json',
   '/images/logos/logo.png',
   '/images/logos/logo-swirl.png',
@@ -111,7 +109,11 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(
       fetch(request)
         .catch(() => {
-          return caches.match(request) || new Response('Offline', { status: 503 });
+          // Avoid serving cached private routes; only fall back for public HTML shell
+          if (request.headers.get('accept')?.includes('text/html')) {
+            return caches.match('/') || new Response('Offline', { status: 503 })
+          }
+          return new Response('Offline', { status: 503 });
         })
     );
   }

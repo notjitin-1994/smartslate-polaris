@@ -26,8 +26,7 @@ export async function createStarmapDraft(params?: {
   userId?: string
 }): Promise<StarmapRow> {
   const supabase = getSupabase()
-  const session = await supabase.auth.getSession()
-  const userId = params?.userId ?? session.data.session?.user?.id
+  const userId = params?.userId ?? (await supabase.auth.getSession()).data.session?.user?.id
   if (!userId) throw new Error('Not authenticated')
 
   // Insert minimal fields to avoid unknown column errors
@@ -41,14 +40,19 @@ export async function createStarmapDraft(params?: {
   return data as unknown as StarmapRow
 }
 
-export async function listUserStarmaps(): Promise<StarmapSummaryRow[]> {
+export async function listUserStarmaps(params?: { userId?: string }): Promise<StarmapSummaryRow[]> {
   const supabase = getSupabase()
-  const { data: { session } } = await supabase.auth.getSession()
-  if (!session?.user) throw new Error('Not authenticated')
+  let userId = params?.userId
+  if (!userId) {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.user) throw new Error('Not authenticated')
+    userId = session.user.id
+  }
 
   const { data, error } = await supabase
     .from('master_discovery')
     .select('*')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
 
   if (error) throw error

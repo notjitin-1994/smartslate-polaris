@@ -1,11 +1,11 @@
-export const config = { runtime: 'edge' }
+export const config = { runtime: 'nodejs', maxDuration: 60 }
 
 type RequestBody = {
   id?: string
 }
 
-function ensureEnv(name: string, fallback?: string): string {
-  const value = (process.env as Record<string, string | undefined>)[name] || fallback
+function ensureEnv(name: string): string {
+  const value = (process.env as Record<string, string | undefined>)[name]
   if (!value) throw new Error(`Missing required env: ${name}`)
   return value
 }
@@ -76,9 +76,9 @@ export default async function handler(request: Request): Promise<Response> {
       return new Response(JSON.stringify({ error: 'Missing required field: id' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
     }
 
-    const SUPABASE_URL = ensureEnv('SUPABASE_URL', (process.env as any).VITE_SUPABASE_URL)
+    const SUPABASE_URL = ensureEnv('SUPABASE_URL')
     const SUPABASE_SERVICE_ROLE_KEY = ensureEnv('SUPABASE_SERVICE_ROLE_KEY')
-    const OPENAI_API_KEY = ensureEnv('OPENAI_API_KEY', (process.env as any).VITE_OPENAI_API_KEY)
+    const OPENAI_API_KEY = ensureEnv('OPENAI_API_KEY')
     const OPENAI_BASE_URL = (process.env as any).OPENAI_BASE_URL || 'https://api.openai.com'
     const OPENAI_MODEL = (process.env as any).OPENAI_MODEL || 'gpt-4o-mini'
     // Use model default temperature
@@ -130,8 +130,10 @@ Output must be valid JSON only, matching the schema described in the task.
 - Provide helpful labels, defaults, and options tailored to context.`
     const userPrompt = buildUserPrompt(row)
 
-    // Call OpenAI Chat Completions with JSON-only response
-    const openaiResp = await fetch(`${OPENAI_BASE_URL}/v1/chat/completions`, {
+    // Call OpenAI Chat Completions with JSON-only response (short timeout)
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 20000)
+    const openaiReq = fetch(`${OPENAI_BASE_URL}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${OPENAI_API_KEY}`,
@@ -145,15 +147,18 @@ Output must be valid JSON only, matching the schema described in the task.
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ]
-      })
+      }),
+      signal: controller.signal
     })
+    const openaiResp = await openaiReq
+    clearTimeout(timeoutId)
 
     if (!openaiResp.ok) {
       const errText = await openaiResp.text()
       return new Response(JSON.stringify({ error: 'OpenAI request failed', details: errText }), { status: 502, headers: { 'Content-Type': 'application/json' } })
     }
 
-    const completion = await openaiResp.json()
+    const completion = await openaiResp.json().catch(() => ({}))
     const content = completion?.choices?.[0]?.message?.content
     if (!content || typeof content !== 'string') {
       return new Response(JSON.stringify({ error: 'Invalid OpenAI response format' }), { status: 502, headers: { 'Content-Type': 'application/json' } })
@@ -184,6 +189,10 @@ Output must be valid JSON only, matching the schema described in the task.
 
     return new Response(JSON.stringify({ ok: true, dynamic_questions: parsed }), { status: 200, headers: { 'Content-Type': 'application/json' } })
   } catch (err: any) {
+    const isAbort = (err?.name === 'AbortError') || /aborted|timeout/i.test(String(err?.message || err))
+    if (isAbort) {
+      return new Response(JSON.stringify({ error: 'Upstream timeout', details: 'OpenAI request exceeded 20s' }), { status: 504, headers: { 'Content-Type': 'application/json' } })
+    }
     return new Response(JSON.stringify({ error: 'Unhandled error', details: err?.message || String(err) }), { status: 500, headers: { 'Content-Type': 'application/json' } })
   }
 }

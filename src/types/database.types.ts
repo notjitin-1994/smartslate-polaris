@@ -22,7 +22,7 @@ export interface Database {
           dynamic_questions: Json | null
           dynamic_answers: Json | null
           final_prompt: string | null
-          final_report: string | null
+          // final_report removed from app usage
           preliminary_report: string | null
           report_format: 'standard' | 'detailed' | 'executive' | 'technical'
           report_length: number | null
@@ -77,7 +77,7 @@ export interface Database {
           dynamic_questions?: Json | null
           dynamic_answers?: Json | null
           final_prompt?: string | null
-          final_report?: string | null
+          // final_report removed from app usage
           preliminary_report?: string | null
           report_format?: 'standard' | 'detailed' | 'executive' | 'technical'
           report_length?: number | null
@@ -132,7 +132,7 @@ export interface Database {
           dynamic_questions?: Json | null
           dynamic_answers?: Json | null
           final_prompt?: string | null
-          final_report?: string | null
+          // final_report removed from app usage
           preliminary_report?: string | null
           report_format?: 'standard' | 'detailed' | 'executive' | 'technical'
           report_length?: number | null
@@ -321,7 +321,7 @@ export interface Database {
         Row: {
           id: string
           session_id: string
-          prompt_type: 'initial_research' | 'dynamic_questions' | 'final_report'
+          prompt_type: 'initial_research' | 'dynamic_questions'
           prompt_text: string
           ai_provider: string | null
           ai_model: string | null
@@ -331,7 +331,7 @@ export interface Database {
         Insert: {
           id?: string
           session_id: string
-          prompt_type: 'initial_research' | 'dynamic_questions' | 'final_report'
+          prompt_type: 'initial_research' | 'dynamic_questions'
           prompt_text: string
           ai_provider?: string | null
           ai_model?: string | null
@@ -341,7 +341,7 @@ export interface Database {
         Update: {
           id?: string
           session_id?: string
-          prompt_type?: 'initial_research' | 'dynamic_questions' | 'final_report'
+          prompt_type?: 'initial_research' | 'dynamic_questions'
           prompt_text?: string
           ai_provider?: string | null
           ai_model?: string | null
@@ -354,7 +354,7 @@ export interface Database {
           id: string
           session_id: string
           prompt_id: string
-          response_type: 'research_data' | 'dynamic_questions' | 'final_report'
+          response_type: 'research_data' | 'dynamic_questions'
           response_text: string
           response_json: Json | null
           ai_provider: string | null
@@ -367,7 +367,7 @@ export interface Database {
           id?: string
           session_id: string
           prompt_id: string
-          response_type: 'research_data' | 'dynamic_questions' | 'final_report'
+          response_type: 'research_data' | 'dynamic_questions'
           response_text: string
           response_json?: Json | null
           ai_provider?: string | null
@@ -380,7 +380,7 @@ export interface Database {
           id?: string
           session_id?: string
           prompt_id?: string
-          response_type?: 'research_data' | 'dynamic_questions' | 'final_report'
+          response_type?: 'research_data' | 'dynamic_questions'
           response_text?: string
           response_json?: Json | null
           ai_provider?: string | null

@@ -849,10 +849,7 @@ export function StarmapRequestForm({ onComplete, initialStep = 'requestor', star
                   group: groupData as GroupInfo,
                   dynamicAnswers: answers
                 } as any)
-                const id = starmapId || recordId
-                if (id) {
-                  try { navigate(`/discoveries/${id}`) } catch { window.location.href = `/discoveries/${id}` }
-                }
+                navigate('/')
               }}
             />
           </motion.div>

@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabaseClient'
 import { DynamicQuestionInput } from './DynamicQuestionInput'
 import { ProgressIndicator } from './ProgressIndicator'
 import { QuestionnaireHeader } from '../shared/QuestionnaireHeader'
-import { FinalReportLoadingScreen } from '@/components/FinalReportLoadingScreen'
+// Final report flow removed
 import { HEADER_TITLE, getDynamicSubheading } from '../shared/headerCopy'
 import type { DynamicQuestion, DynamicQuestionnaireProps, StageAnswers } from './types'
 
@@ -36,7 +36,7 @@ export function DynamicQuestionnaire({
   const [answersLoaded, setAnswersLoaded] = useState(false)
   const [isExiting, setIsExiting] = useState(false)
   const [exitKey, setExitKey] = useState(0)
-  const [showFinalReportLoader, setShowFinalReportLoader] = useState(false)
+  // Final report loader removed
 
   const scrollToTopSmooth = (): Promise<void> => {
     return new Promise(resolve => {
@@ -370,8 +370,10 @@ export function DynamicQuestionnaire({
       persistCurrentStage(next)
       setIsExiting(false)
     } else {
-      await handleSubmit()
+      // On last stage, just save and call onComplete
+      await saveAnswers()
       setIsExiting(false)
+      if (onComplete) onComplete(answers)
     }
   }
 
@@ -384,46 +386,7 @@ export function DynamicQuestionnaire({
     }
   }
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true)
-    
-    try {
-      // Ensure current stage is saved without modifying status (DB constraint allows only 'draft' or 'submitted')
-      await saveAnswers()
-
-      // Show final report loader inside the master container body
-      await scrollToTopSmooth()
-      setIsExiting(true)
-      setExitKey(Date.now())
-      await new Promise(r => setTimeout(r, 250))
-      setShowFinalReportLoader(true)
-      setIsExiting(false)
-
-      // Trigger serverless API to generate final report
-      try {
-        const resp = await fetch('/api/final-report', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: recordId })
-        })
-        if (!resp.ok) {
-          const body = await resp.text()
-          console.error('Final report generation failed:', body)
-          toast.error('Failed to generate final report. Please try again.')
-          // Keep the loading screen up – the background job may still complete; the loader will poll Supabase
-        }
-      } catch (e) {
-        console.error('Final report request error:', e)
-        toast.error('Could not contact AI service for final report.')
-        // Keep the loading screen up to allow polling fallback
-      }
-    } catch (error) {
-      console.error('Error submitting answers:', error)
-      toast.error('Failed to submit answers. Please try again.')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
+  // Final submit removed (no final report generation)
 
   const getStageProgress = (stageIndex: number) => {
     const stageQuestions = stages[stageIndex]?.questions || []
@@ -508,7 +471,7 @@ export function DynamicQuestionnaire({
           {/* Progress indicator moved to header */}
 
           {/* Form Content within master container (no inner card) */}
-          {!showFinalReportLoader ? (
+          {(
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={isExiting ? { opacity: 0, y: -20 } : { opacity: 1, y: 0 }}
@@ -641,33 +604,10 @@ export function DynamicQuestionnaire({
               </button>
             </div>
           </motion.div>
-          ) : (
-            <motion.div
-              key="final-report-loading"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.3 }}
-            >
-              <FinalReportLoadingScreen
-                embedded
-                recordId={recordId}
-                processingLabel="Generating your Final Blueprint"
-                onComplete={() => {
-                  setShowFinalReportLoader(false)
-                  toast.success('Final report generated!')
-                  if (onComplete) onComplete(answers)
-                }}
-                onFail={() => {
-                  setShowFinalReportLoader(false)
-                  toast.error('Final report generation failed.')
-                }}
-              />
-            </motion.div>
           )}
 
           {/* Helper Text */}
-          {!showFinalReportLoader && (
+          {(
           <motion.div
             className="mt-2 text-center pb-1"
             initial={{ opacity: 0 }}

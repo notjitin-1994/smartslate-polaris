@@ -15,9 +15,12 @@ interface StoredSession {
 const SESSION_KEY = 'smartslate_shared_session'
 const REMEMBER_ME_KEY = 'smartslate_remember_me'
 const SESSION_DOMAIN = '.smartslate.io' // Allows sharing across all subdomains
+const SENDER_ID_KEY = 'smartslate_auth_sender_id'
+const SYNC_FALLBACK_KEY = 'smartslate_auth_sync'
 
 export class CrossDomainAuthService {
   private static instance: CrossDomainAuthService
+  private lastBroadcastToken: string | null = null
   
   private constructor() {}
   
@@ -42,7 +45,17 @@ export class CrossDomainAuthService {
         user: session.user
       }
 
-      // Store in localStorage for immediate access
+      // Check previous token to avoid rebroadcasting identical tokens
+      let previousToken: string | null = null
+      try {
+        const prevRaw = localStorage.getItem(SESSION_KEY)
+        if (prevRaw) {
+          const prev = JSON.parse(prevRaw) as StoredSession
+          previousToken = prev?.access_token || null
+        }
+      } catch {}
+
+      // Store in localStorage for immediate access (always keep current)
       localStorage.setItem(SESSION_KEY, JSON.stringify(sessionData))
       
       // Store remember me preference
@@ -52,8 +65,12 @@ export class CrossDomainAuthService {
         localStorage.removeItem(REMEMBER_ME_KEY)
       }
 
-      // For cross-subdomain access, we'll use a broadcast channel to sync
-      this.broadcastSessionUpdate(sessionData)
+      // For cross-subdomain access, broadcast only if token actually changed
+      const tokenChanged = (sessionData.access_token && sessionData.access_token !== previousToken)
+      if (tokenChanged && sessionData.access_token !== this.lastBroadcastToken) {
+        this.lastBroadcastToken = sessionData.access_token
+        this.broadcastSessionUpdate(sessionData)
+      }
 
       // Additionally, set a secure cookie for true cross-domain support (best-effort; never throw)
       try {
@@ -214,13 +231,14 @@ export class CrossDomainAuthService {
   private broadcastSessionUpdate(session: StoredSession): void {
     try {
       const channel = new BroadcastChannel('smartslate_auth')
-      channel.postMessage({ type: 'session_update', session })
+      channel.postMessage({ type: 'session_update', session, senderId: this.getSenderId() })
       channel.close()
     } catch (error) {
       // BroadcastChannel not supported, fallback to storage events
-      window.localStorage.setItem('smartslate_auth_sync', JSON.stringify({
+      window.localStorage.setItem(SYNC_FALLBACK_KEY, JSON.stringify({
         type: 'session_update',
         session,
+        senderId: this.getSenderId(),
         timestamp: Date.now()
       }))
     }
@@ -232,12 +250,13 @@ export class CrossDomainAuthService {
   private broadcastSessionClear(): void {
     try {
       const channel = new BroadcastChannel('smartslate_auth')
-      channel.postMessage({ type: 'session_clear' })
+      channel.postMessage({ type: 'session_clear', senderId: this.getSenderId() })
       channel.close()
     } catch (error) {
       // BroadcastChannel not supported, fallback to storage events
-      window.localStorage.setItem('smartslate_auth_sync', JSON.stringify({
+      window.localStorage.setItem(SYNC_FALLBACK_KEY, JSON.stringify({
         type: 'session_clear',
+        senderId: this.getSenderId(),
         timestamp: Date.now()
       }))
     }
@@ -248,24 +267,48 @@ export class CrossDomainAuthService {
    */
   setupCrossTabSync(onSessionUpdate: (session: StoredSession | null) => void): () => void {
     let channel: BroadcastChannel | null = null
+    const myId = this.getSenderId()
     
     try {
       // Try BroadcastChannel first
       channel = new BroadcastChannel('smartslate_auth')
       channel.onmessage = (event) => {
-        if (event.data.type === 'session_update') {
-          onSessionUpdate(event.data.session)
-        } else if (event.data.type === 'session_clear') {
+        const data = event?.data || {}
+        if (data?.senderId && data.senderId === myId) return
+        if (data.type === 'session_update') {
+          // Dedup: if incoming token equals currently stored, skip
+          try {
+            const prevRaw = localStorage.getItem(SESSION_KEY)
+            if (prevRaw) {
+              const prev = JSON.parse(prevRaw) as StoredSession
+              if (prev?.access_token && data?.session?.access_token && prev.access_token === data.session.access_token) {
+                return
+              }
+            }
+          } catch {}
+          onSessionUpdate(data.session)
+        } else if (data.type === 'session_clear') {
           onSessionUpdate(null)
         }
       }
     } catch (error) {
       // Fallback to storage events
       const handleStorageChange = (e: StorageEvent) => {
-        if (e.key === 'smartslate_auth_sync' && e.newValue) {
+        if (e.key === SYNC_FALLBACK_KEY && e.newValue) {
           try {
             const data = JSON.parse(e.newValue)
+            if (data?.senderId && data.senderId === myId) return
             if (data.type === 'session_update') {
+              // Dedup: if incoming token equals currently stored, skip
+              try {
+                const prevRaw = localStorage.getItem(SESSION_KEY)
+                if (prevRaw) {
+                  const prev = JSON.parse(prevRaw) as StoredSession
+                  if (prev?.access_token && data?.session?.access_token && prev.access_token === data.session.access_token) {
+                    return
+                  }
+                }
+              } catch {}
               onSessionUpdate(data.session)
             } else if (data.type === 'session_clear') {
               onSessionUpdate(null)
@@ -285,6 +328,25 @@ export class CrossDomainAuthService {
     
     return () => {
       channel?.close()
+    }
+  }
+
+  // Generate a stable per-tab sender ID
+  private getSenderId(): string {
+    try {
+      let id = sessionStorage.getItem(SENDER_ID_KEY)
+      if (id && /^[0-9a-f\-]{8,}$/i.test(id)) return id
+      const created = (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
+        ? (crypto as any).randomUUID()
+        : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+            const r = Math.random() * 16 | 0
+            const v = c === 'x' ? r : (r & 0x3) | 0x8
+            return v.toString(16)
+          })
+      sessionStorage.setItem(SENDER_ID_KEY, created)
+      return created
+    } catch {
+      return `tab-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     }
   }
 }

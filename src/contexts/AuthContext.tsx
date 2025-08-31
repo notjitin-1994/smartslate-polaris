@@ -71,6 +71,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         
         // Try to restore session from cross-domain storage first
         const storedSession = await crossDomainAuth.getStoredSession()
+        let resolvedSession: Session | null = null
         if (storedSession && mounted) {
           // Reconstruct Supabase session format
           const restoredSession: Session = {
@@ -82,11 +83,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
             user: storedSession.user
           }
           
-          // Set the session in Supabase client
-          await getSupabase().auth.setSession(restoredSession)
+          // Set the session in Supabase client using token pair
+          await getSupabase().auth.setSession({
+            access_token: restoredSession.access_token!,
+            refresh_token: restoredSession.refresh_token!,
+          })
           
           setSession(restoredSession)
           setUser(storedSession.user)
+          resolvedSession = restoredSession
         } else {
           // Fallback to regular session check
           const currentSession = await authService.getSession()
@@ -95,18 +100,18 @@ export function AuthProvider({ children }: AuthProviderProps) {
             setSession(currentSession)
             setUser(currentSession?.user ?? null)
           }
+          resolvedSession = currentSession
         }
         
-        // Start session tracking if authenticated
-        const finalSession = storedSession || (await authService.getSession())
-        if (finalSession?.user && mounted) {
+        // Start session tracking if authenticated (reuse resolved session)
+        if (resolvedSession?.user && mounted) {
           try {
             sessionTracker.start({
-              userId: finalSession.user.id,
+              userId: resolvedSession.user.id,
               tokenType: 'bearer',
-              accessToken: finalSession.access_token,
-              refreshToken: finalSession.refresh_token,
-              expiresAt: typeof finalSession.expires_at === 'number' ? (finalSession.expires_at * 1000) : null
+              accessToken: (resolvedSession as any)?.access_token,
+              refreshToken: (resolvedSession as any)?.refresh_token,
+              expiresAt: typeof (resolvedSession as any)?.expires_at === 'number' ? (((resolvedSession as any).expires_at as number) * 1000) : null
             })
           } catch {}
         }
@@ -176,9 +181,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
             break
           case 'TOKEN_REFRESHED':
-            if (newSession) {
-              await crossDomainAuth.storeSession(newSession, rememberMeRef.current)
-            }
             try { sessionTracker.touch() } catch {}
             break
           case 'USER_UPDATED':
@@ -204,7 +206,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
           user: storedSession.user
         }
         
-        await getSupabase().auth.setSession(restoredSession)
+        // Only set on Supabase client if token actually changed
+        try {
+          const { data: { session: current } } = await getSupabase().auth.getSession()
+          const currentToken = (current as any)?.access_token
+          if (currentToken !== restoredSession.access_token) {
+            await getSupabase().auth.setSession({
+              access_token: restoredSession.access_token!,
+              refresh_token: restoredSession.refresh_token!,
+            })
+          }
+        } catch {}
         setSession(restoredSession)
         setUser(storedSession.user)
       } else {

@@ -9,7 +9,7 @@
 -- This table stores all comprehensive starmap data including:
 -- - Static questions and answers
 -- - Dynamic questions and answers
--- - Prompts and final reports
+-- - Prompts
 -- - Progress tracking and status
 
 -- Drop existing table if needed (only for development)
@@ -37,9 +37,8 @@ CREATE TABLE IF NOT EXISTS starmaps_master (
   dynamic_questions JSONB DEFAULT '[]'::JSONB,
   dynamic_answers JSONB DEFAULT '{}'::JSONB,
   
-  -- Final report generation
+  -- Report generation metadata (final report removed from app)
   final_prompt TEXT,
-  final_report TEXT,
   preliminary_report TEXT,
   
   -- Report metadata
@@ -178,8 +177,7 @@ BEGIN
     WHEN 'awaiting_static_answers' THEN NEW.progress_percentage = 20;
     WHEN 'generating_dynamic_questions' THEN NEW.progress_percentage = 40;
     WHEN 'awaiting_dynamic_answers' THEN NEW.progress_percentage = 60;
-    WHEN 'generating_report' THEN NEW.progress_percentage = 80;
-    WHEN 'review' THEN NEW.progress_percentage = 90;
+    -- final report stages removed
     WHEN 'completed' THEN NEW.progress_percentage = 100;
     ELSE -- Keep current progress
   END CASE;
@@ -377,6 +375,5 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE INDEX IF NOT EXISTS idx_master_discovery_dynamic_answers_gin
   ON master_discovery
   USING GIN (dynamic_answers);
-COMMENT ON COLUMN starmaps_master.final_prompt IS 'Final AI prompt used to generate the report';
-COMMENT ON COLUMN starmaps_master.final_report IS 'The complete generated report content';
+COMMENT ON COLUMN starmaps_master.final_prompt IS 'Final AI prompt previously used to generate a report (deprecated)';
 COMMENT ON COLUMN starmaps_master.status IS 'Current status of the starmap in the workflow';
